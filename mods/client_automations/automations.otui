@@ -1,0 +1,72 @@
+// Automations (automations.lua), built from the ot-ui styles
+// (data/styles/50-ot-ui.otui)
+
+AutomationsSheet < OtBackdrop
+  OtPanel
+    id: panel
+    anchors.centerIn: parent
+    width: 480
+    height: 420
+
+    OtTitle
+      id: title
+      anchors.top: parent.top
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 10
+      !text: tr('Automations')
+
+    OtIconButton
+      id: close
+      anchors.top: parent.top
+      anchors.right: parent.right
+      !text: 'X'
+
+    OtHint
+      id: note
+      anchors.top: close.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 6
+      !text: tr('For this character. They work at a player\'s speed, and only on what you open yourself.')
+
+    ScrollablePanel
+      id: list
+      anchors.top: note.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      margin-top: 8
+      margin-right: 14
+      vertical-scrollbar: listScroll
+      layout:
+        type: verticalBox
+
+    VerticalScrollBar
+      id: listScroll
+      anchors.top: list.top
+      anchors.bottom: list.bottom
+      anchors.right: parent.right
+      step: 52
+      pixels-scroll: true
+
+// A "?" explanation
+AutomationsHelp < OtBackdrop
+  OtPanel
+    id: box
+    anchors.centerIn: parent
+    width: 360
+    height: 130
+    phantom: true
+
+    OtText
+      id: text
+      anchors.top: parent.top
+      anchors.left: parent.left
+      anchors.right: parent.right
+      phantom: true
+
+    OtHint
+      anchors.bottom: parent.bottom
+      anchors.right: parent.right
+      !text: tr('Tap to close')
+      phantom: true

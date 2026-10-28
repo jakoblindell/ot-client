@@ -369,6 +369,12 @@ local HUB_BUTTONS = {
     { text = 'Settings', action = function() showSettings(currentPage or 'gameplay') end },
     { text = 'Edit layout', action = function() close(); startEditLayout() end },
     { text = 'Hotbar', action = function() close(); openHotbarSettings() end },
+    { text = 'Automations', action = function()
+        close()
+        if modules.client_automations and modules.client_automations.open then
+            modules.client_automations.open()
+        end
+    end },
     { text = 'Outfit', action = function() close(); g_game.requestOutfit() end },
     { text = 'Quest log', action = function()
         close()
