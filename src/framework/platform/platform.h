@@ -47,6 +47,9 @@ public:
     bool fileExists(std::string file);
     bool removeFile(std::string file);
     ticks_t getFileModificationTime(std::string file);
+#ifdef __EMSCRIPTEN__
+    void reloadPage();
+#endif
     bool openUrl(std::string url, bool now = false);
     bool openDir(std::string path, bool now = false);
     std::string getCPUName();

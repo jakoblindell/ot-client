@@ -19,3 +19,5 @@
 !/client_itemdata/**
 !/client_hunt/
 !/client_hunt/**
+!/client_updates/
+!/client_updates/**

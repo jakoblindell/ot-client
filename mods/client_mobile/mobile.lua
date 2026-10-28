@@ -863,6 +863,27 @@ local function layout()
     end
 end
 
+-- A button another mod puts on the toolbar (client_updates): an icon from
+-- /images/ui/ot/icons/, drawn gold. Returns nil without the touch layout.
+function addToolbarButton(id, icon, tooltip, onClick)
+    if not toolbar then
+        return nil
+    end
+    local button = toolbar.buttons:getChildById(id) or g_ui.createWidget('MobileToolbarButton', toolbar.buttons)
+    button:setId(id)
+    button:setIcon('/images/ui/ot/icons/' .. icon .. '_on')
+    button:setTooltip(tooltip)
+    button.onClick = onClick
+    return button
+end
+
+function removeToolbarButton(id)
+    local button = toolbar and toolbar.buttons:getChildById(id)
+    if button then
+        button:destroy()
+    end
+end
+
 function relayout()
     layout()
 end

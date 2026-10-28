@@ -25,6 +25,8 @@ const ICONS = {
     check: 'delapouite/check-mark', hunt: 'lorc/hunting-horn',
     // item card (client_itemdata)
     coins: 'delapouite/two-coins', drops: 'lorc/skull-crossed-bones',
+    // a new client build is ready (client_updates)
+    update: 'delapouite/upgrade',
 };
 // Hotbar special actions (modules/game_actionbar, by id): a glyph, and a
 // small badge in the bottom right corner for the variant (nearest, lowest

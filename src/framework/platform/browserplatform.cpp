@@ -23,6 +23,8 @@
 #ifdef __EMSCRIPTEN__
 
 #include "platform.h"
+#include <emscripten/emscripten.h>
+#include <emscripten/threading.h>
 #include <cstring>
 #include <fstream>
 #include <unistd.h>
@@ -95,7 +97,16 @@ ticks_t Platform::getFileModificationTime(std::string file)
 
 bool Platform::openUrl(std::string url, bool now)
 {
+    // a new tab (the game keeps running in this one)
+    MAIN_THREAD_EM_ASM({ window.open(UTF8ToString($0), "_blank", "noopener"); }, url.c_str());
     return true;
+}
+
+// Loads the page again, with the newest client build (client updates,
+// ot-client#32)
+void Platform::reloadPage()
+{
+    MAIN_THREAD_ASYNC_EM_ASM({ window.location.reload(); });
 }
 
 bool Platform::openDir(std::string path, bool now)

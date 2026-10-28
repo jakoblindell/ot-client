@@ -138,6 +138,9 @@ void Application::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_platform", "isNetworkOnline", &Platform::isNetworkOnline, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "isPageVisible", &Platform::isPageVisible, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "isBrowser", &Platform::isBrowser, &g_platform);
+#ifdef __EMSCRIPTEN__
+    g_lua.bindSingletonFunction("g_platform", "reloadPage", &Platform::reloadPage, &g_platform);
+#endif
     g_lua.bindSingletonFunction("g_platform", "isConsole", &Platform::isConsole, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getBrowserConfigFlag", &Platform::getBrowserConfigFlag, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getGamepadButtons", &Platform::getGamepadButtons, &g_platform);
