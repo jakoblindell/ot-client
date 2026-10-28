@@ -21,3 +21,5 @@
 !/client_hunt/**
 !/client_updates/
 !/client_updates/**
+!/client_typing/
+!/client_typing/**

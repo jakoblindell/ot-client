@@ -1,0 +1,8 @@
+Module
+  name: client_typing
+  description: Suggestions above the chat line on touch screens: spells, NPC words, names and your own words (ot-client#20)
+  author: ot-client
+  sandboxed: true
+  scripts: [ typing ]
+  @onLoad: init()
+  @onUnload: terminate()

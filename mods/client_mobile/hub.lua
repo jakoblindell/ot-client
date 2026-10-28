@@ -75,6 +75,10 @@ local SETTINGS = {
                 help = 'Places the movement control, hotbar, bars, backpack and chat one at a time, like on your first login.' },
             { id = 'hotbar', kind = 'button', text = 'Hotbar presets, rows and slots', buttonText = 'Hotbar...',
                 help = 'Number of presets (P button), extra rows and how many slots the hotbar shows.' },
+            { id = 'typing', kind = 'toggle', text = 'Typing suggestions',
+                help = 'Words above the chat line while typing: your spells, what the NPC understands, names and words you used before. Gold ones send at once.' },
+            { id = 'clearWords', kind = 'button', text = 'Forget the words you typed', buttonText = 'Clear',
+                help = 'Typing suggestions learn the words you use. This forgets them.' },
             { id = 'resetUi', kind = 'button', text = 'Back to the default layout', buttonText = 'Reset UI',
                 help = 'Puts every piece back in its first place and size and unpins all panels. Your hotbar stays.' },
         },
@@ -145,6 +149,8 @@ local function rowValue(row)
         return g_platform.getTouchMode()
     elseif row.id == 'viewSize' then
         return getViewSize()
+    elseif row.id == 'typing' then
+        return modules.client_typing.isEnabled()
     end
 end
 
@@ -176,6 +182,8 @@ local function setRowValue(row, value)
         setTouchMode(value)
     elseif row.id == 'viewSize' then
         setViewSize(value)
+    elseif row.id == 'typing' then
+        modules.client_typing.setEnabled(value)
     end
 end
 
@@ -195,6 +203,9 @@ local function rowAction(row)
     elseif row.id == 'resetUi' then
         close()
         confirmResetLayout()
+    elseif row.id == 'clearWords' then
+        modules.client_typing.clearLearnedWords()
+        showHelp('The learned words are forgotten.')
     end
 end
 
@@ -207,6 +218,8 @@ local function rowAvailable(row)
         return modules.client_gamepad and modules.client_gamepad.openBindWindow ~= nil and g_platform.isBrowser()
     elseif row.id == 'layoutMode' then
         return g_platform.isBrowser()
+    elseif row.id == 'typing' or row.id == 'clearWords' then
+        return modules.client_typing and modules.client_typing.isEnabled ~= nil
     elseif row.id == 'clientBuild' then
         return modules.client_updates and modules.client_updates.getBuildText and
             modules.client_updates.getBuildText() ~= nil
