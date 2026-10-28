@@ -241,6 +241,17 @@ local function render(list)
     end
 end
 
+-- The chat's messages move up while the bar is shown, so it covers none
+local function makeRoom(room)
+    local parent = textEdit and textEdit:getParent()
+    for _, id in ipairs({ 'consoleContentPanel', 'readOnlyPanel' }) do
+        local panel = parent and parent:getChildById(id)
+        if panel and panel:getMarginBottom() ~= 4 + room then
+            panel:setMarginBottom(4 + room)
+        end
+    end
+end
+
 function update()
     if not bar then
         return
@@ -248,6 +259,7 @@ function update()
     if not isEnabled() or not textEdit or not textEdit:isVisible() or not g_game.isOnline() or
         textEdit:getText():find('^[/!]') then
         bar:hide()
+        makeRoom(0)
         shown = nil
         return
     end
@@ -265,6 +277,7 @@ function update()
     if bar:isVisible() then
         place()
     end
+    makeRoom(bar:isVisible() and bar:getHeight() + 4 or 0)
 end
 
 local function onTextChange()
@@ -299,6 +312,7 @@ local function onGameEnd()
     if bar then
         bar:hide()
     end
+    makeRoom(0)
     shown = nil
 end
 
