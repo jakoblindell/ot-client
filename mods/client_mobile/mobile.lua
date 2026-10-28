@@ -712,7 +712,7 @@ local function layout()
         stats:setMarginRight(8)
     else
         stats:addAnchor(AnchorVerticalCenter, 'mobileToolbar', AnchorVerticalCenter)
-        stats:setWidth(math.max(120, math.min(460, width - #TABS * 50 - 32)))
+        stats:setWidth(math.max(120, math.min(460, width - #toolbar.buttons:getChildren() * 50 - 32)))
     end
     updateStats()
 
@@ -874,6 +874,7 @@ function addToolbarButton(id, icon, tooltip, onClick)
     button:setIcon('/images/ui/ot/icons/' .. icon .. '_on')
     button:setTooltip(tooltip)
     button.onClick = onClick
+    relayout()
     return button
 end
 
@@ -881,6 +882,7 @@ function removeToolbarButton(id)
     local button = toolbar and toolbar.buttons:getChildById(id)
     if button then
         button:destroy()
+        relayout()
     end
 end
 
