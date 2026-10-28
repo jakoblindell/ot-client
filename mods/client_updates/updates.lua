@@ -14,6 +14,7 @@ local pending -- the newer build's version.json
 local notified -- the build the toast was shown for
 local checkEvent, toast, toastEvent, sheet, button
 local applying = false
+local justUpdated = false
 
 local function buildNumber(build)
     return tostring(build):match('^(%d+)') or tostring(build)
@@ -146,6 +147,10 @@ function check()
 end
 
 local function onGameStart()
+    if justUpdated then
+        justUpdated = false
+        showToast(tr('Updated to build %s.', buildNumber(ownBuild.build)))
+    end
     check()
     if checkEvent then
         removeEvent(checkEvent)
@@ -168,7 +173,8 @@ local function onGameEnd()
     if not applying and reconnect and reconnect.willReconnect and reconnect.willReconnect() then
         return
     end
-    reload()
+    -- (after the other modules have saved their settings for this game)
+    scheduleEvent(reload, 1500)
 end
 
 function getBuild()
@@ -184,18 +190,17 @@ function init()
         return
     end
     g_ui.importStyle('updates')
-    -- the first start of a new build says so
+    -- the first game of a new build says so
     local last = g_settings.getString(LAST_BUILD_SETTING)
     if last ~= ownBuild.build then
         g_settings.set(LAST_BUILD_SETTING, ownBuild.build)
         g_settings.save()
-        if last ~= '' then
-            scheduleEvent(function()
-                showToast(tr('Updated to build %s.', buildNumber(ownBuild.build)))
-            end, 1500)
-        end
+        -- (said in the game: the login screen covers anything shown earlier)
+        justUpdated = last ~= ''
     end
-    connect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd })
+    connect(g_game, { onGameStart = onGameStart })
+    -- first: a slot that returns true ends the others' turn
+    connect(g_game, { onGameEnd = onGameEnd }, true)
     if g_game.isOnline() then
         onGameStart()
     end
