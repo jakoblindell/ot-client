@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - web-client-792
+  # (built to test a change before it is merged; only pushes publish)
+  pull_request:
+    branches:
+      - web-client-792
 
 permissions:
   contents: read
@@ -20,8 +24,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      # The build's id, inside the bundle (the client knows what it is) and
+      # next to it as version.json (what the server offers; ot-client#32)
+      - name: Stamp the build
+        run: |
+          # the build is when it was made (UTC), so a later build sorts after an earlier one
+          BUILD="$(date -u +%Y-%m-%d-%H%M)"
+          printf '{"build":"%s","commit":"%s"}\n' "$BUILD" "${GITHUB_SHA::7}" > data/build.json
+          cat data/build.json
+
       - name: Build browser bundle with Docker
         run: bash Dockerfile.browser.sh
+
+      - name: Write version.json
+        run: cp data/build.json "$OUTPUT_DIR/version.json"
 
       - name: Report the end of the build log
         if: failure()
@@ -43,6 +59,7 @@ jobs:
   publish:
     name: Publish pre-release
     needs: build-browser
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write

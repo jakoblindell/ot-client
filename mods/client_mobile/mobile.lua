@@ -712,7 +712,7 @@ local function layout()
         stats:setMarginRight(8)
     else
         stats:addAnchor(AnchorVerticalCenter, 'mobileToolbar', AnchorVerticalCenter)
-        stats:setWidth(math.max(120, math.min(460, width - #TABS * 50 - 32)))
+        stats:setWidth(math.max(120, math.min(460, width - #toolbar.buttons:getChildren() * 50 - 32)))
     end
     updateStats()
 
@@ -863,6 +863,29 @@ local function layout()
     end
 end
 
+-- A button another mod puts on the toolbar (client_updates): an icon from
+-- /images/ui/ot/icons/, drawn gold. Returns nil without the touch layout.
+function addToolbarButton(id, icon, tooltip, onClick)
+    if not toolbar then
+        return nil
+    end
+    local button = toolbar.buttons:getChildById(id) or g_ui.createWidget('MobileToolbarButton', toolbar.buttons)
+    button:setId(id)
+    button:setIcon('/images/ui/ot/icons/' .. icon .. '_on')
+    button:setTooltip(tooltip)
+    button.onClick = onClick
+    relayout()
+    return button
+end
+
+function removeToolbarButton(id)
+    local button = toolbar and toolbar.buttons:getChildById(id)
+    if button then
+        button:destroy()
+        relayout()
+    end
+end
+
 function relayout()
     layout()
 end
@@ -921,6 +944,7 @@ function onEditLayoutChange(active)
 end
 
 local function onGameEnd()
+    stopGameInfo()
     setupOfferReady = false
     stopUiSetup()
     stopEditLayout()
@@ -929,6 +953,7 @@ end
 
 local function onGameStart()
     setMenuVisible(false)
+    startGameInfo()
     if modules.game_actionbar then
         modules.game_actionbar.ActionBarAssignSheet = openHotbarSheet
     end
@@ -1043,6 +1068,7 @@ function terminate()
     destroyHotbarPresetRow()
     presetRow = nil
     terminateTap()
+    stopGameInfo()
     toolbar:destroy()
     stats:destroy()
     chatButton:destroy()

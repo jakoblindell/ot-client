@@ -1,0 +1,70 @@
+// Client updates (updates.lua), built from the ot-ui styles
+// (data/styles/50-ot-ui.otui)
+
+// A short note at the top of the screen that goes away on its own
+UpdateToast < OtPanel
+  anchors.top: parent.top
+  anchors.horizontalCenter: parent.horizontalCenter
+  margin-top: 8
+  width: 320
+  padding: 8
+  height: 40
+  phantom: true
+  focusable: false
+
+  OtText
+    id: text
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.top: parent.top
+    text-align: center
+    phantom: true
+
+// What the update is and when it applies, with Apply now
+UpdateSheet < OtBackdrop
+  OtPanel
+    id: panel
+    anchors.centerIn: parent
+    width: 360
+    height: 200
+
+    OtTitle
+      id: title
+      anchors.top: parent.top
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 10
+      !text: tr('Update ready')
+
+    OtIconButton
+      id: close
+      anchors.top: parent.top
+      anchors.right: parent.right
+      !text: 'X'
+
+    OtText
+      id: text
+      anchors.top: close.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 10
+
+    OtHint
+      id: build
+      anchors.top: text.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 6
+
+    OtButton
+      id: later
+      anchors.bottom: parent.bottom
+      anchors.left: parent.left
+      width: 150
+      !text: tr('Later')
+
+    OtButtonPrimary
+      id: apply
+      anchors.bottom: parent.bottom
+      anchors.right: parent.right
+      width: 150
+      !text: tr('Apply now')

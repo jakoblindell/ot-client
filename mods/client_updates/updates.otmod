@@ -1,0 +1,8 @@
+Module
+  name: client_updates
+  description: Notices a new client build and loads it at logout or on Apply now (ot-client#32)
+  author: ot-client
+  sandboxed: true
+  scripts: [ updates ]
+  @onLoad: init()
+  @onUnload: terminate()

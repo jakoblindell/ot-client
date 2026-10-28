@@ -30,6 +30,8 @@ local SETTINGS = {
             { key = 'walkFirstStepDelay', kind = 'step', text = 'Walk delay after first step', min = 50, max = 500,
                 step = 25, unit = 'ms',
                 help = 'How long you stand after the first step before walking on, when the D-pad or stick is held.' },
+            { id = 'clientBuild', kind = 'build', text = 'Client version',
+                help = 'The build of the game client you are running. Check asks the website for a newer one; an update loads when you log out.' },
         },
     },
     {
@@ -45,8 +47,10 @@ local SETTINGS = {
             { key = 'enableLights', kind = 'toggle', text = 'Lights', help = 'Draw darkness and light sources.' },
             { key = 'ambientLight', kind = 'step', text = 'Minimum brightness', min = 0, max = 100, step = 10, unit = '%',
                 help = 'How bright dark places are at least. 0% is the classic darkness.' },
-            { key = 'showFps', kind = 'toggle', text = 'Show frame rate', help = 'Frames per second in the corner.' },
-            { key = 'showPing', kind = 'toggle', text = 'Show ping', help = 'Your connection delay to the server in milliseconds.' },
+            { key = 'showFps', kind = 'toggle', text = 'Show frame rate',
+                help = 'Frames per second and the client build, in the top left corner of the game view.' },
+            { key = 'showPing', kind = 'toggle', text = 'Show ping',
+                help = 'Your connection delay to the server in milliseconds, in the top left corner of the game view.' },
             { key = 'soundMaster', kind = 'step', text = 'Volume', min = 0, max = 100, step = 10, unit = '%',
                 help = 'Volume of all game sounds. 0% is muted.' },
         },
@@ -203,6 +207,9 @@ local function rowAvailable(row)
         return modules.client_gamepad and modules.client_gamepad.openBindWindow ~= nil and g_platform.isBrowser()
     elseif row.id == 'layoutMode' then
         return g_platform.isBrowser()
+    elseif row.id == 'clientBuild' then
+        return modules.client_updates and modules.client_updates.getBuildText and
+            modules.client_updates.getBuildText() ~= nil
     end
     return true
 end
@@ -250,6 +257,37 @@ local function addRow(list, row)
         local plus = g_ui.createWidget('OtIconButton', controls)
         plus:setText('+')
         plus.onClick = function() step(row.step) end
+    elseif row.kind == 'build' then
+        -- the build, and Check (client_updates)
+        local updates = modules.client_updates
+        local label = g_ui.createWidget('OtValue', controls)
+        label:setText(updates.getBuildText())
+        label:setWidth(140)
+        local button = g_ui.createWidget('OtButton', controls)
+        button:setText(updates.isUpdatePending() and tr('Update') or tr('Check'))
+        button:setWidth(90)
+        button.onClick = function()
+            if updates.isUpdatePending() then
+                close()
+                updates.openSheet()
+                return
+            end
+            button:setEnabled(false)
+            updates.check(function(found)
+                if not hub then
+                    return
+                end
+                button:setEnabled(true)
+                if found then
+                    close()
+                    updates.openSheet()
+                elseif found == false then
+                    showHelp('You have the newest build.')
+                else
+                    showHelp('The website did not answer. Try again later.')
+                end
+            end)
+        end
     elseif row.kind == 'button' then
         local button = g_ui.createWidget('OtButton', controls)
         button:setText(tr(row.buttonText))
