@@ -332,6 +332,27 @@ local function onDialog(protocol, opcode, buffer)
     window:raise()
 end
 
+-- What the player can say to the NPC now (client_typing's suggestions), or
+-- nil when no NPC is talking to the player
+function getWords()
+    if not dialog then
+        return nil
+    end
+    local words = {}
+    if dialog.question then
+        table.insert(words, 'yes')
+        table.insert(words, 'no')
+    end
+    for _, keyword in ipairs(dialog.keywords or {}) do
+        table.insert(words, keyword)
+    end
+    if #(dialog.buy or {}) + #(dialog.sell or {}) > 0 then
+        table.insert(words, 'trade')
+    end
+    table.insert(words, 'bye')
+    return words
+end
+
 -- The player closed the window: say goodbye so the NPC is free again
 function dismiss()
     if dialog then

@@ -1,0 +1,15 @@
+// Typing suggestions (typing.lua), built from the ot-ui styles
+// (data/styles/50-ot-ui.otui)
+
+// One suggestion. $on (gold text): sends at once (a spell, an NPC word, a
+// message said before); plain: completes the word being typed
+TypingChip < OtButton
+  margin-right: 4
+
+// The row of suggestions just above the chat line
+TypingBar < UIWidget
+  height: 40
+  focusable: false
+  phantom: true
+  layout:
+    type: horizontalBox
