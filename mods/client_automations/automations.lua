@@ -2,7 +2,8 @@
 -- work, per character, all off until switched on:
 --
 --   Loot gold / Loot food: what is in a corpse you open goes to your backpack
---   Change gold: a full stack of 100 coins becomes the next coin
+--   Change gold: a full stack of 100 coins (in your bags or equipment)
+--     becomes the next coin
 --   Eat food: eats from your open bags now and then ("You are full." is
 --     not shown when it comes from this)
 --   Refill ammo: an empty ammo slot is filled from the same arrows or bolts
@@ -42,7 +43,7 @@ local AUTOMATIONS = {
     { id = 'changeGold', text = 'Change gold',
         help = 'A full stack of 100 gold or platinum coins in your open bags becomes the next coin.' },
     { id = 'eatFood', text = 'Eat food',
-        help = 'Eats food from your open bags every two minutes, so you keep regenerating.' },
+        help = 'Eats food from your open bags after you log in and every two minutes, so you keep regenerating.' },
     { id = 'refillAmmo', text = 'Refill ammo',
         help = 'When your arrows or bolts run out, the same kind from your open bags goes to the ammo slot.' },
 }
@@ -80,9 +81,22 @@ end
 
 -- Helpers ----------------------------------------------------------------------
 
+-- Opened from the map (a corpse, a bag on the floor): not inside another
+-- container and not one of your equipped items (small corpses count as
+-- pickupable in 7.x, so that says nothing)
 local function isGround(container)
+    if container:hasParent() then
+        return false
+    end
     local item = container:getContainerItem()
-    return not (item and item:isPickupable())
+    local player = g_game.getLocalPlayer()
+    for slot = InventorySlotFirst, InventorySlotLast do
+        local equipped = player and player:getInventoryItem(slot)
+        if equipped and item and equipped:getId() == item:getId() then
+            return false
+        end
+    end
+    return true
 end
 
 local function backpackPosition()
@@ -152,10 +166,21 @@ local function changeStep()
     if not isOn('changeGold') or g_clock.millis() - lastUseAt < 1000 then
         return false
     end
-    local stack = findCarried(function(item)
-        local id = item:getId()
+    local function full(item)
+        local id = item and item:getId()
         return (id == GOLD_COIN or id == PLATINUM_COIN) and item:getCount() == 100
-    end)
+    end
+    -- (coins are often held in a hand or the ammo slot in 7.x)
+    local player = g_game.getLocalPlayer()
+    local stack
+    for slot = InventorySlotFirst, InventorySlotLast do
+        local item = player and player:getInventoryItem(slot)
+        if full(item) then
+            stack = item
+            break
+        end
+    end
+    stack = stack or findCarried(full)
     if stack then
         lastUseAt = g_clock.millis()
         g_game.use(stack)
@@ -202,7 +227,14 @@ local function eat()
 end
 
 local function onInventoryChange(player, slot, item, oldItem)
-    if slot ~= InventorySlotAmmo or item or not oldItem or not isOn('refillAmmo') then
+    if item and isOn('changeGold') then
+        startTicking()
+    end
+    if slot ~= InventorySlotAmmo then
+        return
+    end
+    -- arrows and bolts only (coins live there too)
+    if item or not oldItem or not oldItem:isAmmo() or not isOn('refillAmmo') then
         return
     end
     local id = oldItem:getId()
@@ -296,6 +328,11 @@ local function onGameStart()
         removeEvent(eatEvent)
     end
     eatEvent = cycleEvent(eat, EAT_EVERY)
+    scheduleEvent(eat, 5000)
+    -- (a full stack may be waiting from last time)
+    if isOn('changeGold') then
+        scheduleEvent(startTicking, 2000)
+    end
 end
 
 local function onGameEnd()
@@ -310,7 +347,8 @@ end
 
 function init()
     g_ui.importStyle('automations')
-    connect(Container, { onOpen = onContainerOpen, onAddItem = onContainerChange, onUpdateItem = onContainerChange })
+    -- first: a handler that returns true ends the others' turn
+    connect(Container, { onOpen = onContainerOpen, onAddItem = onContainerChange, onUpdateItem = onContainerChange }, true)
     connect(LocalPlayer, { onInventoryChange = onInventoryChange })
     connect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd })
     -- first, to keep our own "You are full." out of the messages
