@@ -28,8 +28,9 @@ jobs:
       # next to it as version.json (what the server offers; ot-client#32)
       - name: Stamp the build
         run: |
-          BUILD="${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
-          printf '{"build":"%s","commit":"%s","date":"%s"}\n' "$BUILD" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%MZ)" > data/build.json
+          # the build is when it was made (UTC), so a later build sorts after an earlier one
+          BUILD="$(date -u +%Y-%m-%d-%H%M)"
+          printf '{"build":"%s","commit":"%s"}\n' "$BUILD" "${GITHUB_SHA::7}" > data/build.json
           cat data/build.json
 
       - name: Build browser bundle with Docker

@@ -275,3 +275,15 @@ MobileSetupBar < OtPanel
       size: 24 24
       image-source: /images/ui/ot/icons/check_on
       phantom: true
+
+// Frame rate, latency and build over the game view (gameinfo.lua)
+MobileGameInfo < Label
+  anchors.top: parent.top
+  anchors.left: parent.left
+  margin-top: 4
+  margin-left: 4
+  // (outlined text, no box: there when you look for it, not eye-catching)
+  font: $ot-font-text
+  color: $ot-text
+  text-auto-resize: true
+  phantom: true

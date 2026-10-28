@@ -9,16 +9,13 @@ local CHECK_EVERY = 15 * 60 * 1000
 local LAST_BUILD_SETTING = 'clientUpdatesLastBuild'
 local BUTTON_ID = 'clientUpdateButton'
 
-local ownBuild -- {build = '123-abc1234', ...} or nil: a local build
+local ownBuild -- {build = '2026-10-28-0927', commit = '46aee97'} or nil: a local build
 local pending -- the newer build's version.json
 local notified -- the build the toast was shown for
 local checkEvent, toast, toastEvent, sheet, button
 local applying = false
 local justUpdated = false
 
-local function buildNumber(build)
-    return tostring(build):match('^(%d+)') or tostring(build)
-end
 
 local function readOwnBuild()
     for _, file in ipairs({ '/build.json', '/data/build.json' }) do
@@ -76,7 +73,7 @@ local function applyNow()
     end
 end
 
-local function openSheet()
+function openSheet()
     if not pending then
         return
     end
@@ -84,7 +81,7 @@ local function openSheet()
     sheet = g_ui.createWidget('UpdateSheet', rootWidget)
     local panel = sheet.panel
     panel.text:setText(tr('A new version of the client is ready. It loads when you log out, or now if you like (this logs you out).'))
-    panel.build:setText(tr('Build %s, you have build %s.', buildNumber(pending.build), buildNumber(ownBuild.build)))
+    panel.build:setText(tr('Build %s, you have build %s.', pending.build, ownBuild.build))
     panel.close.onClick = closeSheet
     panel.later.onClick = closeSheet
     panel.apply.onClick = applyNow
@@ -124,7 +121,7 @@ end
 
 local function onVersion(info)
     if type(info) ~= 'table' or not info.build or info.build == ownBuild.build then
-        return
+        return false
     end
     pending = info
     showButton()
@@ -132,16 +129,22 @@ local function onVersion(info)
         notified = info.build
         showToast(tr('A client update is ready. It is applied when you log out.'))
     end
+    return true
 end
 
-function check()
+-- done(found): optional; found is nil when the website did not answer
+function check(done)
     if not ownBuild or not HTTP then
         return
     end
     -- (next to the page; the time keeps caches out of it)
     HTTP.getJSON('version.json?t=' .. os.time(), function(info, err)
+        local found
         if not err then
-            onVersion(info)
+            found = onVersion(info)
+        end
+        if done then
+            done(found)
         end
     end)
 end
@@ -149,7 +152,7 @@ end
 local function onGameStart()
     if justUpdated then
         justUpdated = false
-        showToast(tr('Updated to build %s.', buildNumber(ownBuild.build)))
+        showToast(tr('Updated to build %s.', ownBuild.build))
     end
     check()
     if checkEvent then
@@ -181,6 +184,24 @@ function getBuild()
     return ownBuild and ownBuild.build
 end
 
+-- "2026-10-28-0927" (when it was made, UTC), or nil for a local build
+function getBuildText()
+    return ownBuild and ownBuild.build
+end
+
+function isUpdatePending()
+    return pending ~= nil
+end
+
+-- The login screen's version text says which build this is
+local function labelLoginScreen()
+    local label = rootWidget:recursiveGetChildById('clientVersionLabel')
+    if label then
+        label:setText(g_app.getName() .. '\n' .. tr('Build: %s', ownBuild.build) ..
+            (ownBuild.commit and (' (' .. ownBuild.commit .. ')') or ''))
+    end
+end
+
 function init()
     if not (g_platform.isBrowser and g_platform.isBrowser()) then
         return
@@ -190,6 +211,7 @@ function init()
         return
     end
     g_ui.importStyle('updates')
+    labelLoginScreen()
     -- the first game of a new build says so
     local last = g_settings.getString(LAST_BUILD_SETTING)
     if last ~= ownBuild.build then

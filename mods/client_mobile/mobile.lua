@@ -944,6 +944,7 @@ function onEditLayoutChange(active)
 end
 
 local function onGameEnd()
+    stopGameInfo()
     setupOfferReady = false
     stopUiSetup()
     stopEditLayout()
@@ -952,6 +953,7 @@ end
 
 local function onGameStart()
     setMenuVisible(false)
+    startGameInfo()
     if modules.game_actionbar then
         modules.game_actionbar.ActionBarAssignSheet = openHotbarSheet
     end
@@ -1066,6 +1068,7 @@ function terminate()
     destroyHotbarPresetRow()
     presetRow = nil
     terminateTap()
+    stopGameInfo()
     toolbar:destroy()
     stats:destroy()
     chatButton:destroy()
