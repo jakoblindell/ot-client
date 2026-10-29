@@ -42,7 +42,23 @@ local AUTOMATIONS = {
     { id = 'changeGold', text = 'Change gold' },
     { id = 'eatFood', text = 'Eat food' },
     { id = 'refillAmmo', text = 'Refill ammo' },
+    { id = 'stakeSkin', text = 'Stake/skin' },
+    { id = 'autoTurn', text = 'Auto-turn' },
+    { id = 'manaSound', text = 'Mana sound' },
 }
+
+-- Auto stake/skin: tool -> the corpses it works on (the game server's
+-- data/actions/scripts/misc/skinning_dusting.lua)
+local OBSIDIAN_KNIFE, BLESSED_STAKE = 5908, 5942
+local SKINNING = {
+    [OBSIDIAN_KNIFE] = { [4011] = true, [4047] = true, [4057] = true, [4052] = true, -- minotaurs
+        [4321] = true, [4327] = true, [4324] = true, -- lizards
+        [4025] = true, [4062] = true, [4112] = true, [4212] = true }, -- dragons, dragon lords, behemoths, bone beasts
+    [BLESSED_STAKE] = { [4097] = true, [4137] = true }, -- demons, vampires
+}
+-- Auto-turn: spells that hit what is in front of you
+local DIRECTIONAL = { 'Strike', 'Wave', 'Beam' }
+local MANA_SOUND = '/mods/client_automations/sounds/mana_full'
 
 local options = {} -- this character's switches
 local lootQueue = {} -- containers (corpses) to take things from
@@ -263,8 +279,22 @@ local CORPSE_EVERY = 500
 local corpseEvent
 local triedAt = {} -- "x,y,z" -> millis of the last try
 
+local skinned = {} -- "x,y,z" -> true once the knife or stake was used
+
+-- A tool in a hand, the ammo slot or your open bags
+local function findTool(id)
+    local player = g_game.getLocalPlayer()
+    for slot = InventorySlotFirst, InventorySlotLast do
+        local item = player and player:getInventoryItem(slot)
+        if item and item:getId() == id then
+            return item
+        end
+    end
+    return findCarried(function(item) return item:getId() == id end)
+end
+
 local function openCorpseStep()
-    if not isOn('openCorpse') or not g_game.isOnline() then
+    if not (isOn('openCorpse') or isOn('stakeSkin')) or not g_game.isOnline() then
         return
     end
     local classic = modules.client_classic
@@ -277,8 +307,21 @@ local function openCorpseStep()
     for _, corpse in ipairs(classic.getMyCorpses()) do
         local pos = corpse.pos
         local key = pos.x .. ',' .. pos.y .. ',' .. pos.z
-        if pos.z == here.z and math.abs(pos.x - here.x) <= 1 and math.abs(pos.y - here.y) <= 1 and
-            now - (triedAt[key] or 0) > 3000 then
+        local near = pos.z == here.z and math.abs(pos.x - here.x) <= 1 and math.abs(pos.y - here.y) <= 1
+        if near and isOn('stakeSkin') and not skinned[key] then
+            -- first the knife or stake (it changes the corpse), then open
+            for tool, corpses in pairs(SKINNING) do
+                if corpses[corpse.item:getId()] then
+                    local carried = findTool(tool)
+                    if carried then
+                        skinned[key] = true
+                        g_game.useWith(carried, corpse.item)
+                        return
+                    end
+                end
+            end
+        end
+        if near and isOn('openCorpse') and now - (triedAt[key] or 0) > 3000 then
             triedAt[key] = now
             g_game.open(corpse.item)
             return
@@ -348,6 +391,8 @@ local function showHelp(text)
     closeHelp()
     helpBox = g_ui.createWidget('AutomationsHelp', rootWidget)
     helpBox.box.text:setText(tr(text))
+    helpBox.box:setWidth(math.min(520, rootWidget:getWidth() - 16))
+    helpBox.box:setHeight(math.min(rootWidget:getHeight() - 16, helpBox.box.text:getHeight() + 50))
     helpBox.onClick = closeHelp
     helpBox:raise()
 end
@@ -361,6 +406,9 @@ function close()
 end
 
 local HELP = 'Open corpse: a corpse of a monster you killed opens when you stand next to it.\n' ..
+    'Stake/skin: with an obsidian knife or blessed stake in your bags, a minotaur, lizard, dragon, behemoth, bone beast, vampire or demon corpse of yours is skinned or staked when you stand next to it.\n' ..
+    'Auto-turn: a strike, wave or beam (hotbar or typed) first turns you to your target.\n' ..
+    'Mana sound: a chime when your mana is full.\n' ..
     'Loot gold / food: coins or food from a corpse you open go to your loot container, onto a stack of the same kind when there is one.\n' ..
     'Change gold: when looting makes a stack of 100 gold or platinum coins, it becomes the next coin. Coins you carry or change yourself are never touched.\n' ..
     'Eat food: eats after you log in and every two minutes.\n' ..
@@ -438,6 +486,91 @@ function toggle()
     end
 end
 
+-- Auto-turn: before a strike, wave or beam from the hotbar, face the target
+local directional = {} -- spell words -> true
+local originalTalk
+
+local function buildDirectional()
+    directional = {}
+    for _, spell in pairs(SpellInfo and SpellInfo.Default or {}) do
+        for _, word in ipairs(DIRECTIONAL) do
+            if spell.words and spell.name and spell.name:find(word) then
+                directional[spell.words:lower()] = true
+            end
+        end
+    end
+end
+
+local function faceTarget()
+    local player = g_game.getLocalPlayer()
+    local target = g_game.getAttackingCreature()
+    if not player or not target then
+        return
+    end
+    local from, to = player:getPosition(), target:getPosition()
+    if from.z ~= to.z then
+        return
+    end
+    local dx, dy = to.x - from.x, to.y - from.y
+    if dx == 0 and dy == 0 then
+        return
+    end
+    local direction
+    if math.abs(dx) >= math.abs(dy) then
+        direction = dx > 0 and East or West
+    else
+        direction = dy > 0 and South or North
+    end
+    if player:getDirection() ~= direction then
+        g_game.turn(direction)
+    end
+end
+
+local function beforeSpell(words)
+    if isOn('autoTurn') and type(words) == 'string' then
+        if not next(directional) then
+            buildDirectional()
+        end
+        if directional[words:lower():gsub('^%s+', ''):gsub('%s+$', '')] then
+            faceTarget()
+        end
+    end
+end
+
+local originalTalkChannel
+
+local function onTalk(words, ...)
+    beforeSpell(words)
+    return originalTalk(words, ...)
+end
+
+-- (typed in the chat: said in the default channel)
+local function onTalkChannel(mode, channel, words, ...)
+    if mode == MessageModes.Say then
+        beforeSpell(words)
+    end
+    return originalTalkChannel(mode, channel, words, ...)
+end
+
+-- Mana full sound
+local function onManaChange(player, mana, maxMana, oldMana)
+    -- (not at login: mana comes from 0 then)
+    if not isOn('manaSound') or not g_sounds or maxMana <= 0 or mana < maxMana or
+        not oldMana or oldMana <= 0 or oldMana >= maxMana then
+        return
+    end
+    -- (the client's own sounds stay off: this channel only)
+    if g_sounds.setAudioEnabled and not g_sounds.isAudioEnabled() then
+        g_sounds.setAudioEnabled(true)
+    end
+    local channel = g_sounds.getChannel(SoundChannels.Bot)
+    if channel then
+        channel:setEnabled(true)
+        channel:setGain(1)
+        channel:play(MANA_SOUND, 0, 1.0)
+    end
+end
+
 -- Module ------------------------------------------------------------------------
 
 local function onGameStart()
@@ -451,6 +584,7 @@ local function onGameStart()
         removeEvent(corpseEvent)
     end
     triedAt = {}
+    skinned = {}
     corpseEvent = cycleEvent(openCorpseStep, CORPSE_EVERY)
     scheduleEvent(eat, 5000)
 end
@@ -473,7 +607,11 @@ function init()
     g_ui.importStyle('automations')
     -- first: a handler that returns true ends the others' turn
     connect(Container, { onOpen = onContainerOpen }, true)
-    connect(LocalPlayer, { onInventoryChange = onInventoryChange })
+    connect(LocalPlayer, { onInventoryChange = onInventoryChange, onManaChange = onManaChange })
+    originalTalk = g_game.talk
+    g_game.talk = onTalk
+    originalTalkChannel = g_game.talkChannel
+    g_game.talkChannel = onTalkChannel
     connect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd })
     -- first, to keep our own "You are full." out of the messages
     connect(g_game, { onTextMessage = onTextMessage }, true)
@@ -489,7 +627,13 @@ end
 
 function terminate()
     disconnect(Container, { onOpen = onContainerOpen })
-    disconnect(LocalPlayer, { onInventoryChange = onInventoryChange })
+    disconnect(LocalPlayer, { onInventoryChange = onInventoryChange, onManaChange = onManaChange })
+    if g_game.talk == onTalk then
+        g_game.talk = originalTalk
+    end
+    if g_game.talkChannel == onTalkChannel then
+        g_game.talkChannel = originalTalkChannel
+    end
     disconnect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd, onTextMessage = onTextMessage })
     onGameEnd()
     if topButton then

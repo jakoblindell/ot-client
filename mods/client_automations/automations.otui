@@ -83,8 +83,8 @@ AutomationsHelp < OtBackdrop
   OtPanel
     id: box
     anchors.centerIn: parent
-    width: 400
-    height: 240
+    width: 520
+    height: 300
     phantom: true
 
     OtText
