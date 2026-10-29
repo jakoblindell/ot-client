@@ -2,8 +2,8 @@
 -- work, per character, all off until switched on:
 --
 --   Loot gold / Loot food: what is in a corpse you open goes to your backpack
---   Change gold: a full stack of 100 coins (in your bags or equipment)
---     becomes the next coin
+--   Change gold: a stack that looting fills to 100 coins becomes the next
+--     coin (coins you carry or change down yourself are left alone)
 --   Eat food: eats from your open bags now and then ("You are full." is
 --     not shown when it comes from this)
 --   Refill ammo: an empty ammo slot is filled from the same arrows or bolts
@@ -48,12 +48,10 @@ local options = {} -- this character's switches
 local lootQueue = {} -- containers (corpses) to take things from
 local ticker, eatEvent
 local lastUseAt, lastEatAt = 0, 0
--- You changed a platinum or crystal coin into smaller coins yourself (to
--- pay 50 gold, say): full stacks are left alone for a while
-local CHANGE_PAUSE = 5 * 60 * 1000
-local changedDownAt = -CHANGE_PAUSE
-local ourUse = false
-local originalUse
+-- Coins just looted: { container = id, coin = id, until = millis }. Change
+-- gold only changes a stack that looting filled, never coins you carry or
+-- changed down yourself
+local lootedCoins
 local sheet, helpBox, topButton
 
 -- Settings ---------------------------------------------------------------------
@@ -214,6 +212,9 @@ local function lootStep()
                         return false
                     end
                     g_game.move(item, target, count)
+                    if COINS[item:getId()] and target.y >= 64 then
+                        lootedCoins = { container = target.y - 64, coin = item:getId(), untilAt = g_clock.millis() + 3000 }
+                    end
                     return true
                 end
             end
@@ -225,33 +226,25 @@ end
 
 local function changeStep()
     -- (wait for the server's answer before using another stack)
-    if not isOn('changeGold') or g_clock.millis() - lastUseAt < 1000 or
-        g_clock.millis() - changedDownAt < CHANGE_PAUSE then
+    if not isOn('changeGold') or not lootedCoins or g_clock.millis() - lastUseAt < 1000 then
         return false
     end
-    local function full(item)
-        local id = item and item:getId()
-        return (id == GOLD_COIN or id == PLATINUM_COIN) and item:getCount() == 100
+    if g_clock.millis() > lootedCoins.untilAt then
+        lootedCoins = nil
+        return false
     end
-    -- (coins are often held in a hand or the ammo slot in 7.x)
-    local player = g_game.getLocalPlayer()
-    local stack
-    for slot = InventorySlotFirst, InventorySlotLast do
-        local item = player and player:getInventoryItem(slot)
-        if full(item) then
-            stack = item
-            break
+    local container = g_game.getContainer(lootedCoins.container)
+    local coin = lootedCoins.coin
+    for _, item in ipairs(container and container:getItems() or {}) do
+        if item:getId() == coin and coin ~= CRYSTAL_COIN and item:getCount() == 100 then
+            lastUseAt = g_clock.millis()
+            lootedCoins = nil
+            g_game.use(item)
+            return true
         end
     end
-    stack = stack or findCarried(full)
-    if stack then
-        lastUseAt = g_clock.millis()
-        ourUse = true
-        g_game.use(stack)
-        ourUse = false
-        return true
-    end
-    return false
+    -- (the loot move may not have arrived yet: try again next tick)
+    return true
 end
 
 tick = function()
@@ -302,12 +295,6 @@ local function onContainerOpen(container)
     end
 end
 
-local function onContainerChange()
-    if isOn('changeGold') then
-        startTicking()
-    end
-end
-
 local function eat()
     if not isOn('eatFood') or not g_game.isOnline() then
         return
@@ -320,9 +307,6 @@ local function eat()
 end
 
 local function onInventoryChange(player, slot, item, oldItem)
-    if item and isOn('changeGold') then
-        startTicking()
-    end
     if slot ~= InventorySlotAmmo then
         return
     end
@@ -378,7 +362,7 @@ end
 
 local HELP = 'Open corpse: a corpse of a monster you killed opens when you stand next to it.\n' ..
     'Loot gold / food: coins or food from a corpse you open go to your loot container, onto a stack of the same kind when there is one.\n' ..
-    'Change gold: 100 gold or platinum coins become the next coin. When you change a coin into smaller ones yourself, full stacks are left alone for five minutes.\n' ..
+    'Change gold: when looting makes a stack of 100 gold or platinum coins, it becomes the next coin. Coins you carry or change yourself are never touched.\n' ..
     'Eat food: eats after you log in and every two minutes.\n' ..
     'Refill ammo: arrows or bolts from your bags fill an empty ammo slot.\n' ..
     'They work at a player\'s speed, only on what you open yourself. Saved for this character.'
@@ -433,9 +417,6 @@ function open()
         toggle.check.onCheckChange = function(widget, checked)
             options[automation.id] = checked
             saveOptions()
-            if automation.id == 'changeGold' and checked then
-                startTicking()
-            end
         end
         toggle.onClick = function()
             toggle.check:setChecked(not toggle.check:isChecked())
@@ -472,10 +453,6 @@ local function onGameStart()
     triedAt = {}
     corpseEvent = cycleEvent(openCorpseStep, CORPSE_EVERY)
     scheduleEvent(eat, 5000)
-    -- (a full stack may be waiting from last time)
-    if isOn('changeGold') then
-        scheduleEvent(startTicking, 2000)
-    end
 end
 
 local function onGameEnd()
@@ -492,19 +469,10 @@ local function onGameEnd()
     end
 end
 
-local function onUse(thing, ...)
-    if not ourUse and thing and thing.getId and (thing:getId() == PLATINUM_COIN or thing:getId() == CRYSTAL_COIN) then
-        changedDownAt = g_clock.millis()
-    end
-    return originalUse(thing, ...)
-end
-
 function init()
     g_ui.importStyle('automations')
-    originalUse = g_game.use
-    g_game.use = onUse
     -- first: a handler that returns true ends the others' turn
-    connect(Container, { onOpen = onContainerOpen, onAddItem = onContainerChange, onUpdateItem = onContainerChange }, true)
+    connect(Container, { onOpen = onContainerOpen }, true)
     connect(LocalPlayer, { onInventoryChange = onInventoryChange })
     connect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd })
     -- first, to keep our own "You are full." out of the messages
@@ -520,10 +488,7 @@ function init()
 end
 
 function terminate()
-    if g_game.use == onUse then
-        g_game.use = originalUse
-    end
-    disconnect(Container, { onOpen = onContainerOpen, onAddItem = onContainerChange, onUpdateItem = onContainerChange })
+    disconnect(Container, { onOpen = onContainerOpen })
     disconnect(LocalPlayer, { onInventoryChange = onInventoryChange })
     disconnect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd, onTextMessage = onTextMessage })
     onGameEnd()
