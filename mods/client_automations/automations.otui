@@ -1,12 +1,37 @@
 // Automations (automations.lua), built from the ot-ui styles
-// (data/styles/50-ot-ui.otui)
+// (data/styles/50-ot-ui.otui). Compact: two columns of switches, one "?"
+// for all of them, and where loot goes.
+
+// One switch: the box and its name; a tap anywhere on it toggles
+AutomationToggle < UIWidget
+  height: 40
+  phantom: false
+
+  OtCheck
+    id: check
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+
+  OtLabel
+    id: text
+    anchors.left: check.right
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 2
+    phantom: true
 
 AutomationsSheet < OtBackdrop
   OtPanel
     id: panel
     anchors.centerIn: parent
-    width: 480
-    height: 420
+    width: 440
+    height: 260
+
+    OtHelpButton
+      id: help
+      anchors.top: parent.top
+      anchors.left: parent.left
+      margin-top: 8
 
     OtTitle
       id: title
@@ -21,41 +46,45 @@ AutomationsSheet < OtBackdrop
       anchors.right: parent.right
       !text: 'X'
 
-    OtHint
-      id: note
+    UIWidget
+      id: toggles
       anchors.top: close.bottom
       anchors.left: parent.left
       anchors.right: parent.right
       margin-top: 6
-      !text: tr('For this character. They work at a player\'s speed, and only on what you open yourself.')
+      layout:
+        type: grid
+        cell-size: 200 40
+        cell-spacing: 2
+        flow: true
+        fit-children: true
 
-    ScrollablePanel
-      id: list
-      anchors.top: note.bottom
+    OtLabel
+      id: lootToLabel
+      anchors.top: toggles.bottom
+      anchors.left: parent.left
+      margin-top: 12
+      text-auto-resize: true
+      !text: tr('Put loot in')
+
+    UIWidget
+      id: lootTo
+      anchors.top: lootToLabel.bottom
       anchors.left: parent.left
       anchors.right: parent.right
-      anchors.bottom: parent.bottom
-      margin-top: 8
-      margin-right: 14
-      vertical-scrollbar: listScroll
+      margin-top: 4
+      height: 40
       layout:
-        type: verticalBox
+        type: horizontalBox
+        spacing: 4
 
-    VerticalScrollBar
-      id: listScroll
-      anchors.top: list.top
-      anchors.bottom: list.bottom
-      anchors.right: parent.right
-      step: 52
-      pixels-scroll: true
-
-// A "?" explanation
+// The "?" explanation
 AutomationsHelp < OtBackdrop
   OtPanel
     id: box
     anchors.centerIn: parent
-    width: 360
-    height: 130
+    width: 400
+    height: 240
     phantom: true
 
     OtText

@@ -36,16 +36,11 @@ local STOP_MESSAGES = {
 }
 
 local AUTOMATIONS = {
-    { id = 'lootGold', text = 'Loot gold',
-        help = 'Coins in a corpse you open go to your backpack.' },
-    { id = 'lootFood', text = 'Loot food',
-        help = 'Food in a corpse you open goes to your backpack.' },
-    { id = 'changeGold', text = 'Change gold',
-        help = 'A full stack of 100 gold or platinum coins in your open bags becomes the next coin.' },
-    { id = 'eatFood', text = 'Eat food',
-        help = 'Eats food from your open bags after you log in and every two minutes, so you keep regenerating.' },
-    { id = 'refillAmmo', text = 'Refill ammo',
-        help = 'When your arrows or bolts run out, the same kind from your open bags goes to the ammo slot.' },
+    { id = 'lootGold', text = 'Loot gold' },
+    { id = 'lootFood', text = 'Loot food' },
+    { id = 'changeGold', text = 'Change gold' },
+    { id = 'eatFood', text = 'Eat food' },
+    { id = 'refillAmmo', text = 'Refill ammo' },
 }
 
 local options = {} -- this character's switches
@@ -85,6 +80,12 @@ end
 -- container and not one of your equipped items (small corpses count as
 -- pickupable in 7.x, so that says nothing)
 local function isGround(container)
+    -- the containers window knows where each was opened from
+    local containers = modules.client_containers
+    local known = containers and containers.isGroundContainer and containers.isGroundContainer(container)
+    if known ~= nil then
+        return known
+    end
     if container:hasParent() then
         return false
     end
@@ -99,12 +100,61 @@ local function isGround(container)
     return true
 end
 
-local function backpackPosition()
+-- Your main backpack, when it is open
+local function openBackpack()
     local player = g_game.getLocalPlayer()
     local backpack = player and player:getInventoryItem(InventorySlotBack)
-    if backpack and backpack:isContainer() then
-        return { x = 65535, y = InventorySlotBack, z = 0 }
+    if not backpack then
+        return nil
     end
+    for _, container in pairs(g_game.getContainers()) do
+        local item = container:getContainerItem()
+        if not container:hasParent() and item and item:getId() == backpack:getId() and not isGround(container) then
+            return container
+        end
+    end
+end
+
+-- Where loot goes: the container named in "Put loot in" when it is open,
+-- else the main backpack (open, or its inventory slot)
+local function lootContainer()
+    local wantedName = options.lootTo
+    local containers = modules.client_containers
+    if wantedName and containers and containers.getNamedContainers then
+        for _, entry in ipairs(containers.getNamedContainers()) do
+            if entry.name == wantedName then
+                return entry.container
+            end
+        end
+    end
+    return openBackpack()
+end
+
+-- Where to move an item so it joins a stack of the same kind (coins on
+-- coins), else the container's first free slot. (A move to the container's
+-- slot 0 could land inside a bag kept there.)
+local function lootTarget(item)
+    local container = lootContainer()
+    if not container then
+        local player = g_game.getLocalPlayer()
+        local backpack = player and player:getInventoryItem(InventorySlotBack)
+        if backpack and backpack:isContainer() then
+            return { x = 65535, y = InventorySlotBack, z = 0 }, item:getCount()
+        end
+        return nil
+    end
+    if item:isStackable() then
+        for slot, carried in ipairs(container:getItems()) do
+            if carried:getId() == item:getId() and carried:getCount() < 100 then
+                return { x = 65535, y = 64 + container:getId(), z = slot - 1 },
+                    math.min(item:getCount(), 100 - carried:getCount())
+            end
+        end
+    end
+    if container:getItemsCount() >= container:getCapacity() then
+        return nil
+    end
+    return { x = 65535, y = 64 + container:getId(), z = container:getItemsCount() }, item:getCount()
 end
 
 -- The first item in your own open bags (not corpses) that matches
@@ -145,13 +195,18 @@ end
 local function lootStep()
     while #lootQueue > 0 do
         local container = lootQueue[1]
-        local target = backpackPosition()
-        if container:isClosed() or not target then
+        if container:isClosed() then
             table.remove(lootQueue, 1)
         else
             for _, item in ipairs(container:getItems()) do
                 if wanted(item) then
-                    g_game.move(item, target, item:getCount())
+                    local target, count = lootTarget(item)
+                    if not target then
+                        -- nowhere to put it
+                        lootQueue = {}
+                        return false
+                    end
+                    g_game.move(item, target, count)
                     return true
                 end
             end
@@ -283,30 +338,72 @@ function close()
     end
 end
 
+local HELP = 'Loot gold / food: coins or food from a corpse you open go to your loot container, onto a stack of the same kind when there is one.\n' ..
+    'Change gold: 100 gold or platinum coins become the next coin.\n' ..
+    'Eat food: eats after you log in and every two minutes.\n' ..
+    'Refill ammo: arrows or bolts from your bags fill an empty ammo slot.\n' ..
+    'They work at a player\'s speed, only on what you open yourself. Saved for this character.'
+
+local function renderLootTo()
+    local row = sheet.panel.lootTo
+    row:destroyChildren()
+    local choices = { { value = nil, text = tr('Backpack') } }
+    local containers = modules.client_containers
+    local seen = {}
+    for _, entry in ipairs(containers and containers.getNamedContainers and containers.getNamedContainers() or {}) do
+        if not seen[entry.name] then
+            seen[entry.name] = true
+            table.insert(choices, { value = entry.name, text = entry.name })
+        end
+    end
+    -- a chosen container that is closed now still shows
+    if options.lootTo and not seen[options.lootTo] then
+        table.insert(choices, { value = options.lootTo, text = options.lootTo })
+    end
+    for _, choice in ipairs(choices) do
+        local button = g_ui.createWidget('OtButton', row)
+        button:setText(choice.text)
+        button:setWidth(math.max(80, button:getTextSize().width + 24))
+        button:setChecked(options.lootTo == choice.value)
+        button.onClick = function()
+            options.lootTo = choice.value
+            saveOptions()
+            renderLootTo()
+        end
+    end
+end
+
 function open()
     close()
     sheet = g_ui.createWidget('AutomationsSheet', rootWidget)
     local panel = sheet.panel
-    panel:setSize({ width = math.min(480, rootWidget:getWidth() - 16),
-        height = math.min(420, rootWidget:getHeight() - 16) })
+    local width = math.min(440, rootWidget:getWidth() - 16)
+    panel:setWidth(width)
     sheet.onClick = close
     sheet.onEscape = close
     panel.close.onClick = close
+    panel.help.onClick = function() showHelp(HELP) end
+    local toggles = panel.toggles
+    toggles:getLayout():setCellSize({ width = math.floor((width - 24 - 2) / 2), height = 40 })
     for _, automation in ipairs(AUTOMATIONS) do
-        local row = g_ui.createWidget('OtSettingRow', panel.list)
-        row.title:setText(tr(automation.text))
-        row.help.onClick = function() showHelp(automation.help) end
-        local check = g_ui.createWidget('OtCheck', row.controls)
-        check:setChecked(isOn(automation.id))
-        check.onCheckChange = function(widget, checked)
+        local toggle = g_ui.createWidget('AutomationToggle', toggles)
+        toggle.text:setText(tr(automation.text))
+        toggle.check:setChecked(isOn(automation.id))
+        toggle.check.onCheckChange = function(widget, checked)
             options[automation.id] = checked
             saveOptions()
             if automation.id == 'changeGold' and checked then
                 startTicking()
             end
         end
-        row.controls:setWidth(40)
+        toggle.onClick = function()
+            toggle.check:setChecked(not toggle.check:isChecked())
+        end
     end
+    renderLootTo()
+    -- as tall as what it holds
+    local rows = math.ceil(#AUTOMATIONS / 2)
+    panel:setHeight(math.min(rootWidget:getHeight() - 16, 12 + 40 + 6 + rows * 42 + 12 + 16 + 4 + 40 + 12))
     sheet:raise()
     sheet:focus()
 end
