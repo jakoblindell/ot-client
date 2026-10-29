@@ -36,6 +36,7 @@ local STOP_MESSAGES = {
 }
 
 local AUTOMATIONS = {
+    { id = 'openCorpse', text = 'Open corpse' },
     { id = 'lootGold', text = 'Loot gold' },
     { id = 'lootFood', text = 'Loot food' },
     { id = 'changeGold', text = 'Change gold' },
@@ -47,6 +48,12 @@ local options = {} -- this character's switches
 local lootQueue = {} -- containers (corpses) to take things from
 local ticker, eatEvent
 local lastUseAt, lastEatAt = 0, 0
+-- You changed a platinum or crystal coin into smaller coins yourself (to
+-- pay 50 gold, say): full stacks are left alone for a while
+local CHANGE_PAUSE = 5 * 60 * 1000
+local changedDownAt = -CHANGE_PAUSE
+local ourUse = false
+local originalUse
 local sheet, helpBox, topButton
 
 -- Settings ---------------------------------------------------------------------
@@ -218,7 +225,8 @@ end
 
 local function changeStep()
     -- (wait for the server's answer before using another stack)
-    if not isOn('changeGold') or g_clock.millis() - lastUseAt < 1000 then
+    if not isOn('changeGold') or g_clock.millis() - lastUseAt < 1000 or
+        g_clock.millis() - changedDownAt < CHANGE_PAUSE then
         return false
     end
     local function full(item)
@@ -238,7 +246,9 @@ local function changeStep()
     stack = stack or findCarried(full)
     if stack then
         lastUseAt = g_clock.millis()
+        ourUse = true
         g_game.use(stack)
+        ourUse = false
         return true
     end
     return false
@@ -253,6 +263,34 @@ tick = function()
         return
     end
     stopTicking()
+end
+
+-- Open corpse: one of your corpses next to you (never walks to it)
+local CORPSE_EVERY = 500
+local corpseEvent
+local triedAt = {} -- "x,y,z" -> millis of the last try
+
+local function openCorpseStep()
+    if not isOn('openCorpse') or not g_game.isOnline() then
+        return
+    end
+    local classic = modules.client_classic
+    local player = g_game.getLocalPlayer()
+    if not (classic and classic.getMyCorpses and player) then
+        return
+    end
+    local here = player:getPosition()
+    local now = g_clock.millis()
+    for _, corpse in ipairs(classic.getMyCorpses()) do
+        local pos = corpse.pos
+        local key = pos.x .. ',' .. pos.y .. ',' .. pos.z
+        if pos.z == here.z and math.abs(pos.x - here.x) <= 1 and math.abs(pos.y - here.y) <= 1 and
+            now - (triedAt[key] or 0) > 3000 then
+            triedAt[key] = now
+            g_game.open(corpse.item)
+            return
+        end
+    end
 end
 
 -- Events -----------------------------------------------------------------------
@@ -338,8 +376,9 @@ function close()
     end
 end
 
-local HELP = 'Loot gold / food: coins or food from a corpse you open go to your loot container, onto a stack of the same kind when there is one.\n' ..
-    'Change gold: 100 gold or platinum coins become the next coin.\n' ..
+local HELP = 'Open corpse: a corpse of a monster you killed opens when you stand next to it.\n' ..
+    'Loot gold / food: coins or food from a corpse you open go to your loot container, onto a stack of the same kind when there is one.\n' ..
+    'Change gold: 100 gold or platinum coins become the next coin. When you change a coin into smaller ones yourself, full stacks are left alone for five minutes.\n' ..
     'Eat food: eats after you log in and every two minutes.\n' ..
     'Refill ammo: arrows or bolts from your bags fill an empty ammo slot.\n' ..
     'They work at a player\'s speed, only on what you open yourself. Saved for this character.'
@@ -377,14 +416,16 @@ function open()
     close()
     sheet = g_ui.createWidget('AutomationsSheet', rootWidget)
     local panel = sheet.panel
-    local width = math.min(440, rootWidget:getWidth() - 16)
+    local width = math.min(600, rootWidget:getWidth() - 16)
     panel:setWidth(width)
     sheet.onClick = close
     sheet.onEscape = close
     panel.close.onClick = close
     panel.help.onClick = function() showHelp(HELP) end
     local toggles = panel.toggles
-    toggles:getLayout():setCellSize({ width = math.floor((width - 24 - 2) / 2), height = 40 })
+    -- as many columns as fit (4 on a tablet or desktop, 3 on a phone)
+    local columns = math.max(2, math.min(4, math.floor((width - 24) / 140)))
+    toggles:getLayout():setCellSize({ width = math.floor((width - 24 - 2 * (columns - 1)) / columns), height = 40 })
     for _, automation in ipairs(AUTOMATIONS) do
         local toggle = g_ui.createWidget('AutomationToggle', toggles)
         toggle.text:setText(tr(automation.text))
@@ -402,7 +443,7 @@ function open()
     end
     renderLootTo()
     -- as tall as what it holds
-    local rows = math.ceil(#AUTOMATIONS / 2)
+    local rows = math.ceil(#AUTOMATIONS / columns)
     panel:setHeight(math.min(rootWidget:getHeight() - 16, 12 + 40 + 6 + rows * 42 + 12 + 16 + 4 + 40 + 12))
     sheet:raise()
     sheet:focus()
@@ -425,6 +466,11 @@ local function onGameStart()
         removeEvent(eatEvent)
     end
     eatEvent = cycleEvent(eat, EAT_EVERY)
+    if corpseEvent then
+        removeEvent(corpseEvent)
+    end
+    triedAt = {}
+    corpseEvent = cycleEvent(openCorpseStep, CORPSE_EVERY)
     scheduleEvent(eat, 5000)
     -- (a full stack may be waiting from last time)
     if isOn('changeGold') then
@@ -440,10 +486,23 @@ local function onGameEnd()
         removeEvent(eatEvent)
         eatEvent = nil
     end
+    if corpseEvent then
+        removeEvent(corpseEvent)
+        corpseEvent = nil
+    end
+end
+
+local function onUse(thing, ...)
+    if not ourUse and thing and thing.getId and (thing:getId() == PLATINUM_COIN or thing:getId() == CRYSTAL_COIN) then
+        changedDownAt = g_clock.millis()
+    end
+    return originalUse(thing, ...)
 end
 
 function init()
     g_ui.importStyle('automations')
+    originalUse = g_game.use
+    g_game.use = onUse
     -- first: a handler that returns true ends the others' turn
     connect(Container, { onOpen = onContainerOpen, onAddItem = onContainerChange, onUpdateItem = onContainerChange }, true)
     connect(LocalPlayer, { onInventoryChange = onInventoryChange })
@@ -461,6 +520,9 @@ function init()
 end
 
 function terminate()
+    if g_game.use == onUse then
+        g_game.use = originalUse
+    end
     disconnect(Container, { onOpen = onContainerOpen, onAddItem = onContainerChange, onUpdateItem = onContainerChange })
     disconnect(LocalPlayer, { onInventoryChange = onInventoryChange })
     disconnect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd, onTextMessage = onTextMessage })

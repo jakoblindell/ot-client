@@ -1,5 +1,5 @@
 // Automations (automations.lua), built from the ot-ui styles
-// (data/styles/50-ot-ui.otui). Compact: two columns of switches, one "?"
+// (data/styles/50-ot-ui.otui). Compact: columns of switches, one "?"
 // for all of them, and where loot goes.
 
 // One switch: the box and its name; a tap anywhere on it toggles
@@ -24,7 +24,7 @@ AutomationsSheet < OtBackdrop
   OtPanel
     id: panel
     anchors.centerIn: parent
-    width: 440
+    width: 600
     height: 260
 
     OtHelpButton

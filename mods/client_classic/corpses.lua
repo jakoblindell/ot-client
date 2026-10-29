@@ -90,6 +90,20 @@ local function onCorpseMessage(protocol, opcode, buffer)
     scan()
 end
 
+-- Your unopened corpses that are in view: { { pos = Position, item = Item } }
+-- (client_automations opens them)
+function getMyCorpses()
+    local list = {}
+    for _, mark in pairs(marks) do
+        local tile = g_map.getTile(mark.pos)
+        local corpse = tile and corpsesOn(tile)[1]
+        if corpse then
+            table.insert(list, { pos = mark.pos, item = corpse })
+        end
+    end
+    return list
+end
+
 local function onGameEnd()
     clearShine()
     marks = {}
