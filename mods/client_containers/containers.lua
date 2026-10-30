@@ -628,6 +628,28 @@ function toggle()
     end
 end
 
+-- The open containers you named, as { name = 'Loot', container = c }
+-- (client_automations puts loot there)
+function getNamedContainers()
+    local _, names = namesNode()
+    local list = {}
+    for _, tab in ipairs(tabs) do
+        local custom = names and tab.key and names[tab.key]
+        if custom and custom ~= '' and not tab.container:isClosed() then
+            table.insert(list, { name = custom, container = tab.container })
+        end
+    end
+    return list
+end
+
+-- Whether an open container is on the ground (a corpse), as far as known
+function isGroundContainer(container)
+    local tab = tabFor(container:getId())
+    if tab then
+        return tab.ground
+    end
+end
+
 function getWindow()
     return window
 end

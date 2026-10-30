@@ -23,3 +23,5 @@
 !/client_updates/**
 !/client_typing/
 !/client_typing/**
+!/client_automations/
+!/client_automations/**

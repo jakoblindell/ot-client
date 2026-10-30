@@ -1,0 +1,8 @@
+Module
+  name: client_automations
+  description: Optional automations per character: loot gold and food from corpses you open, change gold, eat, refill ammo (ot-client#21)
+  author: ot-client
+  sandboxed: true
+  scripts: [ automations ]
+  @onLoad: init()
+  @onUnload: terminate()
