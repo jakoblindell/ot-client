@@ -27,6 +27,9 @@ for _, id in ipairs({ 3250, 3577, 3578, 3579, 3580, 3581, 3582, 3583, 3584, 3585
     6542, 6543, 6544, 6545, 6569, 6574 }) do
     FOODS[id] = true
 end
+-- Arrows and bolts (items with the Ammo flag in the game server's
+-- items.srv; 7.x item files give the client no such flag)
+local AMMO = { [3446] = true, [3447] = true, [3448] = true, [3449] = true, [3450] = true, [6528] = true }
 -- Server answers that end a looting run
 local STOP_MESSAGES = {
     'You cannot put more objects in this container.',
@@ -349,15 +352,23 @@ local function eat()
     end
 end
 
-local function onInventoryChange(player, slot, item, oldItem)
+-- (the client reports no old item when a slot empties, so the arrows in
+-- the slot are remembered while they are there)
+local ammoInSlot
+
+local function onInventoryChange(player, slot, item)
     if slot ~= InventorySlotAmmo then
         return
     end
-    -- arrows and bolts only (coins live there too)
-    if item or not oldItem or not oldItem:isAmmo() or not isOn('refillAmmo') then
+    if item then
+        ammoInSlot = AMMO[item:getId()] and item:getId() or nil
         return
     end
-    local id = oldItem:getId()
+    local id = ammoInSlot
+    ammoInSlot = nil
+    if not id or not isOn('refillAmmo') then
+        return
+    end
     scheduleEvent(function()
         local refill = g_game.isOnline() and findCarried(function(candidate) return candidate:getId() == id end)
         if refill then
@@ -607,7 +618,8 @@ function init()
     g_ui.importStyle('automations')
     -- first: a handler that returns true ends the others' turn
     connect(Container, { onOpen = onContainerOpen }, true)
-    connect(LocalPlayer, { onInventoryChange = onInventoryChange, onManaChange = onManaChange })
+    -- first: a handler that returns true ends the others' turn
+    connect(LocalPlayer, { onInventoryChange = onInventoryChange, onManaChange = onManaChange }, true)
     originalTalk = g_game.talk
     g_game.talk = onTalk
     originalTalkChannel = g_game.talkChannel
