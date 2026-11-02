@@ -1,6 +1,7 @@
 // Automations (automations.lua), built from the ot-ui styles
-// (data/styles/50-ot-ui.otui). Compact: columns of switches, one "?"
-// for all of them, and where loot goes.
+// (data/styles/50-ot-ui.otui). Compact: two tabs. General: columns of
+// switches, one "?" for all of them, and where loot goes. Loot list: the
+// items to take from corpses, each with its own container.
 
 // One switch: the box and its name; a tap anywhere on it toggles
 AutomationToggle < UIWidget
@@ -19,6 +20,56 @@ AutomationToggle < UIWidget
     anchors.verticalCenter: parent.verticalCenter
     margin-left: 2
     phantom: true
+
+// A search result: tap to add it to the loot list
+LootSearchResult < OtButton
+  height: 40
+  margin-right: 4
+  text-align: left
+  text-offset: 40 0
+
+  Item
+    id: item
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 4
+    virtual: true
+    phantom: true
+
+// An item on the loot list: picture, name, its container (tap to change)
+// and remove
+LootListRow < UIWidget
+  height: 40
+  margin-bottom: 2
+
+  Item
+    id: item
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    virtual: true
+    phantom: true
+
+  OtLabel
+    id: name
+    anchors.left: item.right
+    anchors.right: target.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 6
+    margin-right: 6
+    phantom: true
+
+  OtButton
+    id: target
+    anchors.right: remove.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-right: 4
+    width: 120
+
+  OtIconButton
+    id: remove
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    !text: 'X'
 
 AutomationsSheet < OtBackdrop
   OtPanel
@@ -46,37 +97,106 @@ AutomationsSheet < OtBackdrop
       anchors.right: parent.right
       !text: 'X'
 
-    UIWidget
-      id: toggles
+    OtTabRow
+      id: tabs
       anchors.top: close.bottom
       anchors.left: parent.left
       anchors.right: parent.right
       margin-top: 6
-      layout:
-        type: grid
-        cell-size: 200 40
-        cell-spacing: 2
-        flow: true
-        fit-children: true
-
-    OtLabel
-      id: lootToLabel
-      anchors.top: toggles.bottom
-      anchors.left: parent.left
-      margin-top: 12
-      text-auto-resize: true
-      !text: tr('Put loot in')
 
     UIWidget
-      id: lootTo
-      anchors.top: lootToLabel.bottom
+      id: general
+      anchors.top: tabs.bottom
       anchors.left: parent.left
       anchors.right: parent.right
-      margin-top: 4
-      height: 40
-      layout:
-        type: horizontalBox
-        spacing: 4
+      anchors.bottom: parent.bottom
+      margin-top: 6
+
+      UIWidget
+        id: toggles
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        layout:
+          type: grid
+          cell-size: 200 40
+          cell-spacing: 2
+          flow: true
+          fit-children: true
+
+      OtLabel
+        id: lootToLabel
+        anchors.top: toggles.bottom
+        anchors.left: parent.left
+        margin-top: 12
+        text-auto-resize: true
+        !text: tr('Put loot in')
+
+      UIWidget
+        id: lootTo
+        anchors.top: lootToLabel.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        margin-top: 4
+        height: 40
+        layout:
+          type: horizontalBox
+          spacing: 4
+
+    UIWidget
+      id: lootPage
+      anchors.top: tabs.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      margin-top: 6
+      visible: false
+
+      TextEdit
+        id: search
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 36
+        max-length: 30
+        placeholder: Search an item to loot
+
+      UIWidget
+        id: results
+        anchors.top: search.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        margin-top: 4
+        height: 40
+        layout:
+          type: horizontalBox
+
+      OtHint
+        id: empty
+        anchors.top: results.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        margin-top: 6
+
+      ScrollablePanel
+        id: list
+        anchors.top: results.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        margin-top: 6
+        margin-right: 14
+        vertical-scrollbar: listScroll
+        layout:
+          type: verticalBox
+
+      VerticalScrollBar
+        id: listScroll
+        anchors.top: list.top
+        anchors.bottom: list.bottom
+        anchors.right: parent.right
+        step: 42
+        pixels-scroll: true
 
 // The "?" explanation
 AutomationsHelp < OtBackdrop

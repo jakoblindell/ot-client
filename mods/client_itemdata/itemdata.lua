@@ -115,6 +115,34 @@ function findByName(name)
     return byName[name] or byName[name:gsub('es$', '')] or byName[name:gsub('s$', '')]
 end
 
+-- Items whose name holds the text, those starting with it first, as
+-- { { id = 3297, name = 'serpent sword' } } (at most limit)
+function search(text, limit)
+    text = text:lower():gsub('^%s+', ''):gsub('%s+$', '')
+    if not data or #text < 2 then
+        return {}
+    end
+    local seen, found = {}, {}
+    for id, item in pairs(data.items) do
+        local name = item.n:lower()
+        local at = name:find(text, 1, true)
+        if at and not seen[name] then
+            seen[name] = true
+            table.insert(found, { id = tonumber(id), name = item.n, first = at == 1 })
+        end
+    end
+    table.sort(found, function(a, b)
+        if a.first ~= b.first then
+            return a.first
+        end
+        return a.name < b.name
+    end)
+    while limit and #found > limit do
+        table.remove(found)
+    end
+    return found
+end
+
 function npcName(index)
     return data and data.npcs[index + 1]
 end

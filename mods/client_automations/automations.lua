@@ -139,26 +139,33 @@ local function openBackpack()
     end
 end
 
--- Where loot goes: the container named in "Put loot in" when it is open,
--- else the main backpack (open, or its inventory slot)
-local function lootContainer()
-    local wantedName = options.lootTo
+-- An open container you named (client_containers), or nil
+local function namedContainer(name)
     local containers = modules.client_containers
-    if wantedName and containers and containers.getNamedContainers then
+    if name and containers and containers.getNamedContainers then
         for _, entry in ipairs(containers.getNamedContainers()) do
-            if entry.name == wantedName then
+            if entry.name == name then
                 return entry.container
             end
         end
     end
-    return openBackpack()
+end
+
+-- Where an item goes: its own container from the loot list, else the one
+-- in "Put loot in", else the main backpack (each when it is open)
+local function lootContainer(item)
+    local listed = options.lootList and options.lootList[tostring(item:getId())]
+    if listed == 'Backpack' then
+        return openBackpack()
+    end
+    return (type(listed) == 'string' and namedContainer(listed)) or namedContainer(options.lootTo) or openBackpack()
 end
 
 -- Where to move an item so it joins a stack of the same kind (coins on
 -- coins), else the container's first free slot. (A move to the container's
 -- slot 0 could land inside a bag kept there.)
 local function lootTarget(item)
-    local container = lootContainer()
+    local container = lootContainer(item)
     if not container then
         local player = g_game.getLocalPlayer()
         local backpack = player and player:getInventoryItem(InventorySlotBack)
@@ -196,7 +203,32 @@ end
 
 local function wanted(item)
     local id = item:getId()
-    return (isOn('lootGold') and COINS[id]) or (isOn('lootFood') and FOODS[id]) or false
+    return (isOn('lootGold') and COINS[id]) or (isOn('lootFood') and FOODS[id]) or
+        (options.lootList and options.lootList[tostring(id)] ~= nil) or false
+end
+
+-- The loot list ---------------------------------------------------------------
+-- options.lootList: item id (text) -> a container name, or false: where
+-- "Put loot in" says
+
+local function lootListActive()
+    return options.lootList ~= nil and next(options.lootList) ~= nil
+end
+
+function isListed(id)
+    return options.lootList ~= nil and options.lootList[tostring(id)] ~= nil
+end
+
+function setListed(id, listed)
+    options.lootList = options.lootList or {}
+    if listed then
+        if options.lootList[tostring(id)] == nil then
+            options.lootList[tostring(id)] = false
+        end
+    else
+        options.lootList[tostring(id)] = nil
+    end
+    saveOptions()
 end
 
 -- The work loop: one move or use per tick ------------------------------------------
@@ -335,7 +367,7 @@ end
 -- Events -----------------------------------------------------------------------
 
 local function onContainerOpen(container)
-    if (isOn('lootGold') or isOn('lootFood')) and isGround(container) then
+    if (isOn('lootGold') or isOn('lootFood') or lootListActive()) and isGround(container) then
         table.insert(lootQueue, container)
         startTicking()
     end
@@ -424,11 +456,11 @@ local HELP = 'Open corpse: a corpse of a monster you killed opens when you stand
     'Change gold: when looting makes a stack of 100 gold or platinum coins, it becomes the next coin. Coins you carry or change yourself are never touched.\n' ..
     'Eat food: eats after you log in and every two minutes.\n' ..
     'Refill ammo: arrows or bolts from your bags fill an empty ammo slot.\n' ..
+    'Loot list: the items to take from corpses you open, each into its own container or the one in Put loot in.\n' ..
     'They work at a player\'s speed, only on what you open yourself. Saved for this character.'
 
-local function renderLootTo()
-    local row = sheet.panel.lootTo
-    row:destroyChildren()
+-- The containers loot can go to: Backpack (nil) and the ones you named
+local function lootChoices(current)
     local choices = { { value = nil, text = tr('Backpack') } }
     local containers = modules.client_containers
     local seen = {}
@@ -439,10 +471,16 @@ local function renderLootTo()
         end
     end
     -- a chosen container that is closed now still shows
-    if options.lootTo and not seen[options.lootTo] then
-        table.insert(choices, { value = options.lootTo, text = options.lootTo })
+    if current and not seen[current] then
+        table.insert(choices, { value = current, text = current })
     end
-    for _, choice in ipairs(choices) do
+    return choices
+end
+
+local function renderLootTo()
+    local row = sheet.panel.general.lootTo
+    row:destroyChildren()
+    for _, choice in ipairs(lootChoices(options.lootTo)) do
         local button = g_ui.createWidget('OtButton', row)
         button:setText(choice.text)
         button:setWidth(math.max(80, button:getTextSize().width + 24))
@@ -455,7 +493,101 @@ local function renderLootTo()
     end
 end
 
-function open()
+local function itemName(id)
+    local itemdata = modules.client_itemdata
+    local entry = itemdata and itemdata.getItem and itemdata.getItem(id)
+    return entry and entry.n:gsub('^%l', string.upper) or tostring(id)
+end
+
+local renderLootPage
+
+local function renderLootList()
+    local page = sheet.panel.lootPage
+    local list = page.list
+    list:destroyChildren()
+    local entries = {}
+    for id, target in pairs(options.lootList or {}) do
+        table.insert(entries, { id = tonumber(id), target = target, name = itemName(id) })
+    end
+    table.sort(entries, function(a, b) return a.name < b.name end)
+    for _, entry in ipairs(entries) do
+        local row = g_ui.createWidget('LootListRow', list)
+        row.item:setItemId(entry.id)
+        row.name:setText(entry.name)
+        -- the item's own container, or the one in "Put loot in"
+        row.target:setText(entry.target or tr('Default'))
+        row.target:setChecked(entry.target ~= false)
+        row.target.onClick = function()
+            -- Default (as in "Put loot in"), Backpack, then your named containers
+            local choices = { false, 'Backpack' }
+            local named = entry.target ~= 'Backpack' and entry.target or nil
+            for _, choice in ipairs(lootChoices(named)) do
+                if choice.value and choice.value ~= 'Backpack' then
+                    table.insert(choices, choice.value)
+                end
+            end
+            local at = 1
+            for i, value in ipairs(choices) do
+                if value == entry.target then
+                    at = i
+                    break
+                end
+            end
+            options.lootList[tostring(entry.id)] = choices[at % #choices + 1]
+            saveOptions()
+            renderLootList()
+        end
+        row.remove.onClick = function()
+            setListed(entry.id, false)
+            renderLootPage()
+        end
+    end
+    page.empty:setVisible(#entries == 0 and page.search:getText() == '')
+    page.empty:setText(tr('Nothing on the list yet. Search an item above, or long press an item in a container and choose Loot this.'))
+end
+
+renderLootPage = function()
+    local page = sheet.panel.lootPage
+    local results = page.results
+    results:destroyChildren()
+    local itemdata = modules.client_itemdata
+    local room = page:getWidth()
+    for _, found in ipairs(itemdata and itemdata.search and itemdata.search(page.search:getText(), 8) or {}) do
+        -- (corpses can be picked up in 7.x: not loot)
+        if not isListed(found.id) and not found.name:find('^dead ') then
+            local button = g_ui.createWidget('LootSearchResult', results)
+            button.item:setItemId(found.id)
+            button:setText(found.name)
+            button:setWidth(button:getTextSize().width + 52)
+            room = room - button:getWidth() - 4
+            if room < 0 then
+                button:destroy()
+                break
+            end
+            button.onClick = function()
+                setListed(found.id, true)
+                page.search:setText('')
+                renderLootPage()
+            end
+        end
+    end
+    results:setHeight(#results:getChildren() > 0 and 40 or 0)
+    renderLootList()
+end
+
+local function showTab(id)
+    local panel = sheet.panel
+    panel.general:setVisible(id == 'general')
+    panel.lootPage:setVisible(id == 'loot')
+    for _, tab in ipairs(panel.tabs:getChildren()) do
+        tab:setChecked(tab:getId() == id)
+    end
+    if id == 'loot' then
+        renderLootPage()
+    end
+end
+
+function open(tab)
     close()
     sheet = g_ui.createWidget('AutomationsSheet', rootWidget)
     local panel = sheet.panel
@@ -465,7 +597,14 @@ function open()
     sheet.onEscape = close
     panel.close.onClick = close
     panel.help.onClick = function() showHelp(HELP) end
-    local toggles = panel.toggles
+    for _, entry in ipairs({ { 'general', 'General' }, { 'loot', 'Loot list' } }) do
+        local button = g_ui.createWidget('OtTab', panel.tabs)
+        button:setId(entry[1])
+        button:setText(tr(entry[2]))
+        button.onClick = function() showTab(entry[1]) end
+    end
+    panel.tabs:getLayout():setCellSize({ width = 130, height = 36 })
+    local toggles = panel.general.toggles
     -- as many columns as fit (4 on a tablet or desktop, 3 on a phone)
     local columns = math.max(2, math.min(4, math.floor((width - 24) / 140)))
     toggles:getLayout():setCellSize({ width = math.floor((width - 24 - 2 * (columns - 1)) / columns), height = 40 })
@@ -482,9 +621,14 @@ function open()
         end
     end
     renderLootTo()
-    -- as tall as what it holds
+    panel.lootPage.search.onTextChange = function()
+        renderLootPage()
+    end
+    -- as tall as the switches need, and room for a list
     local rows = math.ceil(#AUTOMATIONS / columns)
-    panel:setHeight(math.min(rootWidget:getHeight() - 16, 12 + 40 + 6 + rows * 42 + 12 + 16 + 4 + 40 + 12))
+    local general = 12 + 40 + 6 + 36 + 6 + rows * 42 + 12 + 16 + 4 + 40 + 12
+    panel:setHeight(math.min(rootWidget:getHeight() - 16, math.max(general, 380)))
+    showTab(tab or 'general')
     sheet:raise()
     sheet:focus()
 end

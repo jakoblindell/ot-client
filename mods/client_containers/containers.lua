@@ -334,6 +334,14 @@ openMenu = function(item, tab)
         if item:isPickupable() then
             addMenuButton(rows, 'Trade with...', function() modules.game_interface.startTradeWith(item) end)
         end
+        -- the loot list (client_automations)
+        local automations = modules.client_automations
+        if automations and automations.isListed and item:isPickupable() then
+            local listed = automations.isListed(item:getId())
+            addMenuButton(rows, listed and "Don't loot this" or 'Loot this', function()
+                automations.setListed(item:getId(), not listed)
+            end)
+        end
     else
         panel:getChildById('title'):setText(displayName(tab))
         if tab.key then
