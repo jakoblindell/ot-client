@@ -1,0 +1,11 @@
+// Tasks pages in the hub (tasks.lua), built from the ot-ui styles
+
+// "Kills" and the bar
+TasksProgress < UIWidget
+  height: 36
+
+  OtProgress
+    id: bar
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter

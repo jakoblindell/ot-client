@@ -1,0 +1,8 @@
+Module
+  name: client_tasks
+  description: Tasks in the hub: the daily hunt (status from the server, extended opcode 106; ot-client#44, ot-server#21)
+  author: ot-client
+  sandboxed: true
+  scripts: [ tasks ]
+  @onLoad: init()
+  @onUnload: terminate()
