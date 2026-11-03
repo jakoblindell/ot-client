@@ -56,6 +56,23 @@ local function tabFor(id)
     end
 end
 
+-- Containers opened without a tab (openQuietly: client_automations fills
+-- bags inside a full loot bag without showing them)
+local quietTabs = {}
+local quietNext -- the name the next opened container gets, opened quietly
+
+local function quietFor(id)
+    for index, tab in ipairs(quietTabs) do
+        if tab.container:getId() == id then
+            return tab, index
+        end
+    end
+end
+
+local function anyTab(id)
+    return tabFor(id) or quietFor(id)
+end
+
 -- Where an opened container came from: the client is not told, so the
 -- position of the last container item used or opened is kept (g_game.use and
 -- g_game.open are wrapped in init)
@@ -76,7 +93,7 @@ local function locationKey(pos)
     if pos.y < 64 then
         return 'inv' .. pos.y
     end
-    local parent = tabFor(pos.y - 64)
+    local parent = anyTab(pos.y - 64)
     if parent and parent.key then
         return parent.key .. '/' .. pos.z
     end
@@ -538,6 +555,24 @@ local function onOpen(container, previousContainer)
     hideClassicWindow(container)
     local pos = pendingPosition
     pendingPosition = nil
+    local _, quietIndex = quietFor(container:getId())
+    if quietIndex then
+        table.remove(quietTabs, quietIndex)
+    end
+    if quietNext then
+        -- no tab: named like the bag it is in, filled by the automations
+        local name = quietNext
+        quietNext = nil
+        local entry = { container = container, ground = false, key = locationKey(pos), quiet = true }
+        table.insert(quietTabs, entry)
+        local all, names = namesNode()
+        if all and entry.key then
+            names[entry.key] = name
+            g_settings.setNode(NAMES_SETTING, all)
+            g_settings.save()
+        end
+        return
+    end
     local ground
     if pos then
         ground = pos.x ~= 65535
@@ -578,6 +613,11 @@ local function onOpen(container, previousContainer)
 end
 
 local function onClose(container)
+    local _, quietIndex = quietFor(container:getId())
+    if quietIndex then
+        table.remove(quietTabs, quietIndex)
+        return
+    end
     local _, index = tabFor(container:getId())
     if not index then
         return
@@ -614,6 +654,8 @@ end
 
 local function onGameEnd()
     tabs = {}
+    quietTabs = {}
+    quietNext = nil
     shown = nil
     firstTab = 1
     closeMenu()
@@ -641,18 +683,30 @@ end
 function getNamedContainers()
     local _, names = namesNode()
     local list = {}
-    for _, tab in ipairs(tabs) do
-        local custom = names and tab.key and names[tab.key]
-        if custom and custom ~= '' and not tab.container:isClosed() then
-            table.insert(list, { name = custom, container = tab.container })
+    for _, group in ipairs({ tabs, quietTabs }) do
+        for _, tab in ipairs(group) do
+            local custom = names and tab.key and names[tab.key]
+            if custom and custom ~= '' and not tab.container:isClosed() then
+                table.insert(list, { name = custom, container = tab.container, quiet = tab.quiet })
+            end
         end
     end
     return list
 end
 
+-- Opens a container item (a bag inside a loot bag) without a tab and names
+-- it; it shows as a tab once the player opens it
+function openQuietly(item, name)
+    -- (after the container being opened now, which may have asked for it)
+    addEvent(function()
+        quietNext = name
+        g_game.open(item, nil)
+    end)
+end
+
 -- Whether an open container is on the ground (a corpse), as far as known
 function isGroundContainer(container)
-    local tab = tabFor(container:getId())
+    local tab = anyTab(container:getId())
     if tab then
         return tab.ground
     end

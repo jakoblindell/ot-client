@@ -199,54 +199,89 @@ local function openBackpack()
     end
 end
 
--- An open container you named (client_containers), or nil
-local function namedContainer(name)
+-- The open containers with a name (client_containers), outer ones first:
+-- a named loot bag and the bags inside it that took its name
+local function namedChain(name)
+    local list = {}
     local containers = modules.client_containers
     if name and containers and containers.getNamedContainers then
         for _, entry in ipairs(containers.getNamedContainers()) do
             if entry.name == name then
-                return entry.container
+                table.insert(list, entry.container)
             end
         end
     end
+    return list
 end
 
--- Where an item goes: its own container from the loot list, else the one
--- in "Put loot in", else the main backpack (each when it is open)
-local function lootContainer(item)
+-- The named container an item goes to: its own from the loot filter, else
+-- the one in "Put loot in"; nil: the main backpack
+local function targetName(item)
     local list = activeList()
     local listed = list and list[tostring(item:getId())]
     if listed == 'Backpack' then
-        return openBackpack()
-    end
-    return (type(listed) == 'string' and namedContainer(listed)) or namedContainer(options.lootTo) or openBackpack()
-end
-
--- Where to move an item so it joins a stack of the same kind (coins on
--- coins), else the container's first free slot. (A move to the container's
--- slot 0 could land inside a bag kept there.)
-local function lootTarget(item)
-    local container = lootContainer(item)
-    if not container then
-        local player = g_game.getLocalPlayer()
-        local backpack = player and player:getInventoryItem(InventorySlotBack)
-        if backpack and backpack:isContainer() then
-            return { x = 65535, y = InventorySlotBack, z = 0 }, item:getCount()
-        end
         return nil
     end
-    if item:isStackable() then
-        for slot, carried in ipairs(container:getItems()) do
-            if carried:getId() == item:getId() and carried:getCount() < 100 then
-                return { x = 65535, y = 64 + container:getId(), z = slot - 1 },
-                    math.min(item:getCount(), 100 - carried:getCount())
+    if type(listed) == 'string' then
+        return listed
+    end
+    return options.lootTo
+end
+
+-- Bags inside a full loot bag already opened for it ("container id:slot")
+local openedBags = {}
+
+-- Where to move an item: onto a stack of the same kind (coins on coins),
+-- else a free slot, in the first bag of the chain with room (planned:
+-- container id -> items already on their way there). (A move to a
+-- container's slot 0 could land inside a bag kept there.)
+-- Returns position, count; or nil, a bag to open first, its name; or nil
+local function lootTarget(item, planned)
+    local name = targetName(item)
+    local chain = namedChain(name)
+    if #chain == 0 then
+        -- (the named bag is not open: the main backpack)
+        local backpack = openBackpack()
+        chain = backpack and { backpack } or {}
+        name = nil
+        if not backpack then
+            local player = g_game.getLocalPlayer()
+            local slot = player and player:getInventoryItem(InventorySlotBack)
+            if slot and slot:isContainer() then
+                return { x = 65535, y = InventorySlotBack, z = 0 }, item:getCount()
+            end
+            return nil
+        end
+    end
+    for _, container in ipairs(chain) do
+        if item:isStackable() then
+            for slot, carried in ipairs(container:getItems()) do
+                if carried:getId() == item:getId() and carried:getCount() < 100 then
+                    return { x = 65535, y = 64 + container:getId(), z = slot - 1 },
+                        math.min(item:getCount(), 100 - carried:getCount())
+                end
+            end
+        end
+        local id = container:getId()
+        if container:getItemsCount() + (planned[id] or 0) < container:getCapacity() then
+            planned[id] = (planned[id] or 0) + 1
+            return { x = 65535, y = 64 + id, z = container:getItemsCount() }, item:getCount()
+        end
+    end
+    -- all full: a bag inside one of them takes the name (the innermost first)
+    if name then
+        for i = #chain, 1, -1 do
+            local container = chain[i]
+            for slot, carried in ipairs(container:getItems()) do
+                local key = container:getId() .. ':' .. (slot - 1)
+                if carried:isContainer() and not openedBags[key] then
+                    openedBags[key] = true
+                    return nil, carried, name
+                end
             end
         end
     end
-    if container:getItemsCount() >= container:getCapacity() then
-        return nil
-    end
-    return { x = 65535, y = 64 + container:getId(), z = container:getItemsCount() }, item:getCount()
+    return nil
 end
 
 -- The first item in your own open bags (not corpses) that matches
@@ -325,31 +360,30 @@ end
 
 -- Everything wanted in a container you opened, sent at once. From the last
 -- slot to the first: taking one item out moves the ones after it up, so
--- the others keep their places.
+-- the others keep their places. When the loot bags are full, a bag inside
+-- them is opened (without a tab) and the looting goes on once it is open.
+local waitingCorpse
+local fullWarnedAt = 0
+
 local function lootAll(container)
     if container:isClosed() then
         return
     end
     local items = container:getItems()
-    local planned = {} -- container id -> items being added
+    local planned = {}
     for i = #items, 1, -1 do
         local item = items[i]
         if wanted(item) then
-            local target, count = lootTarget(item)
-            if target and target.y >= 64 then
-                -- a new slot: count what is on its way there
-                local id = target.y - 64
-                local into = g_game.getContainer(id)
-                local stacking = item:isStackable() and target.z < (into and into:getItemsCount() or 0)
-                if not stacking then
-                    planned[id] = (planned[id] or 0) + 1
-                    if into and into:getItemsCount() + planned[id] > into:getCapacity() then
-                        target = nil
-                    end
-                end
-            end
+            local target, count, name = lootTarget(item, planned)
             if not target then
-                -- nowhere to put it
+                if count then
+                    -- count: the bag to open
+                    waitingCorpse = container
+                    modules.client_containers.openQuietly(count, name)
+                elseif g_clock.millis() - fullWarnedAt > 10000 then
+                    fullWarnedAt = g_clock.millis()
+                    modules.game_textmessage.displayFailureMessage(tr('Your loot bags are full.'))
+                end
                 return
             end
             g_game.move(item, target, count)
@@ -452,6 +486,18 @@ end
 -- Events -----------------------------------------------------------------------
 
 local function onContainerOpen(container)
+    -- a bag opened for the loot: carry on with the corpse (once the
+    -- containers window has named it)
+    if waitingCorpse and not isGround(container) then
+        local corpse = waitingCorpse
+        waitingCorpse = nil
+        scheduleEvent(function()
+            if g_game.isOnline() then
+                lootAll(corpse)
+            end
+        end, 50)
+        return
+    end
     if (isOn('lootGold') or isOn('lootFood') or lootListActive()) and isGround(container) then
         lootAll(container)
         -- (a coin stack that reached 100 is changed once the moves arrive)
@@ -1073,6 +1119,8 @@ end
 
 local function onGameStart()
     rareList = nil
+    openedBags = {}
+    waitingCorpse = nil
     loadOptions()
     loadFilters()
     saveOptions()
