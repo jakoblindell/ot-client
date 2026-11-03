@@ -43,6 +43,19 @@ ContainersSlot < Item
     border-width: 2
     border-color: $ot-gold
 
+// the name you gave a bag in this slot, shortened, along its bottom
+ContainersSlotName < Label
+  anchors.left: parent.left
+  anchors.right: parent.right
+  anchors.bottom: parent.bottom
+  margin-bottom: 1
+  height: 9
+  font: $ot-font-small
+  color: $ot-gold
+  text-align: center
+  background-color: #000000a0
+  phantom: true
+
 ContainersWindow < OtPanel
   id: containersWindow
   width: 190

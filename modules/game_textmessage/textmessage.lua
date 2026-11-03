@@ -225,6 +225,33 @@ function calculateVisibleTime(text)
     return math.max(#text * 50, 4000)
 end
 
+-- A 7.x loot message with each item coloured by its rarity, or nil; the
+-- rest in baseColor ("{text, #colour}" parts, for setColoredText)
+function lootColors(text, baseColor)
+    local itemdata = modules.client_itemdata
+    if not (itemdata and itemdata.lootColoredText and text:find('^Loot of ')) then
+        return nil
+    end
+    local ok, colored = pcall(itemdata.lootColoredText, text)
+    if not ok or not colored then
+        return nil
+    end
+    local parts, at = {}, 1
+    while true do
+        local open, close = colored:find('%b{}', at)
+        local plain = colored:sub(at, (open or #colored + 1) - 1)
+        if plain ~= '' then
+            table.insert(parts, '{' .. plain .. ', ' .. baseColor .. '}')
+        end
+        if not open then
+            break
+        end
+        table.insert(parts, colored:sub(open, close))
+        at = close + 1
+    end
+    return table.concat(parts)
+end
+
 function displayMessage(mode, text)
 
     if not g_game.isOnline() then
@@ -261,7 +288,13 @@ function displayMessage(mode, text)
             local targetTab = modules.game_console.getTab(lootTabName) and lootTabName or tr("Server Log")
             modules.game_console.addText(lootColoredText, msgtype, targetTab)
         else
-            modules.game_console.addText(text, msgtype, tr(msgtype.consoleTab))
+            local colored = lootColors(text, msgtype.color)
+            if colored then
+                modules.game_console.addText(colored, setmetatable({ colored = true }, { __index = msgtype }),
+                    tr(msgtype.consoleTab))
+            else
+                modules.game_console.addText(text, msgtype, tr(msgtype.consoleTab))
+            end
         end
     end
 
@@ -280,6 +313,11 @@ function displayMessage(mode, text)
         -- Loot messages ("Loot of a rat: cheese", 7.x sends them as plain
         -- info messages) stand out: bold, on a dark box
         local isLoot = text:find('^Loot of ') ~= nil
+        -- each item in the colour of its rarity (client_itemdata)
+        local colored = isLoot and lootColors(text, msgtype.color)
+        if colored then
+            label:setColoredText(colored)
+        end
         label:setFont(isLoot and 'Verdana Bold-11px-outline' or 'verdana-11px-rounded')
         label:setBackgroundColor(isLoot and '#000000a0' or 'alpha')
         label:setPadding(isLoot and 3 or 0)

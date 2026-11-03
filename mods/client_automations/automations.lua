@@ -30,13 +30,6 @@ end
 -- Arrows and bolts (items with the Ammo flag in the game server's
 -- items.srv; 7.x item files give the client no such flag)
 local AMMO = { [3446] = true, [3447] = true, [3448] = true, [3449] = true, [3450] = true, [6528] = true }
--- Server answers that end a looting run
-local STOP_MESSAGES = {
-    'You cannot put more objects in this container.',
-    'This object is too heavy for you to carry.',
-    'You do not have enough room.',
-    'There is not enough room.',
-}
 
 local AUTOMATIONS = {
     { id = 'openCorpse', text = 'Open corpse' },
@@ -64,7 +57,6 @@ local DIRECTIONAL = { 'Strike', 'Wave', 'Beam' }
 local MANA_SOUND = '/mods/client_automations/sounds/mana_full'
 
 local options = {} -- this character's switches
-local lootQueue = {} -- containers (corpses) to take things from
 local ticker, eatEvent
 local lastUseAt, lastEatAt = 0, 0
 -- Coins just looted: { container = id, coin = id, until = millis }. Change
@@ -96,6 +88,74 @@ end
 
 function isOn(id)
     return options[id] == true
+end
+
+-- Loot filters: named loot lists kept for every character on this device
+-- ({ name -> { item id (text) -> a container name, or false: as "Put loot
+-- in" } }); each character picks one (options.lootFilter) or none
+local FILTERS_SETTING = 'automations_lootFilters'
+local filters = {}
+
+local function loadFilters()
+    local ok, saved = pcall(json.decode, g_settings.getString(FILTERS_SETTING))
+    filters = ok and type(saved) == 'table' and saved or {}
+    -- a character's list from before filters becomes a filter of its own
+    if type(options.lootList) == 'table' and next(options.lootList) then
+        local player = g_game.getLocalPlayer()
+        local name = (player and player:getName() or 'My') .. '\'s loot'
+        filters[name] = filters[name] or options.lootList
+        options.lootFilter = options.lootFilter or name
+    end
+    options.lootList = nil
+end
+
+local function saveFilters()
+    g_settings.set(FILTERS_SETTING, json.encode(filters))
+    g_settings.save()
+end
+
+-- A ready-made filter: every item some monster drops Rare or rarer (from
+-- the item data's rarity words; read-only)
+local PRESET_RARE = 'Everything rare'
+local MAX_ITEMS = 500
+local rareList
+
+local function presetRare()
+    if not rareList then
+        local itemdata = modules.client_itemdata
+        local list = {}
+        for _, entry in ipairs(itemdata and itemdata.lootItems and itemdata.lootItems() or {}) do
+            if entry.tier >= itemdata.RARE_TIER then
+                list[tostring(entry.id)] = false
+            end
+        end
+        -- (the item data may not be loaded yet: try again next time)
+        if next(list) then
+            rareList = list
+        end
+        return list
+    end
+    return rareList
+end
+
+local function isPreset(name)
+    return name == PRESET_RARE
+end
+
+-- The active filter's items, or nil
+local function activeList()
+    if isPreset(options.lootFilter) then
+        return presetRare()
+    end
+    return options.lootFilter and filters[options.lootFilter] or nil
+end
+
+local function countOf(list)
+    local n = 0
+    for _ in pairs(list or {}) do
+        n = n + 1
+    end
+    return n
 end
 
 -- Helpers ----------------------------------------------------------------------
@@ -139,46 +199,89 @@ local function openBackpack()
     end
 end
 
--- Where loot goes: the container named in "Put loot in" when it is open,
--- else the main backpack (open, or its inventory slot)
-local function lootContainer()
-    local wantedName = options.lootTo
+-- The open containers with a name (client_containers), outer ones first:
+-- a named loot bag and the bags inside it that took its name
+local function namedChain(name)
+    local list = {}
     local containers = modules.client_containers
-    if wantedName and containers and containers.getNamedContainers then
+    if name and containers and containers.getNamedContainers then
         for _, entry in ipairs(containers.getNamedContainers()) do
-            if entry.name == wantedName then
-                return entry.container
+            if entry.name == name then
+                table.insert(list, entry.container)
             end
         end
     end
-    return openBackpack()
+    return list
 end
 
--- Where to move an item so it joins a stack of the same kind (coins on
--- coins), else the container's first free slot. (A move to the container's
--- slot 0 could land inside a bag kept there.)
-local function lootTarget(item)
-    local container = lootContainer()
-    if not container then
-        local player = g_game.getLocalPlayer()
-        local backpack = player and player:getInventoryItem(InventorySlotBack)
-        if backpack and backpack:isContainer() then
-            return { x = 65535, y = InventorySlotBack, z = 0 }, item:getCount()
-        end
+-- The named container an item goes to: its own from the loot filter, else
+-- the one in "Put loot in"; nil: the main backpack
+local function targetName(item)
+    local list = activeList()
+    local listed = list and list[tostring(item:getId())]
+    if listed == 'Backpack' then
         return nil
     end
-    if item:isStackable() then
-        for slot, carried in ipairs(container:getItems()) do
-            if carried:getId() == item:getId() and carried:getCount() < 100 then
-                return { x = 65535, y = 64 + container:getId(), z = slot - 1 },
-                    math.min(item:getCount(), 100 - carried:getCount())
+    if type(listed) == 'string' then
+        return listed
+    end
+    return options.lootTo
+end
+
+-- Bags inside a full loot bag already opened for it ("container id:slot")
+local openedBags = {}
+
+-- Where to move an item: onto a stack of the same kind (coins on coins),
+-- else a free slot, in the first bag of the chain with room (planned:
+-- container id -> items already on their way there). (A move to a
+-- container's slot 0 could land inside a bag kept there.)
+-- Returns position, count; or nil, a bag to open first, its name; or nil
+local function lootTarget(item, planned)
+    local name = targetName(item)
+    local chain = namedChain(name)
+    if #chain == 0 then
+        -- (the named bag is not open: the main backpack)
+        local backpack = openBackpack()
+        chain = backpack and { backpack } or {}
+        name = nil
+        if not backpack then
+            local player = g_game.getLocalPlayer()
+            local slot = player and player:getInventoryItem(InventorySlotBack)
+            if slot and slot:isContainer() then
+                return { x = 65535, y = InventorySlotBack, z = 0 }, item:getCount()
+            end
+            return nil
+        end
+    end
+    for _, container in ipairs(chain) do
+        if item:isStackable() then
+            for slot, carried in ipairs(container:getItems()) do
+                if carried:getId() == item:getId() and carried:getCount() < 100 then
+                    return { x = 65535, y = 64 + container:getId(), z = slot - 1 },
+                        math.min(item:getCount(), 100 - carried:getCount())
+                end
+            end
+        end
+        local id = container:getId()
+        if container:getItemsCount() + (planned[id] or 0) < container:getCapacity() then
+            planned[id] = (planned[id] or 0) + 1
+            return { x = 65535, y = 64 + id, z = container:getItemsCount() }, item:getCount()
+        end
+    end
+    -- all full: a bag inside one of them takes the name (the innermost first)
+    if name then
+        for i = #chain, 1, -1 do
+            local container = chain[i]
+            for slot, carried in ipairs(container:getItems()) do
+                local key = container:getId() .. ':' .. (slot - 1)
+                if carried:isContainer() and not openedBags[key] then
+                    openedBags[key] = true
+                    return nil, carried, name
+                end
             end
         end
     end
-    if container:getItemsCount() >= container:getCapacity() then
-        return nil
-    end
-    return { x = 65535, y = 64 + container:getId(), z = container:getItemsCount() }, item:getCount()
+    return nil
 end
 
 -- The first item in your own open bags (not corpses) that matches
@@ -196,7 +299,46 @@ end
 
 local function wanted(item)
     local id = item:getId()
-    return (isOn('lootGold') and COINS[id]) or (isOn('lootFood') and FOODS[id]) or false
+    return (isOn('lootGold') and COINS[id]) or (isOn('lootFood') and FOODS[id]) or
+        (activeList() ~= nil and activeList()[tostring(id)] ~= nil) or false
+end
+
+-- The loot list ---------------------------------------------------------------
+
+local function lootListActive()
+    local list = activeList()
+    return list ~= nil and next(list) ~= nil
+end
+
+function isListed(id)
+    local list = activeList()
+    return list ~= nil and list[tostring(id)] ~= nil
+end
+
+-- (with no filter chosen, one named "Loot" is made and chosen). Returns
+-- false when it cannot: a ready-made filter, or the filter is full
+function setListed(id, listed)
+    if isPreset(options.lootFilter) then
+        return false
+    end
+    if not activeList() then
+        options.lootFilter = options.lootFilter or 'Loot'
+        filters[options.lootFilter] = filters[options.lootFilter] or {}
+        saveOptions()
+    end
+    local list = activeList()
+    if listed then
+        if list[tostring(id)] == nil then
+            if countOf(list) >= MAX_ITEMS then
+                return false
+            end
+            list[tostring(id)] = false
+        end
+    else
+        list[tostring(id)] = nil
+    end
+    saveFilters()
+    return true
 end
 
 -- The work loop: one move or use per tick ------------------------------------------
@@ -216,31 +358,40 @@ local function stopTicking()
     end
 end
 
-local function lootStep()
-    while #lootQueue > 0 do
-        local container = lootQueue[1]
-        if container:isClosed() then
-            table.remove(lootQueue, 1)
-        else
-            for _, item in ipairs(container:getItems()) do
-                if wanted(item) then
-                    local target, count = lootTarget(item)
-                    if not target then
-                        -- nowhere to put it
-                        lootQueue = {}
-                        return false
-                    end
-                    g_game.move(item, target, count)
-                    if COINS[item:getId()] and target.y >= 64 then
-                        lootedCoins = { container = target.y - 64, coin = item:getId(), untilAt = g_clock.millis() + 3000 }
-                    end
-                    return true
+-- Everything wanted in a container you opened, sent at once. From the last
+-- slot to the first: taking one item out moves the ones after it up, so
+-- the others keep their places. When the loot bags are full, a bag inside
+-- them is opened (without a tab) and the looting goes on once it is open.
+local waitingCorpse
+local fullWarnedAt = 0
+
+local function lootAll(container)
+    if container:isClosed() then
+        return
+    end
+    local items = container:getItems()
+    local planned = {}
+    for i = #items, 1, -1 do
+        local item = items[i]
+        if wanted(item) then
+            local target, count, name = lootTarget(item, planned)
+            if not target then
+                if count then
+                    -- count: the bag to open
+                    waitingCorpse = container
+                    modules.client_containers.openQuietly(count, name)
+                elseif g_clock.millis() - fullWarnedAt > 10000 then
+                    fullWarnedAt = g_clock.millis()
+                    modules.game_textmessage.displayFailureMessage(tr('Your loot bags are full.'))
                 end
+                return
             end
-            table.remove(lootQueue, 1)
+            g_game.move(item, target, count)
+            if COINS[item:getId()] and target.y >= 64 then
+                lootedCoins = { container = target.y - 64, coin = item:getId(), untilAt = g_clock.millis() + 3000 }
+            end
         end
     end
-    return false
 end
 
 local function changeStep()
@@ -271,7 +422,7 @@ tick = function()
         stopTicking()
         return
     end
-    if lootStep() or changeStep() then
+    if changeStep() then
         return
     end
     stopTicking()
@@ -335,9 +486,24 @@ end
 -- Events -----------------------------------------------------------------------
 
 local function onContainerOpen(container)
-    if (isOn('lootGold') or isOn('lootFood')) and isGround(container) then
-        table.insert(lootQueue, container)
-        startTicking()
+    -- a bag opened for the loot: carry on with the corpse (once the
+    -- containers window has named it)
+    if waitingCorpse and not isGround(container) then
+        local corpse = waitingCorpse
+        waitingCorpse = nil
+        scheduleEvent(function()
+            if g_game.isOnline() then
+                lootAll(corpse)
+            end
+        end, 50)
+        return
+    end
+    if (isOn('lootGold') or isOn('lootFood') or lootListActive()) and isGround(container) then
+        lootAll(container)
+        -- (a coin stack that reached 100 is changed once the moves arrive)
+        if lootedCoins and isOn('changeGold') then
+            startTicking()
+        end
     end
 end
 
@@ -378,11 +544,6 @@ local function onInventoryChange(player, slot, item)
 end
 
 local function onTextMessage(mode, text)
-    for _, message in ipairs(STOP_MESSAGES) do
-        if text == message then
-            lootQueue = {}
-        end
-    end
     -- our own meal: no need to say so
     if text == 'You are full.' and g_clock.millis() - lastEatAt < 2000 then
         return true
@@ -408,8 +569,38 @@ local function showHelp(text)
     helpBox:raise()
 end
 
+local prompt
+
+local function closePrompt()
+    if prompt then
+        prompt:destroy()
+        prompt = nil
+    end
+end
+
+local chooser
+
+local function closeChooser()
+    if chooser then
+        chooser:destroy()
+        chooser = nil
+    end
+end
+
+local picker
+
+local function closePicker()
+    if picker then
+        picker:destroy()
+        picker = nil
+    end
+end
+
 function close()
     closeHelp()
+    closePrompt()
+    closeChooser()
+    closePicker()
     if sheet then
         sheet:destroy()
         sheet = nil
@@ -424,11 +615,11 @@ local HELP = 'Open corpse: a corpse of a monster you killed opens when you stand
     'Change gold: when looting makes a stack of 100 gold or platinum coins, it becomes the next coin. Coins you carry or change yourself are never touched.\n' ..
     'Eat food: eats after you log in and every two minutes.\n' ..
     'Refill ammo: arrows or bolts from your bags fill an empty ammo slot.\n' ..
+    'Loot list: loot filters, each a list of items to take from corpses you open, into their own container or the one in Put loot in. Filters are kept for every character on this device; each character uses one. Copy code and Import move a filter to another device.\n' ..
     'They work at a player\'s speed, only on what you open yourself. Saved for this character.'
 
-local function renderLootTo()
-    local row = sheet.panel.lootTo
-    row:destroyChildren()
+-- The containers loot can go to: Backpack (nil) and the ones you named
+local function lootChoices(current)
     local choices = { { value = nil, text = tr('Backpack') } }
     local containers = modules.client_containers
     local seen = {}
@@ -439,10 +630,16 @@ local function renderLootTo()
         end
     end
     -- a chosen container that is closed now still shows
-    if options.lootTo and not seen[options.lootTo] then
-        table.insert(choices, { value = options.lootTo, text = options.lootTo })
+    if current and not seen[current] then
+        table.insert(choices, { value = current, text = current })
     end
-    for _, choice in ipairs(choices) do
+    return choices
+end
+
+local function renderLootTo()
+    local row = sheet.panel.general.lootTo
+    row:destroyChildren()
+    for _, choice in ipairs(lootChoices(options.lootTo)) do
         local button = g_ui.createWidget('OtButton', row)
         button:setText(choice.text)
         button:setWidth(math.max(80, button:getTextSize().width + 24))
@@ -455,7 +652,334 @@ local function renderLootTo()
     end
 end
 
-function open()
+local function itemName(id)
+    local itemdata = modules.client_itemdata
+    local entry = itemdata and itemdata.getItem and itemdata.getItem(id)
+    return entry and entry.n:gsub('^%l', string.upper) or tostring(id)
+end
+
+local renderLootPage
+
+local function renderLootList()
+    local page = sheet.panel.lootPage
+    local list = page.list
+    list:destroyChildren()
+    local readOnly = isPreset(options.lootFilter)
+    local entries = {}
+    for id, target in pairs(activeList() or {}) do
+        table.insert(entries, { id = tonumber(id), target = target, name = itemName(id) })
+    end
+    table.sort(entries, function(a, b) return a.name < b.name end)
+    for _, entry in ipairs(entries) do
+        local row = g_ui.createWidget('LootListRow', list)
+        row.item:setItemId(entry.id)
+        row.name:setText(entry.name)
+        row.target:setVisible(not readOnly)
+        row.remove:setVisible(not readOnly)
+        -- the item's own container, or the one in "Put loot in"
+        row.target:setText(entry.target or tr('Default'))
+        row.target:setChecked(entry.target ~= false)
+        row.target.onClick = function()
+            -- Default (as in "Put loot in"), Backpack, then your named containers
+            local choices = { false, 'Backpack' }
+            local named = entry.target ~= 'Backpack' and entry.target or nil
+            for _, choice in ipairs(lootChoices(named)) do
+                if choice.value and choice.value ~= 'Backpack' then
+                    table.insert(choices, choice.value)
+                end
+            end
+            local at = 1
+            for i, value in ipairs(choices) do
+                if value == entry.target then
+                    at = i
+                    break
+                end
+            end
+            activeList()[tostring(entry.id)] = choices[at % #choices + 1]
+            saveFilters()
+            renderLootList()
+        end
+        row.remove.onClick = function()
+            setListed(entry.id, false)
+            renderLootPage()
+        end
+    end
+    page.empty:setVisible(#entries == 0)
+    page.empty:setText(activeList() and
+        tr('Nothing in this filter yet. Tap Add loot, or long press an item in a container and choose Loot this.') or
+        tr('No loot filter in use. Tap the filter above to choose or make one. Filters are kept for every character on this device.'))
+end
+
+-- Filter codes: "LOOT1:" and the filter as JSON (copied to share it with
+-- another device, pasted to import)
+local CODE_PREFIX = 'LOOT1:'
+local function askText(title, text, done)
+    closePrompt()
+    prompt = g_ui.createWidget('LootFilterPrompt', rootWidget)
+    prompt.box.title:setText(tr(title))
+    prompt.box.text:setText(text or '')
+    prompt.box.text:setCursorPos(-1)
+    prompt.box.cancel.onClick = closePrompt
+    prompt.box.ok.onClick = function()
+        local value = prompt.box.text:getText():gsub('^%s+', ''):gsub('%s+$', '')
+        closePrompt()
+        if value ~= '' then
+            done(value)
+        end
+    end
+    prompt.onEscape = closePrompt
+    prompt:raise()
+    prompt.box.text:focus()
+end
+
+-- A name not taken yet: "Name", "Name 2", ...
+local function freeName(name)
+    local candidate, n = name, 1
+    while filters[candidate] or isPreset(candidate) do
+        n = n + 1
+        candidate = name .. ' ' .. n
+    end
+    return candidate
+end
+
+local function useFilter(name)
+    options.lootFilter = name
+    saveOptions()
+    renderLootPage()
+end
+
+-- A list to choose from (LootChooser): rows of { text, checked, onClick };
+-- the search narrows them when there are many
+local function openChooser(title, rows)
+    closeChooser()
+    chooser = g_ui.createWidget('LootChooser', rootWidget)
+    local panel = chooser.panel
+    panel:setSize({ width = math.min(420, rootWidget:getWidth() - 16), height = math.min(420, rootWidget:getHeight() - 16) })
+    panel.title:setText(tr(title))
+    panel.close.onClick = closeChooser
+    chooser.onClick = closeChooser
+    chooser.onEscape = closeChooser
+    local many = #rows > 8
+    panel.search:setVisible(many)
+    panel.search:setHeight(many and 36 or 0)
+    local function render()
+        panel.list:destroyChildren()
+        local text = panel.search:getText():lower()
+        local shown = 0
+        for _, row in ipairs(rows) do
+            if text == '' or row.fixed or row.text:lower():find(text, 1, true) then
+                shown = shown + 1
+                if shown > 100 then
+                    break
+                end
+                local button = g_ui.createWidget(row.style or 'OtButton', panel.list)
+                button:setText(row.text)
+                button:setChecked(row.checked or false)
+                button.onClick = function()
+                    closeChooser()
+                    row.onClick()
+                end
+            end
+        end
+    end
+    panel.search.onTextChange = render
+    render()
+    chooser:raise()
+end
+
+local function openFilterMenu()
+    local rows = {
+        { text = tr('None'), checked = options.lootFilter == nil, fixed = true, onClick = function() useFilter(nil) end },
+        { text = tr(PRESET_RARE) .. '  (' .. tr('ready-made') .. ')', checked = isPreset(options.lootFilter), fixed = true,
+            onClick = function() useFilter(PRESET_RARE) end },
+    }
+    local names = {}
+    for name in pairs(filters) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    for _, name in ipairs(names) do
+        table.insert(rows, { text = name .. '  (' .. countOf(filters[name]) .. ')', checked = options.lootFilter == name,
+            onClick = function() useFilter(name) end })
+    end
+    table.insert(rows, { text = '+ ' .. tr('New filter'), style = 'OtButtonPrimary', fixed = true, onClick = function()
+        askText('Name the new loot filter', '', function(name)
+            name = freeName(name:sub(1, 20))
+            filters[name] = {}
+            saveFilters()
+            useFilter(name)
+        end)
+    end })
+    table.insert(rows, { text = tr('Import a code'), fixed = true, onClick = function()
+        askText('Paste a loot filter code', '', function(code)
+            local ok, data = pcall(json.decode, code:gsub('^' .. CODE_PREFIX, ''))
+            if not ok or type(data) ~= 'table' or type(data.items) ~= 'table' then
+                showHelp('That is not a loot filter code.')
+                return
+            end
+            local items, count, dropped = {}, 0, 0
+            for id, target in pairs(data.items) do
+                if tonumber(id) and (target == false or type(target) == 'string') then
+                    if count < MAX_ITEMS then
+                        items[tostring(id)] = target
+                        count = count + 1
+                    else
+                        dropped = dropped + 1
+                    end
+                end
+            end
+            local name = freeName(type(data.name) == 'string' and data.name:sub(1, 20) or 'Imported')
+            filters[name] = items
+            saveFilters()
+            useFilter(name)
+            if dropped > 0 then
+                showHelp(string.format('A filter holds at most %d items: %d were left out.', MAX_ITEMS, dropped))
+            end
+        end)
+    end })
+    openChooser('Loot filter', rows)
+end
+
+-- Add loot: everything monsters drop (or one monster's loot), a-z, with a
+-- tick for what is in the filter
+local function openPicker(creature)
+    closePicker()
+    local itemdata = modules.client_itemdata
+    if not (itemdata and itemdata.lootItems) then
+        return
+    end
+    picker = g_ui.createWidget('LootPicker', rootWidget)
+    local panel = picker.panel
+    panel:setSize({ width = math.min(560, rootWidget:getWidth() - 16), height = math.min(460, rootWidget:getHeight() - 16) })
+    panel.title:setText(tr('Add loot to') .. ' ' .. options.lootFilter)
+    panel.close.onClick = function()
+        closePicker()
+        renderLootPage()
+    end
+    picker.onEscape = panel.close.onClick
+    panel.creature:setText((creature or tr('All monsters')) .. '  v')
+    panel.creature.onClick = function()
+        local rows = { { text = tr('All monsters'), checked = creature == nil, fixed = true, onClick = function() openPicker(nil) end } }
+        for _, name in ipairs(itemdata.creaturesWithLoot()) do
+            table.insert(rows, { text = name, checked = creature == name, onClick = function() openPicker(name) end })
+        end
+        openChooser('Monster', rows)
+    end
+    local items = itemdata.lootItems(creature)
+    local function render()
+        panel.list:destroyChildren()
+        local text = panel.search:getText():lower()
+        local matching = {}
+        for _, entry in ipairs(items) do
+            if text == '' or entry.name:lower():find(text, 1, true) then
+                table.insert(matching, entry)
+            end
+        end
+        local LIMIT = 120
+        for i = 1, math.min(#matching, LIMIT) do
+            local entry = matching[i]
+            local row = g_ui.createWidget('LootPickRow', panel.list)
+            row.item:setItemId(entry.id)
+            row.name:setText(entry.name:gsub('^%l', string.upper))
+            -- the monster's rarity word, or from the most common to the rarest
+            if creature or entry.minTier == entry.tier then
+                row.rarity:setText(itemdata.rarityName(entry.tier))
+            else
+                row.rarity:setText(itemdata.rarityName(entry.minTier) .. ' - ' .. itemdata.rarityName(entry.tier))
+            end
+            row.rarity:setColor(itemdata.RARITY_COLORS[entry.tier] or '#e8e8e8')
+            row.check:setChecked(isListed(entry.id))
+            row.onClick = function()
+                local want = not isListed(entry.id)
+                if not setListed(entry.id, want) then
+                    showHelp(string.format('A filter holds at most %d items.', MAX_ITEMS))
+                end
+                row.check:setChecked(isListed(entry.id))
+                panel.count:setText(tr('%d in this filter', countOf(activeList())))
+            end
+        end
+        panel.count:setText(tr('%d in this filter', countOf(activeList())) ..
+            (#matching > LIMIT and ('  -  ' .. tr('showing %d of %d: search to narrow', LIMIT, #matching)) or ''))
+    end
+    panel.search.onTextChange = render
+    render()
+    picker:raise()
+end
+
+local function renderActions()
+    local page = sheet.panel.lootPage
+    page.actions:destroyChildren()
+    local current = options.lootFilter
+    local list = activeList()
+    page.filter:setText(tr('Loot filter') .. ':  ' .. (current or tr('None')) ..
+        (list and ('  (' .. countOf(list) .. ')') or '') .. '   v')
+    page.filter.onClick = openFilterMenu
+    local function addButton(text, onClick, style)
+        local button = g_ui.createWidget(style or 'OtButton', page.actions)
+        button:setText(text)
+        button:setWidth(math.max(64, button:getTextSize().width + 24))
+        button.onClick = onClick
+        return button
+    end
+    if not current then
+        return
+    end
+    if isPreset(current) then
+        -- (ready-made: copy it to change it)
+        addButton(tr('Make a copy'), function()
+            local name = freeName(PRESET_RARE)
+            filters[name] = {}
+            for id in pairs(presetRare()) do
+                filters[name][id] = false
+            end
+            saveFilters()
+            useFilter(name)
+        end)
+        return
+    end
+    addButton(tr('Add loot'), function() openPicker(nil) end, 'OtButtonPrimary')
+    addButton(tr('Rename'), function()
+        askText('Rename the loot filter', current, function(name)
+            name = name:sub(1, 20)
+            if name ~= current then
+                name = freeName(name)
+                filters[name] = filters[current]
+                filters[current] = nil
+                saveFilters()
+                useFilter(name)
+            end
+        end)
+    end)
+    addButton(tr('Copy code'), function()
+        g_window.setClipboardText(CODE_PREFIX .. json.encode({ name = current, items = filters[current] }))
+        showHelp('The code of "' .. current .. '" is copied. Paste it with Import a code on another device.')
+    end)
+    addButton(tr('Delete'), function()
+        filters[current] = nil
+        saveFilters()
+        -- other characters that used it fall back to none
+        useFilter(nil)
+    end, 'OtButtonDanger')
+end
+
+renderLootPage = function()
+    renderActions()
+    renderLootList()
+end
+
+local function showTab(id)
+    local panel = sheet.panel
+    panel.general:setVisible(id == 'general')
+    panel.lootPage:setVisible(id == 'loot')
+    for _, tab in ipairs(panel.tabs:getChildren()) do
+        tab:setChecked(tab:getId() == id)
+    end
+    if id == 'loot' then
+        renderLootPage()
+    end
+end
+
+function open(tab)
     close()
     sheet = g_ui.createWidget('AutomationsSheet', rootWidget)
     local panel = sheet.panel
@@ -465,7 +989,14 @@ function open()
     sheet.onEscape = close
     panel.close.onClick = close
     panel.help.onClick = function() showHelp(HELP) end
-    local toggles = panel.toggles
+    for _, entry in ipairs({ { 'general', 'General' }, { 'loot', 'Loot list' } }) do
+        local button = g_ui.createWidget('OtTab', panel.tabs)
+        button:setId(entry[1])
+        button:setText(tr(entry[2]))
+        button.onClick = function() showTab(entry[1]) end
+    end
+    panel.tabs:getLayout():setCellSize({ width = 130, height = 36 })
+    local toggles = panel.general.toggles
     -- as many columns as fit (4 on a tablet or desktop, 3 on a phone)
     local columns = math.max(2, math.min(4, math.floor((width - 24) / 140)))
     toggles:getLayout():setCellSize({ width = math.floor((width - 24 - 2 * (columns - 1)) / columns), height = 40 })
@@ -482,9 +1013,11 @@ function open()
         end
     end
     renderLootTo()
-    -- as tall as what it holds
+    -- as tall as the switches need, and room for a list
     local rows = math.ceil(#AUTOMATIONS / columns)
-    panel:setHeight(math.min(rootWidget:getHeight() - 16, 12 + 40 + 6 + rows * 42 + 12 + 16 + 4 + 40 + 12))
+    local general = 12 + 40 + 6 + 36 + 6 + rows * 42 + 12 + 16 + 4 + 40 + 12
+    panel:setHeight(math.min(rootWidget:getHeight() - 16, math.max(general, 380)))
+    showTab(tab or 'general')
     sheet:raise()
     sheet:focus()
 end
@@ -585,8 +1118,12 @@ end
 -- Module ------------------------------------------------------------------------
 
 local function onGameStart()
+    rareList = nil
+    openedBags = {}
+    waitingCorpse = nil
     loadOptions()
-    lootQueue = {}
+    loadFilters()
+    saveOptions()
     if eatEvent then
         removeEvent(eatEvent)
     end
@@ -603,7 +1140,6 @@ end
 local function onGameEnd()
     close()
     stopTicking()
-    lootQueue = {}
     if eatEvent then
         removeEvent(eatEvent)
         eatEvent = nil
