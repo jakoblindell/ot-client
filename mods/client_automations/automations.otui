@@ -152,9 +152,32 @@ AutomationsSheet < OtBackdrop
       margin-top: 6
       visible: false
 
+      // the filters: tap one to use it on this character
+      UIWidget
+        id: filters
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: 40
+        layout:
+          type: horizontalBox
+          spacing: 4
+
+      UIWidget
+        id: actions
+        anchors.top: filters.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        margin-top: 4
+        height: 40
+        layout:
+          type: horizontalBox
+          spacing: 4
+
       TextEdit
         id: search
-        anchors.top: parent.top
+        anchors.top: actions.bottom
+        margin-top: 6
         anchors.left: parent.left
         anchors.right: parent.right
         height: 36
@@ -197,6 +220,41 @@ AutomationsSheet < OtBackdrop
         anchors.right: parent.right
         step: 42
         pixels-scroll: true
+
+// A name or a filter code to type or paste
+LootFilterPrompt < OtBackdrop
+  OtPanel
+    id: box
+    anchors.centerIn: parent
+    size: 360 160
+    padding: 10
+
+    OtTitle
+      id: title
+      anchors.top: parent.top
+      anchors.left: parent.left
+
+    TextEdit
+      id: text
+      anchors.top: prev.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 10
+      height: 36
+
+    OtButton
+      id: cancel
+      anchors.left: parent.left
+      anchors.bottom: parent.bottom
+      width: 150
+      !text: tr('Cancel')
+
+    OtButtonPrimary
+      id: ok
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      width: 150
+      !text: tr('OK')
 
 // The "?" explanation
 AutomationsHelp < OtBackdrop

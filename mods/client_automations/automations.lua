@@ -30,13 +30,6 @@ end
 -- Arrows and bolts (items with the Ammo flag in the game server's
 -- items.srv; 7.x item files give the client no such flag)
 local AMMO = { [3446] = true, [3447] = true, [3448] = true, [3449] = true, [3450] = true, [6528] = true }
--- Server answers that end a looting run
-local STOP_MESSAGES = {
-    'You cannot put more objects in this container.',
-    'This object is too heavy for you to carry.',
-    'You do not have enough room.',
-    'There is not enough room.',
-}
 
 local AUTOMATIONS = {
     { id = 'openCorpse', text = 'Open corpse' },
@@ -64,7 +57,6 @@ local DIRECTIONAL = { 'Strike', 'Wave', 'Beam' }
 local MANA_SOUND = '/mods/client_automations/sounds/mana_full'
 
 local options = {} -- this character's switches
-local lootQueue = {} -- containers (corpses) to take things from
 local ticker, eatEvent
 local lastUseAt, lastEatAt = 0, 0
 -- Coins just looted: { container = id, coin = id, until = millis }. Change
@@ -96,6 +88,35 @@ end
 
 function isOn(id)
     return options[id] == true
+end
+
+-- Loot filters: named loot lists kept for every character on this device
+-- ({ name -> { item id (text) -> a container name, or false: as "Put loot
+-- in" } }); each character picks one (options.lootFilter) or none
+local FILTERS_SETTING = 'automations_lootFilters'
+local filters = {}
+
+local function loadFilters()
+    local ok, saved = pcall(json.decode, g_settings.getString(FILTERS_SETTING))
+    filters = ok and type(saved) == 'table' and saved or {}
+    -- a character's list from before filters becomes a filter of its own
+    if type(options.lootList) == 'table' and next(options.lootList) then
+        local player = g_game.getLocalPlayer()
+        local name = (player and player:getName() or 'My') .. '\'s loot'
+        filters[name] = filters[name] or options.lootList
+        options.lootFilter = options.lootFilter or name
+    end
+    options.lootList = nil
+end
+
+local function saveFilters()
+    g_settings.set(FILTERS_SETTING, json.encode(filters))
+    g_settings.save()
+end
+
+-- The active filter's items, or nil
+local function activeList()
+    return options.lootFilter and filters[options.lootFilter] or nil
 end
 
 -- Helpers ----------------------------------------------------------------------
@@ -154,7 +175,8 @@ end
 -- Where an item goes: its own container from the loot list, else the one
 -- in "Put loot in", else the main backpack (each when it is open)
 local function lootContainer(item)
-    local listed = options.lootList and options.lootList[tostring(item:getId())]
+    local list = activeList()
+    local listed = list and list[tostring(item:getId())]
     if listed == 'Backpack' then
         return openBackpack()
     end
@@ -204,31 +226,37 @@ end
 local function wanted(item)
     local id = item:getId()
     return (isOn('lootGold') and COINS[id]) or (isOn('lootFood') and FOODS[id]) or
-        (options.lootList and options.lootList[tostring(id)] ~= nil) or false
+        (activeList() ~= nil and activeList()[tostring(id)] ~= nil) or false
 end
 
 -- The loot list ---------------------------------------------------------------
--- options.lootList: item id (text) -> a container name, or false: where
--- "Put loot in" says
 
 local function lootListActive()
-    return options.lootList ~= nil and next(options.lootList) ~= nil
+    local list = activeList()
+    return list ~= nil and next(list) ~= nil
 end
 
 function isListed(id)
-    return options.lootList ~= nil and options.lootList[tostring(id)] ~= nil
+    local list = activeList()
+    return list ~= nil and list[tostring(id)] ~= nil
 end
 
+-- (with no filter chosen, one named "Loot" is made and chosen)
 function setListed(id, listed)
-    options.lootList = options.lootList or {}
+    if not activeList() then
+        options.lootFilter = options.lootFilter or 'Loot'
+        filters[options.lootFilter] = filters[options.lootFilter] or {}
+        saveOptions()
+    end
+    local list = activeList()
     if listed then
-        if options.lootList[tostring(id)] == nil then
-            options.lootList[tostring(id)] = false
+        if list[tostring(id)] == nil then
+            list[tostring(id)] = false
         end
     else
-        options.lootList[tostring(id)] = nil
+        list[tostring(id)] = nil
     end
-    saveOptions()
+    saveFilters()
 end
 
 -- The work loop: one move or use per tick ------------------------------------------
@@ -248,31 +276,41 @@ local function stopTicking()
     end
 end
 
-local function lootStep()
-    while #lootQueue > 0 do
-        local container = lootQueue[1]
-        if container:isClosed() then
-            table.remove(lootQueue, 1)
-        else
-            for _, item in ipairs(container:getItems()) do
-                if wanted(item) then
-                    local target, count = lootTarget(item)
-                    if not target then
-                        -- nowhere to put it
-                        lootQueue = {}
-                        return false
+-- Everything wanted in a container you opened, sent at once. From the last
+-- slot to the first: taking one item out moves the ones after it up, so
+-- the others keep their places.
+local function lootAll(container)
+    if container:isClosed() then
+        return
+    end
+    local items = container:getItems()
+    local planned = {} -- container id -> items being added
+    for i = #items, 1, -1 do
+        local item = items[i]
+        if wanted(item) then
+            local target, count = lootTarget(item)
+            if target and target.y >= 64 then
+                -- a new slot: count what is on its way there
+                local id = target.y - 64
+                local into = g_game.getContainer(id)
+                local stacking = item:isStackable() and target.z < (into and into:getItemsCount() or 0)
+                if not stacking then
+                    planned[id] = (planned[id] or 0) + 1
+                    if into and into:getItemsCount() + planned[id] > into:getCapacity() then
+                        target = nil
                     end
-                    g_game.move(item, target, count)
-                    if COINS[item:getId()] and target.y >= 64 then
-                        lootedCoins = { container = target.y - 64, coin = item:getId(), untilAt = g_clock.millis() + 3000 }
-                    end
-                    return true
                 end
             end
-            table.remove(lootQueue, 1)
+            if not target then
+                -- nowhere to put it
+                return
+            end
+            g_game.move(item, target, count)
+            if COINS[item:getId()] and target.y >= 64 then
+                lootedCoins = { container = target.y - 64, coin = item:getId(), untilAt = g_clock.millis() + 3000 }
+            end
         end
     end
-    return false
 end
 
 local function changeStep()
@@ -303,7 +341,7 @@ tick = function()
         stopTicking()
         return
     end
-    if lootStep() or changeStep() then
+    if changeStep() then
         return
     end
     stopTicking()
@@ -368,8 +406,11 @@ end
 
 local function onContainerOpen(container)
     if (isOn('lootGold') or isOn('lootFood') or lootListActive()) and isGround(container) then
-        table.insert(lootQueue, container)
-        startTicking()
+        lootAll(container)
+        -- (a coin stack that reached 100 is changed once the moves arrive)
+        if lootedCoins and isOn('changeGold') then
+            startTicking()
+        end
     end
 end
 
@@ -410,11 +451,6 @@ local function onInventoryChange(player, slot, item)
 end
 
 local function onTextMessage(mode, text)
-    for _, message in ipairs(STOP_MESSAGES) do
-        if text == message then
-            lootQueue = {}
-        end
-    end
     -- our own meal: no need to say so
     if text == 'You are full.' and g_clock.millis() - lastEatAt < 2000 then
         return true
@@ -440,8 +476,18 @@ local function showHelp(text)
     helpBox:raise()
 end
 
+local prompt
+
+local function closePrompt()
+    if prompt then
+        prompt:destroy()
+        prompt = nil
+    end
+end
+
 function close()
     closeHelp()
+    closePrompt()
     if sheet then
         sheet:destroy()
         sheet = nil
@@ -456,7 +502,7 @@ local HELP = 'Open corpse: a corpse of a monster you killed opens when you stand
     'Change gold: when looting makes a stack of 100 gold or platinum coins, it becomes the next coin. Coins you carry or change yourself are never touched.\n' ..
     'Eat food: eats after you log in and every two minutes.\n' ..
     'Refill ammo: arrows or bolts from your bags fill an empty ammo slot.\n' ..
-    'Loot list: the items to take from corpses you open, each into its own container or the one in Put loot in.\n' ..
+    'Loot list: loot filters, each a list of items to take from corpses you open, into their own container or the one in Put loot in. Filters are kept for every character on this device; each character uses one. Copy code and Import move a filter to another device.\n' ..
     'They work at a player\'s speed, only on what you open yourself. Saved for this character.'
 
 -- The containers loot can go to: Backpack (nil) and the ones you named
@@ -506,7 +552,7 @@ local function renderLootList()
     local list = page.list
     list:destroyChildren()
     local entries = {}
-    for id, target in pairs(options.lootList or {}) do
+    for id, target in pairs(activeList() or {}) do
         table.insert(entries, { id = tonumber(id), target = target, name = itemName(id) })
     end
     table.sort(entries, function(a, b) return a.name < b.name end)
@@ -533,8 +579,8 @@ local function renderLootList()
                     break
                 end
             end
-            options.lootList[tostring(entry.id)] = choices[at % #choices + 1]
-            saveOptions()
+            activeList()[tostring(entry.id)] = choices[at % #choices + 1]
+            saveFilters()
             renderLootList()
         end
         row.remove.onClick = function()
@@ -543,10 +589,132 @@ local function renderLootList()
         end
     end
     page.empty:setVisible(#entries == 0 and page.search:getText() == '')
-    page.empty:setText(tr('Nothing on the list yet. Search an item above, or long press an item in a container and choose Loot this.'))
+    page.search:setVisible(activeList() ~= nil)
+    page.empty:setText(activeList() and
+        tr('Nothing in this filter yet. Search an item above, or long press an item in a container and choose Loot this.') or
+        tr('No loot filter in use. Choose one above, or make one with + New. Filters are kept for every character on this device.'))
+end
+
+-- Filter codes: "LOOT1:" and the filter as JSON (copied to share it with
+-- another device, pasted to import)
+local CODE_PREFIX = 'LOOT1:'
+local function askText(title, text, done)
+    closePrompt()
+    prompt = g_ui.createWidget('LootFilterPrompt', rootWidget)
+    prompt.box.title:setText(tr(title))
+    prompt.box.text:setText(text or '')
+    prompt.box.text:setCursorPos(-1)
+    prompt.box.cancel.onClick = closePrompt
+    prompt.box.ok.onClick = function()
+        local value = prompt.box.text:getText():gsub('^%s+', ''):gsub('%s+$', '')
+        closePrompt()
+        if value ~= '' then
+            done(value)
+        end
+    end
+    prompt.onEscape = closePrompt
+    prompt:raise()
+    prompt.box.text:focus()
+end
+
+-- A name not taken yet: "Name", "Name 2", ...
+local function freeName(name)
+    local candidate, n = name, 1
+    while filters[candidate] do
+        n = n + 1
+        candidate = name .. ' ' .. n
+    end
+    return candidate
+end
+
+local function useFilter(name)
+    options.lootFilter = name
+    saveOptions()
+    renderLootPage()
+end
+
+local function renderFilters()
+    local page = sheet.panel.lootPage
+    page.filters:destroyChildren()
+    page.actions:destroyChildren()
+    local names = {}
+    for name in pairs(filters) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    local function addButton(row, text, checked, onClick)
+        local button = g_ui.createWidget('OtButton', row)
+        button:setText(text)
+        button:setWidth(math.max(64, button:getTextSize().width + 24))
+        button:setChecked(checked)
+        button.onClick = onClick
+        return button
+    end
+    addButton(page.filters, tr('None'), options.lootFilter == nil, function() useFilter(nil) end)
+    for _, name in ipairs(names) do
+        addButton(page.filters, name, options.lootFilter == name, function() useFilter(name) end)
+    end
+    addButton(page.filters, '+ ' .. tr('New'), false, function()
+        askText('Name the new loot filter', '', function(name)
+            name = freeName(name:sub(1, 20))
+            filters[name] = {}
+            saveFilters()
+            useFilter(name)
+        end)
+    end)
+    local current = options.lootFilter
+    if current then
+        addButton(page.actions, tr('Rename'), false, function()
+            askText('Rename the loot filter', current, function(name)
+                name = name:sub(1, 20)
+                if name ~= current then
+                    name = freeName(name)
+                    filters[name] = filters[current]
+                    filters[current] = nil
+                    saveFilters()
+                    useFilter(name)
+                end
+            end)
+        end)
+        addButton(page.actions, tr('Copy code'), false, function()
+            g_window.setClipboardText(CODE_PREFIX .. json.encode({ name = current, items = filters[current] }))
+            showHelp('The code of "' .. current .. '" is copied. Paste it with Import on another device.')
+        end)
+    end
+    addButton(page.actions, tr('Import'), false, function()
+        askText('Paste a loot filter code', '', function(code)
+            local ok, data = pcall(json.decode, code:gsub('^' .. CODE_PREFIX, ''))
+            if not ok or type(data) ~= 'table' or type(data.items) ~= 'table' then
+                showHelp('That is not a loot filter code.')
+                return
+            end
+            local items = {}
+            for id, target in pairs(data.items) do
+                if tonumber(id) and (target == false or type(target) == 'string') then
+                    items[tostring(id)] = target
+                end
+            end
+            local name = freeName(type(data.name) == 'string' and data.name:sub(1, 20) or 'Imported')
+            filters[name] = items
+            saveFilters()
+            useFilter(name)
+        end)
+    end)
+    if current then
+        local delete = addButton(page.actions, tr('Delete'), false, function()
+            filters[current] = nil
+            saveFilters()
+            -- other characters that used it fall back to none
+            useFilter(nil)
+        end)
+        delete:setStyle('OtButtonDanger')
+        delete:setText(tr('Delete'))
+        delete:setWidth(math.max(64, delete:getTextSize().width + 24))
+    end
 end
 
 renderLootPage = function()
+    renderFilters()
     local page = sheet.panel.lootPage
     local results = page.results
     results:destroyChildren()
@@ -554,7 +722,7 @@ renderLootPage = function()
     local room = page:getWidth()
     for _, found in ipairs(itemdata and itemdata.search and itemdata.search(page.search:getText(), 8) or {}) do
         -- (corpses can be picked up in 7.x: not loot)
-        if not isListed(found.id) and not found.name:find('^dead ') then
+        if activeList() and not isListed(found.id) and not found.name:find('^dead ') then
             local button = g_ui.createWidget('LootSearchResult', results)
             button.item:setItemId(found.id)
             button:setText(found.name)
@@ -730,7 +898,8 @@ end
 
 local function onGameStart()
     loadOptions()
-    lootQueue = {}
+    loadFilters()
+    saveOptions()
     if eatEvent then
         removeEvent(eatEvent)
     end
@@ -747,7 +916,6 @@ end
 local function onGameEnd()
     close()
     stopTicking()
-    lootQueue = {}
     if eatEvent then
         removeEvent(eatEvent)
         eatEvent = nil
