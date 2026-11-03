@@ -16,6 +16,8 @@
 -- out of sight.
 
 local NAMES_SETTING = 'client_containers_names'
+-- characters of a bag's name shown on its slot
+local NAME_CHARS = 4
 local SLOT = 34
 local SPACING = 0
 
@@ -174,12 +176,18 @@ local function renderGrid()
         return
     end
     local container = tab.container
+    local _, names = namesNode()
     for slot = 0, container:getCapacity() - 1 do
         local widget = g_ui.createWidget('ContainersSlot', grid)
         widget:setId('slot' .. slot)
         widget.position = container:getSlotPosition(slot)
         local item = container:getItem(slot)
         widget:setItem(item)
+        -- a bag you named: the start of its name along the bottom
+        local custom = item and item:isContainer() and tab.key and names and names[tab.key .. '/' .. slot]
+        if custom and custom ~= '' then
+            g_ui.createWidget('ContainersSlotName', widget):setText(custom:sub(1, NAME_CHARS))
+        end
         widget.onMouseRelease = function(self, mousePos, mouseButton)
             if not self:containsPoint(mousePos) or g_ui.getDraggingWidget() then
                 return false
