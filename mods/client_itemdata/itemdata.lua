@@ -34,6 +34,7 @@ end
 
 local function use(decoded)
     data = decoded
+    creatureIndex = nil
     byName = {}
     for id, item in pairs(data.items or {}) do
         local name = item.n:lower()
@@ -149,6 +150,106 @@ end
 
 function creatureName(index)
     return data and data.creatures[index + 1]
+end
+
+-- Rarity tiers (an index into data.rarities: 0 Always ... 6 Extremely rare)
+-- and the colour each is shown in (loot messages, loot lists)
+RARITY_COLORS = { [0] = '#c8c8c8', [1] = '#e8e8e8', [2] = '#5fd35f', [3] = '#4aa3ff',
+    [4] = '#c06cff', [5] = '#ff9f2e', [6] = '#ff5050' }
+RARE_TIER = 4
+
+function rarityName(tier)
+    return data and data.rarities and data.rarities[tier + 1] or ''
+end
+
+local creatureIndex -- lower-case name -> index
+
+local function findCreature(name)
+    if not data then
+        return nil
+    end
+    if not creatureIndex then
+        creatureIndex = {}
+        for i, creature in ipairs(data.creatures or {}) do
+            creatureIndex[creature:lower()] = i - 1
+        end
+    end
+    name = name:lower():gsub('^an? ', ''):gsub('^the ', '')
+    return creatureIndex[name]
+end
+
+-- The creatures that drop something players may see, a-z
+function creaturesWithLoot()
+    local seen, list = {}, {}
+    for _, item in pairs(data and data.items or {}) do
+        for _, drop in ipairs(item.drop or {}) do
+            if not seen[drop[1]] then
+                seen[drop[1]] = true
+                table.insert(list, data.creatures[drop[1] + 1])
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a:lower() < b:lower() end)
+    return list
+end
+
+-- Items creatures drop, a-z: { id, name, tier (the creature's, or the
+-- rarest when no creature is given), minTier (the most common),
+-- creatures (how many drop it) }
+function lootItems(creatureName)
+    local index = creatureName and findCreature(creatureName)
+    if creatureName and not index then
+        return {}
+    end
+    local list, seenName = {}, {}
+    for id, item in pairs(data and data.items or {}) do
+        local tier, minTier, count
+        for _, drop in ipairs(item.drop or {}) do
+            if not index or drop[1] == index then
+                tier = math.max(tier or 0, drop[2])
+                minTier = math.min(minTier or 99, drop[2])
+                count = (count or 0) + 1
+            end
+        end
+        local name = item.n:lower()
+        if tier and not seenName[name] then
+            seenName[name] = true
+            table.insert(list, { id = tonumber(id), name = item.n, tier = tier, minTier = minTier, creatures = count })
+        end
+    end
+    table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+    return list
+end
+
+-- "Loot of a dragon: 37 gold coins, a dragon shield." with each item in the
+-- colour of its rarity from that creature (as "{text, #colour}" parts for
+-- setColoredText); items the data does not know keep the plain colour
+function lootColoredText(text)
+    local creature, items = text:match('^(Loot of [^:]+: )(.+)$')
+    if not creature or not data then
+        return nil
+    end
+    local index = findCreature(creature:match('^Loot of (.-): $'))
+    local parts = {}
+    for part in items:gmatch('[^,]+') do
+        local word = part:gsub('^%s+', ''):gsub('%.$', '')
+        local id = findByName((word:gsub('^%d+ ', '')))
+        local tier
+        for _, drop in ipairs(id and getItem(id) and getItem(id).drop or {}) do
+            if drop[1] == index then
+                tier = drop[2]
+            end
+        end
+        local color = tier and RARITY_COLORS[tier]
+        local lead = part:match('^%s*')
+        local tail = part:match('%.$') and '.' or ''
+        if color then
+            table.insert(parts, lead .. '{' .. word:gsub(',', '') .. ', ' .. color .. '}' .. tail)
+        else
+            table.insert(parts, part)
+        end
+    end
+    return creature .. table.concat(parts, ',')
 end
 
 -- fn() runs whenever the data is (re)loaded

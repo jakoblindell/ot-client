@@ -114,9 +114,48 @@ local function saveFilters()
     g_settings.save()
 end
 
+-- A ready-made filter: every item some monster drops Rare or rarer (from
+-- the item data's rarity words; read-only)
+local PRESET_RARE = 'Everything rare'
+local MAX_ITEMS = 500
+local rareList
+
+local function presetRare()
+    if not rareList then
+        local itemdata = modules.client_itemdata
+        local list = {}
+        for _, entry in ipairs(itemdata and itemdata.lootItems and itemdata.lootItems() or {}) do
+            if entry.tier >= itemdata.RARE_TIER then
+                list[tostring(entry.id)] = false
+            end
+        end
+        -- (the item data may not be loaded yet: try again next time)
+        if next(list) then
+            rareList = list
+        end
+        return list
+    end
+    return rareList
+end
+
+local function isPreset(name)
+    return name == PRESET_RARE
+end
+
 -- The active filter's items, or nil
 local function activeList()
+    if isPreset(options.lootFilter) then
+        return presetRare()
+    end
     return options.lootFilter and filters[options.lootFilter] or nil
+end
+
+local function countOf(list)
+    local n = 0
+    for _ in pairs(list or {}) do
+        n = n + 1
+    end
+    return n
 end
 
 -- Helpers ----------------------------------------------------------------------
@@ -241,8 +280,12 @@ function isListed(id)
     return list ~= nil and list[tostring(id)] ~= nil
 end
 
--- (with no filter chosen, one named "Loot" is made and chosen)
+-- (with no filter chosen, one named "Loot" is made and chosen). Returns
+-- false when it cannot: a ready-made filter, or the filter is full
 function setListed(id, listed)
+    if isPreset(options.lootFilter) then
+        return false
+    end
     if not activeList() then
         options.lootFilter = options.lootFilter or 'Loot'
         filters[options.lootFilter] = filters[options.lootFilter] or {}
@@ -251,12 +294,16 @@ function setListed(id, listed)
     local list = activeList()
     if listed then
         if list[tostring(id)] == nil then
+            if countOf(list) >= MAX_ITEMS then
+                return false
+            end
             list[tostring(id)] = false
         end
     else
         list[tostring(id)] = nil
     end
     saveFilters()
+    return true
 end
 
 -- The work loop: one move or use per tick ------------------------------------------
@@ -485,9 +532,29 @@ local function closePrompt()
     end
 end
 
+local chooser
+
+local function closeChooser()
+    if chooser then
+        chooser:destroy()
+        chooser = nil
+    end
+end
+
+local picker
+
+local function closePicker()
+    if picker then
+        picker:destroy()
+        picker = nil
+    end
+end
+
 function close()
     closeHelp()
     closePrompt()
+    closeChooser()
+    closePicker()
     if sheet then
         sheet:destroy()
         sheet = nil
@@ -551,6 +618,7 @@ local function renderLootList()
     local page = sheet.panel.lootPage
     local list = page.list
     list:destroyChildren()
+    local readOnly = isPreset(options.lootFilter)
     local entries = {}
     for id, target in pairs(activeList() or {}) do
         table.insert(entries, { id = tonumber(id), target = target, name = itemName(id) })
@@ -560,6 +628,8 @@ local function renderLootList()
         local row = g_ui.createWidget('LootListRow', list)
         row.item:setItemId(entry.id)
         row.name:setText(entry.name)
+        row.target:setVisible(not readOnly)
+        row.remove:setVisible(not readOnly)
         -- the item's own container, or the one in "Put loot in"
         row.target:setText(entry.target or tr('Default'))
         row.target:setChecked(entry.target ~= false)
@@ -588,11 +658,10 @@ local function renderLootList()
             renderLootPage()
         end
     end
-    page.empty:setVisible(#entries == 0 and page.search:getText() == '')
-    page.search:setVisible(activeList() ~= nil)
+    page.empty:setVisible(#entries == 0)
     page.empty:setText(activeList() and
-        tr('Nothing in this filter yet. Search an item above, or long press an item in a container and choose Loot this.') or
-        tr('No loot filter in use. Choose one above, or make one with + New. Filters are kept for every character on this device.'))
+        tr('Nothing in this filter yet. Tap Add loot, or long press an item in a container and choose Loot this.') or
+        tr('No loot filter in use. Tap the filter above to choose or make one. Filters are kept for every character on this device.'))
 end
 
 -- Filter codes: "LOOT1:" and the filter as JSON (copied to share it with
@@ -620,7 +689,7 @@ end
 -- A name not taken yet: "Name", "Name 2", ...
 local function freeName(name)
     local candidate, n = name, 1
-    while filters[candidate] do
+    while filters[candidate] or isPreset(candidate) do
         n = n + 1
         candidate = name .. ' ' .. n
     end
@@ -633,113 +702,222 @@ local function useFilter(name)
     renderLootPage()
 end
 
-local function renderFilters()
-    local page = sheet.panel.lootPage
-    page.filters:destroyChildren()
-    page.actions:destroyChildren()
+-- A list to choose from (LootChooser): rows of { text, checked, onClick };
+-- the search narrows them when there are many
+local function openChooser(title, rows)
+    closeChooser()
+    chooser = g_ui.createWidget('LootChooser', rootWidget)
+    local panel = chooser.panel
+    panel:setSize({ width = math.min(420, rootWidget:getWidth() - 16), height = math.min(420, rootWidget:getHeight() - 16) })
+    panel.title:setText(tr(title))
+    panel.close.onClick = closeChooser
+    chooser.onClick = closeChooser
+    chooser.onEscape = closeChooser
+    local many = #rows > 8
+    panel.search:setVisible(many)
+    panel.search:setHeight(many and 36 or 0)
+    local function render()
+        panel.list:destroyChildren()
+        local text = panel.search:getText():lower()
+        local shown = 0
+        for _, row in ipairs(rows) do
+            if text == '' or row.fixed or row.text:lower():find(text, 1, true) then
+                shown = shown + 1
+                if shown > 100 then
+                    break
+                end
+                local button = g_ui.createWidget(row.style or 'OtButton', panel.list)
+                button:setText(row.text)
+                button:setChecked(row.checked or false)
+                button.onClick = function()
+                    closeChooser()
+                    row.onClick()
+                end
+            end
+        end
+    end
+    panel.search.onTextChange = render
+    render()
+    chooser:raise()
+end
+
+local function openFilterMenu()
+    local rows = {
+        { text = tr('None'), checked = options.lootFilter == nil, fixed = true, onClick = function() useFilter(nil) end },
+        { text = tr(PRESET_RARE) .. '  (' .. tr('ready-made') .. ')', checked = isPreset(options.lootFilter), fixed = true,
+            onClick = function() useFilter(PRESET_RARE) end },
+    }
     local names = {}
     for name in pairs(filters) do
         table.insert(names, name)
     end
     table.sort(names)
-    local function addButton(row, text, checked, onClick)
-        local button = g_ui.createWidget('OtButton', row)
-        button:setText(text)
-        button:setWidth(math.max(64, button:getTextSize().width + 24))
-        button:setChecked(checked)
-        button.onClick = onClick
-        return button
-    end
-    addButton(page.filters, tr('None'), options.lootFilter == nil, function() useFilter(nil) end)
     for _, name in ipairs(names) do
-        addButton(page.filters, name, options.lootFilter == name, function() useFilter(name) end)
+        table.insert(rows, { text = name .. '  (' .. countOf(filters[name]) .. ')', checked = options.lootFilter == name,
+            onClick = function() useFilter(name) end })
     end
-    addButton(page.filters, '+ ' .. tr('New'), false, function()
+    table.insert(rows, { text = '+ ' .. tr('New filter'), style = 'OtButtonPrimary', fixed = true, onClick = function()
         askText('Name the new loot filter', '', function(name)
             name = freeName(name:sub(1, 20))
             filters[name] = {}
             saveFilters()
             useFilter(name)
         end)
-    end)
-    local current = options.lootFilter
-    if current then
-        addButton(page.actions, tr('Rename'), false, function()
-            askText('Rename the loot filter', current, function(name)
-                name = name:sub(1, 20)
-                if name ~= current then
-                    name = freeName(name)
-                    filters[name] = filters[current]
-                    filters[current] = nil
-                    saveFilters()
-                    useFilter(name)
-                end
-            end)
-        end)
-        addButton(page.actions, tr('Copy code'), false, function()
-            g_window.setClipboardText(CODE_PREFIX .. json.encode({ name = current, items = filters[current] }))
-            showHelp('The code of "' .. current .. '" is copied. Paste it with Import on another device.')
-        end)
-    end
-    addButton(page.actions, tr('Import'), false, function()
+    end })
+    table.insert(rows, { text = tr('Import a code'), fixed = true, onClick = function()
         askText('Paste a loot filter code', '', function(code)
             local ok, data = pcall(json.decode, code:gsub('^' .. CODE_PREFIX, ''))
             if not ok or type(data) ~= 'table' or type(data.items) ~= 'table' then
                 showHelp('That is not a loot filter code.')
                 return
             end
-            local items = {}
+            local items, count, dropped = {}, 0, 0
             for id, target in pairs(data.items) do
                 if tonumber(id) and (target == false or type(target) == 'string') then
-                    items[tostring(id)] = target
+                    if count < MAX_ITEMS then
+                        items[tostring(id)] = target
+                        count = count + 1
+                    else
+                        dropped = dropped + 1
+                    end
                 end
             end
             local name = freeName(type(data.name) == 'string' and data.name:sub(1, 20) or 'Imported')
             filters[name] = items
             saveFilters()
             useFilter(name)
+            if dropped > 0 then
+                showHelp(string.format('A filter holds at most %d items: %d were left out.', MAX_ITEMS, dropped))
+            end
+        end)
+    end })
+    openChooser('Loot filter', rows)
+end
+
+-- Add loot: everything monsters drop (or one monster's loot), a-z, with a
+-- tick for what is in the filter
+local function openPicker(creature)
+    closePicker()
+    local itemdata = modules.client_itemdata
+    if not (itemdata and itemdata.lootItems) then
+        return
+    end
+    picker = g_ui.createWidget('LootPicker', rootWidget)
+    local panel = picker.panel
+    panel:setSize({ width = math.min(560, rootWidget:getWidth() - 16), height = math.min(460, rootWidget:getHeight() - 16) })
+    panel.title:setText(tr('Add loot to') .. ' ' .. options.lootFilter)
+    panel.close.onClick = function()
+        closePicker()
+        renderLootPage()
+    end
+    picker.onEscape = panel.close.onClick
+    panel.creature:setText((creature or tr('All monsters')) .. '  v')
+    panel.creature.onClick = function()
+        local rows = { { text = tr('All monsters'), checked = creature == nil, fixed = true, onClick = function() openPicker(nil) end } }
+        for _, name in ipairs(itemdata.creaturesWithLoot()) do
+            table.insert(rows, { text = name, checked = creature == name, onClick = function() openPicker(name) end })
+        end
+        openChooser('Monster', rows)
+    end
+    local items = itemdata.lootItems(creature)
+    local function render()
+        panel.list:destroyChildren()
+        local text = panel.search:getText():lower()
+        local matching = {}
+        for _, entry in ipairs(items) do
+            if text == '' or entry.name:lower():find(text, 1, true) then
+                table.insert(matching, entry)
+            end
+        end
+        local LIMIT = 120
+        for i = 1, math.min(#matching, LIMIT) do
+            local entry = matching[i]
+            local row = g_ui.createWidget('LootPickRow', panel.list)
+            row.item:setItemId(entry.id)
+            row.name:setText(entry.name:gsub('^%l', string.upper))
+            -- the monster's rarity word, or from the most common to the rarest
+            if creature or entry.minTier == entry.tier then
+                row.rarity:setText(itemdata.rarityName(entry.tier))
+            else
+                row.rarity:setText(itemdata.rarityName(entry.minTier) .. ' - ' .. itemdata.rarityName(entry.tier))
+            end
+            row.rarity:setColor(itemdata.RARITY_COLORS[entry.tier] or '#e8e8e8')
+            row.check:setChecked(isListed(entry.id))
+            row.onClick = function()
+                local want = not isListed(entry.id)
+                if not setListed(entry.id, want) then
+                    showHelp(string.format('A filter holds at most %d items.', MAX_ITEMS))
+                end
+                row.check:setChecked(isListed(entry.id))
+                panel.count:setText(tr('%d in this filter', countOf(activeList())))
+            end
+        end
+        panel.count:setText(tr('%d in this filter', countOf(activeList())) ..
+            (#matching > LIMIT and ('  -  ' .. tr('showing %d of %d: search to narrow', LIMIT, #matching)) or ''))
+    end
+    panel.search.onTextChange = render
+    render()
+    picker:raise()
+end
+
+local function renderActions()
+    local page = sheet.panel.lootPage
+    page.actions:destroyChildren()
+    local current = options.lootFilter
+    local list = activeList()
+    page.filter:setText(tr('Loot filter') .. ':  ' .. (current or tr('None')) ..
+        (list and ('  (' .. countOf(list) .. ')') or '') .. '   v')
+    page.filter.onClick = openFilterMenu
+    local function addButton(text, onClick, style)
+        local button = g_ui.createWidget(style or 'OtButton', page.actions)
+        button:setText(text)
+        button:setWidth(math.max(64, button:getTextSize().width + 24))
+        button.onClick = onClick
+        return button
+    end
+    if not current then
+        return
+    end
+    if isPreset(current) then
+        -- (ready-made: copy it to change it)
+        addButton(tr('Make a copy'), function()
+            local name = freeName(PRESET_RARE)
+            filters[name] = {}
+            for id in pairs(presetRare()) do
+                filters[name][id] = false
+            end
+            saveFilters()
+            useFilter(name)
+        end)
+        return
+    end
+    addButton(tr('Add loot'), function() openPicker(nil) end, 'OtButtonPrimary')
+    addButton(tr('Rename'), function()
+        askText('Rename the loot filter', current, function(name)
+            name = name:sub(1, 20)
+            if name ~= current then
+                name = freeName(name)
+                filters[name] = filters[current]
+                filters[current] = nil
+                saveFilters()
+                useFilter(name)
+            end
         end)
     end)
-    if current then
-        local delete = addButton(page.actions, tr('Delete'), false, function()
-            filters[current] = nil
-            saveFilters()
-            -- other characters that used it fall back to none
-            useFilter(nil)
-        end)
-        delete:setStyle('OtButtonDanger')
-        delete:setText(tr('Delete'))
-        delete:setWidth(math.max(64, delete:getTextSize().width + 24))
-    end
+    addButton(tr('Copy code'), function()
+        g_window.setClipboardText(CODE_PREFIX .. json.encode({ name = current, items = filters[current] }))
+        showHelp('The code of "' .. current .. '" is copied. Paste it with Import a code on another device.')
+    end)
+    addButton(tr('Delete'), function()
+        filters[current] = nil
+        saveFilters()
+        -- other characters that used it fall back to none
+        useFilter(nil)
+    end, 'OtButtonDanger')
 end
 
 renderLootPage = function()
-    renderFilters()
-    local page = sheet.panel.lootPage
-    local results = page.results
-    results:destroyChildren()
-    local itemdata = modules.client_itemdata
-    local room = page:getWidth()
-    for _, found in ipairs(itemdata and itemdata.search and itemdata.search(page.search:getText(), 8) or {}) do
-        -- (corpses can be picked up in 7.x: not loot)
-        if activeList() and not isListed(found.id) and not found.name:find('^dead ') then
-            local button = g_ui.createWidget('LootSearchResult', results)
-            button.item:setItemId(found.id)
-            button:setText(found.name)
-            button:setWidth(button:getTextSize().width + 52)
-            room = room - button:getWidth() - 4
-            if room < 0 then
-                button:destroy()
-                break
-            end
-            button.onClick = function()
-                setListed(found.id, true)
-                page.search:setText('')
-                renderLootPage()
-            end
-        end
-    end
-    results:setHeight(#results:getChildren() > 0 and 40 or 0)
+    renderActions()
     renderLootList()
 end
 
@@ -789,9 +967,6 @@ function open(tab)
         end
     end
     renderLootTo()
-    panel.lootPage.search.onTextChange = function()
-        renderLootPage()
-    end
     -- as tall as the switches need, and room for a list
     local rows = math.ceil(#AUTOMATIONS / columns)
     local general = 12 + 40 + 6 + 36 + 6 + rows * 42 + 12 + 16 + 4 + 40 + 12
@@ -897,6 +1072,7 @@ end
 -- Module ------------------------------------------------------------------------
 
 local function onGameStart()
+    rareList = nil
     loadOptions()
     loadFilters()
     saveOptions()

@@ -21,21 +21,6 @@ AutomationToggle < UIWidget
     margin-left: 2
     phantom: true
 
-// A search result: tap to add it to the loot list
-LootSearchResult < OtButton
-  height: 40
-  margin-right: 4
-  text-align: left
-  text-offset: 40 0
-
-  Item
-    id: item
-    anchors.left: parent.left
-    anchors.verticalCenter: parent.verticalCenter
-    margin-left: 4
-    virtual: true
-    phantom: true
-
 // An item on the loot list: picture, name, its container (tap to change)
 // and remove
 LootListRow < UIWidget
@@ -152,20 +137,18 @@ AutomationsSheet < OtBackdrop
       margin-top: 6
       visible: false
 
-      // the filters: tap one to use it on this character
-      UIWidget
-        id: filters
+      // the filter in use: a drop-down (LootChooser)
+      OtButton
+        id: filter
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 40
-        layout:
-          type: horizontalBox
-          spacing: 4
+        text-align: left
+        text-offset: 12 0
 
       UIWidget
         id: actions
-        anchors.top: filters.bottom
+        anchors.top: filter.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         margin-top: 4
@@ -174,36 +157,16 @@ AutomationsSheet < OtBackdrop
           type: horizontalBox
           spacing: 4
 
-      TextEdit
-        id: search
-        anchors.top: actions.bottom
-        margin-top: 6
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: 36
-        max-length: 30
-        placeholder: Search an item to loot
-
-      UIWidget
-        id: results
-        anchors.top: search.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        margin-top: 4
-        height: 40
-        layout:
-          type: horizontalBox
-
       OtHint
         id: empty
-        anchors.top: results.bottom
+        anchors.top: actions.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         margin-top: 6
 
       ScrollablePanel
         id: list
-        anchors.top: results.bottom
+        anchors.top: actions.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -220,6 +183,159 @@ AutomationsSheet < OtBackdrop
         anchors.right: parent.right
         step: 42
         pixels-scroll: true
+
+// A list to choose from, with a search when there are many (the filter
+// drop-down, the monsters in Add loot)
+LootChooser < OtBackdrop
+  OtPanel
+    id: panel
+    anchors.centerIn: parent
+    size: 420 420
+
+    OtTitle
+      id: title
+      anchors.top: parent.top
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 10
+
+    OtIconButton
+      id: close
+      anchors.top: parent.top
+      anchors.right: parent.right
+      !text: 'X'
+
+    TextEdit
+      id: search
+      anchors.top: close.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 6
+      height: 36
+      max-length: 30
+      placeholder: Search
+
+    ScrollablePanel
+      id: list
+      anchors.top: search.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      margin-top: 6
+      margin-right: 14
+      vertical-scrollbar: listScroll
+      layout:
+        type: verticalBox
+        spacing: 2
+
+    VerticalScrollBar
+      id: listScroll
+      anchors.top: list.top
+      anchors.bottom: list.bottom
+      anchors.right: parent.right
+      step: 42
+      pixels-scroll: true
+
+// Add loot: what monsters drop, a-z, ticked when it is in the filter
+LootPickRow < UIWidget
+  height: 40
+  phantom: false
+
+  OtCheck
+    id: check
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    phantom: true
+
+  Item
+    id: item
+    anchors.left: check.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 2
+    virtual: true
+    phantom: true
+
+  OtLabel
+    id: name
+    anchors.left: item.right
+    anchors.right: rarity.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 6
+    phantom: true
+
+  Label
+    id: rarity
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-right: 6
+    font: $ot-font-text
+    text-auto-resize: true
+    phantom: true
+
+LootPicker < OtBackdrop
+  OtPanel
+    id: panel
+    anchors.centerIn: parent
+    size: 560 460
+
+    OtTitle
+      id: title
+      anchors.top: parent.top
+      anchors.horizontalCenter: parent.horizontalCenter
+      margin-top: 10
+
+    OtIconButton
+      id: close
+      anchors.top: parent.top
+      anchors.right: parent.right
+      !text: 'X'
+
+    OtButton
+      id: creature
+      anchors.top: close.bottom
+      anchors.left: parent.left
+      anchors.right: parent.horizontalCenter
+      margin-top: 6
+      margin-right: 3
+      text-align: left
+      text-offset: 12 0
+
+    TextEdit
+      id: search
+      anchors.top: creature.top
+      anchors.left: parent.horizontalCenter
+      anchors.right: parent.right
+      margin-left: 3
+      height: 40
+      max-length: 30
+      placeholder: Search an item
+
+    OtHint
+      id: count
+      anchors.top: creature.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 4
+
+    ScrollablePanel
+      id: list
+      anchors.top: count.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      margin-top: 4
+      margin-right: 14
+      vertical-scrollbar: listScroll
+      layout:
+        type: verticalBox
+        spacing: 2
+
+    VerticalScrollBar
+      id: listScroll
+      anchors.top: list.top
+      anchors.bottom: list.bottom
+      anchors.right: parent.right
+      step: 42
+      pixels-scroll: true
 
 // A name or a filter code to type or paste
 LootFilterPrompt < OtBackdrop
