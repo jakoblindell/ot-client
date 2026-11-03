@@ -179,6 +179,17 @@ OtCheck < UICheckBox
   $disabled checked:
     image-clip: 0 112 56 56
 
+// How far along something is: a gold fill in a sunken frame, the count on it
+// (setPercent, setText)
+OtProgress < UIProgressBar
+  height: 24
+  background-color: $ot-gold-dark
+  image-source: /images/ui/progressbar
+  image-border: 2
+  font: $ot-font-label
+  color: $ot-text-strong
+  text-align: center
+
 // A value between - and + (OtStepper rows)
 OtValue < Label
   width: 64

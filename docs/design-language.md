@@ -40,6 +40,7 @@ Classic Tibia materials, nothing new to draw:
 | `OtCheck` | On/off: a 28 px box with a gold tick, in a 40×40 touch area |
 | `OtValue` | A value between - and + |
 | `OtHelpButton` | The "?" beside a setting; opens a short explanation |
+| `OtProgress` | A bar for how far along something is (gold fill, the count on it: `setPercent`, `setText`) |
 | `OtSettingRow` | Title + "?" on the left, controls on the right (`controls` takes `OtButton`s, an `OtCheck`, or `-` `OtValue` `+`) |
 
 Tokens (`&ot-…` in the same file): fonts `$ot-font-title`, `$ot-font-label`,

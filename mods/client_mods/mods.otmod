@@ -24,3 +24,4 @@ Module
     - client_updates
     - client_typing
     - client_automations
+    - client_tasks

@@ -101,12 +101,15 @@ local SETTINGS = {
 local hub
 local currentPage
 local helpBox
+local tasksTab -- the Tasks tab shown now (nil: another page)
+local tasksListening
 
 local function options()
     return modules.client_options
 end
 
 local function close()
+    tasksTab = nil
     if helpBox then
         helpBox:destroy()
         helpBox = nil
@@ -322,6 +325,7 @@ showSettings = function(pageId)
     if not hub then
         return
     end
+    tasksTab = nil
     currentPage = pageId
     local panel = hub.panel
     panel.title:setText(tr('Settings'))
@@ -365,6 +369,54 @@ showSettings = function(pageId)
     end)
 end
 
+-- Tasks (ot-client#44): the daily hunt and, later, other tasks; the pages
+-- come from client_tasks and redraw when the server sends news
+local function tasks()
+    return modules.client_tasks
+end
+
+local showTasks
+local function refreshTasks()
+    if hub and tasksTab then
+        showTasks(tasksTab)
+    end
+end
+
+showTasks = function(tabId)
+    if not hub or not tasks() then
+        return
+    end
+    if not tasksListening then
+        tasksListening = true
+        tasks().addListener(refreshTasks)
+    end
+    local opening = tasksTab ~= tabId
+    tasksTab = tabId
+    local panel = hub.panel
+    panel.title:setText(tr('Tasks'))
+    panel.back:setText('< ' .. tr('Hub'))
+    panel.back:setVisible(true)
+    panel.back.onClick = function()
+        openHub()
+    end
+    panel.tabs:destroyChildren()
+    panel.tabs:setVisible(true)
+    panel.tabs:setHeight(36)
+    for _, tab in ipairs(tasks().TABS) do
+        local button = g_ui.createWidget('OtTab', panel.tabs)
+        button:setText(tr(tab.text))
+        button:setChecked(tab.id == tabId)
+        button.onClick = function()
+            showTasks(tab.id)
+        end
+    end
+    panel.list:destroyChildren()
+    tasks().render(tabId, panel.list)
+    if opening then
+        tasks().request()
+    end
+end
+
 local HUB_BUTTONS = {
     { text = 'Settings', action = function() showSettings(currentPage or 'gameplay') end },
     { text = 'Edit layout', action = function() close(); startEditLayout() end },
@@ -375,6 +427,7 @@ local HUB_BUTTONS = {
             modules.client_automations.open()
         end
     end },
+    { text = 'Tasks', action = function() showTasks('daily') end },
     { text = 'Outfit', action = function() close(); g_game.requestOutfit() end },
     { text = 'Quest log', action = function()
         close()
@@ -409,6 +462,7 @@ function openHub()
     hub:raise()
     hub:focus()
     local panel = hub.panel
+    tasksTab = nil
     panel.title:setText(tr('Menu'))
     panel.back:setVisible(false)
     panel.tabs:setVisible(false)
