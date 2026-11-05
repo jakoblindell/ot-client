@@ -9,3 +9,7 @@ TasksProgress < UIWidget
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
+
+// An unlocked achievement: its name in gold
+TasksAchievementDone < OtLabel
+  color: $ot-gold
