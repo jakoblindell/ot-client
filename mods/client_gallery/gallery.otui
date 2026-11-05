@@ -1,0 +1,73 @@
+// The UI gallery (ot-client#70): one page of components over everything else
+
+GalleryRoot < UIWidget
+  anchors.fill: parent
+  background-color: #1c1a17
+  padding: 8
+  phantom: false
+  focusable: false
+
+// A labelled group of components: a caption over a row (sizes set in Lua;
+// no fit-children: nested auto-sizing layouts looped forever)
+GallerySection < UIWidget
+
+  Label
+    id: caption
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 14
+    font: $ot-font-small
+    color: $ot-text-muted
+
+  UIWidget
+    id: items
+    anchors.top: caption.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    margin-top: 4
+    layout:
+      type: horizontalBox
+      spacing: 6
+
+// The page: sections top to bottom
+GalleryColumn < UIWidget
+  anchors.top: parent.top
+  anchors.left: parent.left
+  anchors.bottom: parent.bottom
+  layout:
+    type: verticalBox
+    spacing: 10
+
+// Colour and font samples (the &ot- tokens)
+GallerySwatch < Label
+  size: 64 28
+  font: $ot-font-small
+  color: $ot-text-strong
+  text-align: center
+  border-width: 1
+  border-color: #ffffff33
+
+GallerySwatchGold < GallerySwatch
+  background-color: $ot-gold
+  color: $ot-gold-text
+
+GallerySwatchGoldDark < GallerySwatch
+  background-color: $ot-gold-dark
+
+GallerySwatchPositive < GallerySwatch
+  background-color: $ot-positive
+  color: $ot-gold-text
+
+GallerySwatchNegative < GallerySwatch
+  background-color: $ot-negative
+
+GallerySwatchMuted < GallerySwatch
+  background-color: $ot-text-muted
+  color: $ot-gold-text
+
+GalleryFontSmall < Label
+  font: $ot-font-small
+  color: $ot-text
+  text-auto-resize: true
