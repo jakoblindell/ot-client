@@ -13,3 +13,88 @@ TasksProgress < UIWidget
 // An unlocked achievement: its name in gold
 TasksAchievementDone < OtLabel
   color: $ot-gold
+
+// A quest or chest (ot-client#62): a dot, the name (gold when done), the
+// status on the right, a line below
+JournalRow < UIWidget
+  height: 40
+  margin-bottom: 2
+  border-width-bottom: 1
+  border-color: #ffffff14
+
+  UIWidget
+    id: dot
+    anchors.left: parent.left
+    anchors.top: parent.top
+    margin-left: 4
+    margin-top: 10
+    size: 10 10
+    border-width: 5
+    border-color: #6a6a6a
+    $on:
+      border-color: $ot-positive
+
+  OtLabel
+    id: name
+    anchors.left: dot.right
+    anchors.right: status.left
+    anchors.top: parent.top
+    margin-left: 10
+    margin-top: 6
+    margin-right: 8
+    text-auto-resize: false
+    height: 16
+    $on:
+      color: $ot-gold
+
+  Label
+    id: status
+    anchors.right: parent.right
+    anchors.top: parent.top
+    margin-top: 6
+    margin-right: 6
+    font: $ot-font-text
+    color: $ot-text-muted
+    text-auto-resize: true
+
+  OtHint
+    id: detail
+    anchors.left: name.left
+    anchors.right: parent.right
+    anchors.top: name.bottom
+    margin-top: 2
+    margin-right: 6
+    visible: false
+
+// Journal footer: the region filter and Show completed
+JournalFilter < UIWidget
+  height: 40
+  margin-bottom: 6
+
+  OtLabel
+    id: label
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    text-auto-resize: true
+    !text: tr('Show:')
+
+  OtButton
+    id: region
+    anchors.left: label.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 8
+    width: 200
+
+  OtCheck
+    id: completed
+    anchors.left: region.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 12
+
+  OtLabel
+    id: completedLabel
+    anchors.left: completed.right
+    anchors.verticalCenter: parent.verticalCenter
+    text-auto-resize: true
+    phantom: false
+    !text: tr('Show completed')
