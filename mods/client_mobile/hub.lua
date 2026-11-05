@@ -382,10 +382,15 @@ local function refreshTasks()
     end
 end
 
-showTasks = function(tabId)
+-- pageId: 'daily' (its own hub button) or 'journal' (tabs), ot-client#58
+local tasksPage = 'journal'
+showTasks = function(tabId, pageId)
     if not hub or not tasks() then
         return
     end
+    pageId = pageId or tasksPage
+    tasksPage = pageId
+    local page = tasks().PAGES and tasks().PAGES[pageId] or { title = 'Tasks', tabs = tasks().TABS }
     if not tasksListening then
         tasksListening = true
         tasks().addListener(refreshTasks)
@@ -393,21 +398,28 @@ showTasks = function(tabId)
     local opening = tasksTab ~= tabId
     tasksTab = tabId
     local panel = hub.panel
-    panel.title:setText(tr('Tasks'))
+    panel.title:setText(tr(page.title))
     panel.back:setText('< ' .. tr('Hub'))
     panel.back:setVisible(true)
     panel.back.onClick = function()
         openHub()
     end
     panel.tabs:destroyChildren()
-    panel.tabs:setVisible(true)
-    panel.tabs:setHeight(36)
-    for _, tab in ipairs(tasks().TABS) do
-        local button = g_ui.createWidget('OtTab', panel.tabs)
-        button:setText(tr(tab.text))
-        button:setChecked(tab.id == tabId)
-        button.onClick = function()
-            showTasks(tab.id)
+    -- one tab needs no tab row
+    local tabbed = #page.tabs > 1
+    panel.tabs:setVisible(tabbed)
+    panel.tabs:setHeight(tabbed and 36 or 0)
+    if tabbed then
+        -- room for longer names (Achievements): the tabs share the width, up to 160 each
+        local width = math.min(160, math.floor((panel.tabs:getWidth() - 4 * (#page.tabs - 1)) / #page.tabs))
+        panel.tabs:getLayout():setCellSize({ width = width, height = 36 })
+        for _, tab in ipairs(page.tabs) do
+            local button = g_ui.createWidget('OtTab', panel.tabs)
+            button:setText(tr(tab.text))
+            button:setChecked(tab.id == tabId)
+            button.onClick = function()
+                showTasks(tab.id, pageId)
+            end
         end
     end
     panel.list:destroyChildren()
@@ -427,7 +439,8 @@ local HUB_BUTTONS = {
             modules.client_automations.open()
         end
     end },
-    { text = 'Tasks', action = function() showTasks('daily') end },
+    { text = 'Daily', action = function() showTasks('daily', 'daily') end },
+    { text = 'Journal', action = function() showTasks('hunting', 'journal') end },
     { text = 'Outfit', action = function() close(); g_game.requestOutfit() end },
     { text = 'Quest log', action = function()
         close()

@@ -10,13 +10,20 @@
 
 local TASKS_OPCODE = 106
 
-TABS = {
-    { id = 'daily', text = 'Daily hunt' },
-    { id = 'hunting', text = 'Hunting tasks' },
+-- The hub's pages (ot-client#58): Daily on its own button, the Journal with
+-- tabs (Quests and Chests come later, ot-server#44)
+PAGES = {
+    daily = { title = 'Daily hunt', tabs = { { id = 'daily', text = 'Daily hunt' } } },
+    journal = { title = 'Journal', tabs = {
+        { id = 'hunting', text = 'Tasks' },
+        { id = 'achievements', text = 'Achievements' },
+    } },
 }
+TABS = PAGES.journal.tabs
 
 local daily -- the last status, and when it came (os.time) for the clocks
 local hunting
+local achievements
 local receivedAt = 0
 local listeners = {}
 local tickEvent
@@ -78,6 +85,9 @@ local function onTasks(protocol, opcode, buffer)
     end
     if type(data.hunting) == 'table' then
         hunting = data.hunting
+    end
+    if type(data.achievements) == 'table' then
+        achievements = data.achievements
     end
     changed()
 end
@@ -232,12 +242,83 @@ local function renderHunting(list)
     end
 end
 
+-- Done so far (also under an active task)
+local function renderFinished(list)
+    local finished = hunting and hunting.finished or {}
+    heading(list, 'Finished tasks')
+    if #finished == 0 then
+        text(list, tr('None yet.'), 'OtHint')
+        return
+    end
+    for _, entry in ipairs(finished) do
+        local line = capitalize(entry.name or '')
+        if (entry.times or 1) > 1 then
+            line = line .. ' x' .. entry.times
+        end
+        text(list, tr('%s - %s', line, plural(entry.points or 0, 'point')))
+    end
+end
+
+local function renderAchievements(list)
+    if not achievements then
+        text(list, tr('Asking the server...'), 'OtHint')
+        return
+    end
+    local a = achievements
+    heading(list, 'Achievements')
+    text(list, tr('%d of %d unlocked - %d of %d points', a.unlocked or 0, a.count or 0, a.points or 0, a.totalPoints or 0),
+        'OtLabel'):setTextAutoResize(true)
+    for _, category in ipairs(a.categories or {}) do
+        local entries, order = {}, {}
+        for index, entry in ipairs(a.list or {}) do
+            if entry.category == category.id then
+                table.insert(entries, entry)
+                order[entry] = index
+            end
+        end
+        if #entries > 0 then
+            heading(list, category.name)
+            -- unlocked first, then the rest in list order
+            table.sort(entries, function(x, y)
+                if (x.unlockedAt ~= nil) ~= (y.unlockedAt ~= nil) then
+                    return x.unlockedAt ~= nil
+                end
+                return order[x] < order[y]
+            end)
+            for _, entry in ipairs(entries) do
+                local points = plural(entry.points or 0, 'point')
+                if entry.hidden then
+                    text(list, tr('??? - %s', points), 'OtHint')
+                else
+                    local row = text(list, tr('%s - %s', entry.name or '', points),
+                        entry.unlockedAt and 'TasksAchievementDone' or 'OtLabel')
+                    row:setTextAutoResize(true)
+                    local detail = entry.text or ''
+                    if entry.unlockedAt then
+                        detail = detail .. '  ' .. os.date('%Y-%m-%d', entry.unlockedAt)
+                    end
+                    text(list, detail, 'OtHint')
+                    if entry.target and not entry.unlockedAt then
+                        local progress = g_ui.createWidget('TasksProgress', list)
+                        local value, goal = entry.progress or 0, math.max(1, entry.target)
+                        progress.bar:setPercent(math.floor(100 * math.min(value, goal) / goal))
+                        progress.bar:setText(value .. ' / ' .. goal)
+                    end
+                end
+            end
+        end
+    end
+end
+
 -- Fills `list` with the tab's page
 function render(tabId, list)
     if tabId == 'daily' then
         renderDaily(list)
     elseif tabId == 'hunting' then
         renderHunting(list)
+        renderFinished(list)
+    elseif tabId == 'achievements' then
+        renderAchievements(list)
     end
 end
 
@@ -251,12 +332,14 @@ end
 local function onGameStart()
     daily = nil
     hunting = nil
+    achievements = nil
     request()
 end
 
 local function onGameEnd()
     daily = nil
     hunting = nil
+    achievements = nil
 end
 
 function init()
