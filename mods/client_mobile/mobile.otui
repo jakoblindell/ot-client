@@ -80,9 +80,10 @@ MobileStats < UIWidget
     margin-left: 3
     @onSetup: self.fill:setImageSource('/mods/client_mobile/images/bar_mana')
 
-// Round like the hotbar slots, with the chat icon (gold while open)
+// Round like the hotbar slots (and as big), with the chat icon (gold while
+// open). The face is set by setRoundFace (mobile.lua).
 MobileChatButton < UIButton
-  size: 48 48
+  size: 40 40
   image-source: /mods/client_mobile/images/slot_round
   $pressed:
     image-source: /mods/client_mobile/images/slot_round_pressed
@@ -91,7 +92,7 @@ MobileChatButton < UIButton
   UIWidget
     id: icon
     anchors.centerIn: parent
-    size: 28 28
+    size: 24 24
     image-source: /images/ui/ot/icons/chat
     phantom: true
 

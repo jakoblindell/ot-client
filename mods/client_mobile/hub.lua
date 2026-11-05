@@ -85,6 +85,9 @@ local SETTINGS = {
     },
     {
         id = 'optimization', text = 'Optimization', rows = {
+            { id = 'sharpness', kind = 'choice', text = 'Sharpness',
+                choices = { { 1, 'Normal' }, { 2, 'High' } },
+                help = 'High draws with your screen\'s real pixels (up to 2x): sharper text and icons, but more work for the phone and more battery. Normal is the lightest.' },
             { key = 'lowPowerMode', kind = 'toggle', text = 'Battery saver',
                 help = 'Draws fewer frames while nothing moves, to save battery.' },
             { key = 'backgroundFrameRate', kind = 'choice', text = 'Frame rate limit',
@@ -159,6 +162,8 @@ local function rowValue(row)
         return getViewSize()
     elseif row.id == 'typing' then
         return modules.client_typing.isEnabled()
+    elseif row.id == 'sharpness' then
+        return getSharpness()
     end
 end
 
@@ -192,6 +197,8 @@ local function setRowValue(row, value)
         setViewSize(value)
     elseif row.id == 'typing' then
         modules.client_typing.setEnabled(value)
+    elseif row.id == 'sharpness' then
+        setSharpness(value)
     end
 end
 

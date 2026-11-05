@@ -13,8 +13,43 @@
 local TOOLBAR_HEIGHT = 44
 local GRID_CELL = 44
 local GRID_SPACING = 4
-local ROUND_SLOT = '/mods/client_mobile/images/slot_round'
-local ROUND_SLOT_PRESSED = '/mods/client_mobile/images/slot_round_pressed'
+-- Round buttons (hotbar slots, chat, P1 and the pencil): the face is made
+-- by the engine at the button's exact size ("/generated/circle/..."), so the
+-- ring stays smooth at any size (ot-client#66). Gold for the hotbar and
+-- chat, silver for the preset and edit buttons; brighter while pressed.
+local ROUND_FACES = {
+    gold = { ring = 'b08c3c', pressed = 'ffd470' },
+    silver = { ring = '9ea3ab', pressed = 'e6e9ee' },
+}
+local ROUND_FILL = '141414d7'
+
+local function roundFacePath(size, ring)
+    -- the ring is 3/48 of the size, as in the old 48 px image
+    return string.format('/generated/circle/%d/%.1f/%s/%s', size, size * 3 / 48, ring, ROUND_FILL)
+end
+
+-- Gives a button the round face of the kind ('gold' or 'silver'), and keeps
+-- it matched to the button's size when that changes
+function setRoundFace(widget, kind)
+    widget.roundFace = ROUND_FACES[kind] and kind or 'gold'
+    widget.roundFaceSize = nil
+    local function apply()
+        local size = math.min(widget:getWidth(), widget:getHeight())
+        if size <= 0 or widget.roundFaceSize == size then
+            return
+        end
+        widget.roundFaceSize = size
+        local face = ROUND_FACES[widget.roundFace]
+        local normal = roundFacePath(size, face.ring)
+        widget:mergeStyle({ ['image-source'] = normal, ['$pressed'] = { ['image-source'] = roundFacePath(size, face.pressed) } })
+        widget:setImageSource(normal)
+    end
+    if not widget.roundFaceHooked then
+        widget.roundFaceHooked = true
+        connect(widget, { onGeometryChange = apply })
+    end
+    apply()
+end
 
 -- Toolbar entries, left to right. A panel entry shows the widgets of one side
 -- panel whose id is listed (or starts with a listed prefix).
@@ -48,6 +83,28 @@ local HIDDEN_WIDGETS = {
 -- it can still be changed in the options: phones 1x, small tablets 1.5x,
 -- large tablets 2x (the client's own mobile default is 1.5x everywhere)
 local SCALE_KEY = 'client_mobile_scale_applied'
+-- Sharpness (ot-client#66): how many screen pixels per CSS pixel the client
+-- draws. Normal (1) is the lightest for battery; High follows the screen,
+-- up to 2.
+local SHARPNESS_KEY = 'sharpness'
+
+function getSharpness()
+    local value = tonumber(g_settings.getString(SHARPNESS_KEY))
+    if not value and g_platform.getBrowserConfigString then
+        -- the deployment's default (client-config.js: sharpness: 2)
+        value = tonumber(g_platform.getBrowserConfigString('sharpness'))
+    end
+    return value == 2 and 2 or 1
+end
+
+function setSharpness(value)
+    g_settings.set(SHARPNESS_KEY, tostring(value))
+    g_settings.save()
+    if g_window.setMaxPixelRatio then
+        g_window.setMaxPixelRatio(value)
+    end
+end
+
 local function applyDefaultScale()
     if g_settings.getBoolean(SCALE_KEY) then
         return
@@ -56,7 +113,9 @@ local function applyDefaultScale()
     if not options or not options.setOption then
         return
     end
-    local shortSide = math.min(g_window.getWidth(), g_window.getHeight())
+    -- in CSS pixels (the canvas has the Sharpness setting's pixel ratio)
+    local ratio = g_window.getPixelRatio and g_window.getPixelRatio() or 1
+    local shortSide = math.min(g_window.getWidth(), g_window.getHeight()) / ratio
     -- hudScale option value v gives a scale of max(v / 2 + 0.5, 1)
     local value = shortSide >= 800 and 3 or shortSide >= 600 and 2 or 0
     options.setOption('hudScale', value, true)
@@ -418,11 +477,7 @@ local function makeRound(button)
         return
     end
     button.mobileRound = true
-    button:mergeStyle({
-        ['image-source'] = ROUND_SLOT,
-        ['$pressed'] = { ['image-source'] = ROUND_SLOT_PRESSED },
-    })
-    button:setImageSource(ROUND_SLOT)
+    setRoundFace(button, 'gold')
     local item = button.item or button:getChildById('item')
     if item then
         -- The square slot frame of the item widget is replaced by the circle
@@ -981,6 +1036,10 @@ end
 
 function init()
     initTouchMode()
+    -- every browser, touch or not
+    if g_window.setMaxPixelRatio then
+        g_window.setMaxPixelRatio(getSharpness())
+    end
     if not g_platform.isMobile() then
         return
     end
@@ -1029,6 +1088,7 @@ function init()
     stats:setId('mobileStats')
 
     chatButton = g_ui.createWidget('MobileChatButton', root)
+    setRoundFace(chatButton, 'gold')
     chatButton:setId('mobileChatButton')
     chatButton.onClick = function()
         setChatVisible(not chatVisible)

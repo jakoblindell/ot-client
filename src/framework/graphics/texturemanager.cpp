@@ -95,6 +95,60 @@ void TextureManager::liveReload()
     }, 1000);
 }
 
+// "/generated/circle/<size>/<ring width>/<ring colour>/<fill colour>": a round
+// button face made at exactly <size> pixels, with smooth (antialiased) edges,
+// so round buttons look clean at any size (ot-client#66). Colours are hex
+// without '#' (rrggbb or rrggbbaa); "0" is no ring or no fill.
+static TexturePtr makeCircleTexture(const std::string& path)
+{
+    const auto parts = stdext::split(path.substr(18), "/"); // after "/generated/circle/"
+    if (parts.size() < 4)
+        return nullptr;
+    const int size = std::clamp(stdext::unsafe_cast<int>(parts[0], 0), 1, 512);
+    const float ringWidth = std::max(0.f, stdext::unsafe_cast<float>(parts[1], 0.f));
+    const auto parseColor = [](const std::string& hex) {
+        return hex == "0" ? Color::alpha : Color("#" + hex);
+    };
+    const Color ring = parseColor(parts[2]);
+    const Color fill = parseColor(parts[3]);
+
+    const auto image = std::make_shared<Image>(Size(size, size));
+    auto& pixels = image->getPixels();
+    const float radius = size / 2.f;
+    constexpr int SAMPLES = 4; // 4x4 samples per pixel
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
+            int inRing = 0, inFill = 0;
+            for (int sy = 0; sy < SAMPLES; ++sy) {
+                for (int sx = 0; sx < SAMPLES; ++sx) {
+                    const float dx = x + (sx + .5f) / SAMPLES - radius;
+                    const float dy = y + (sy + .5f) / SAMPLES - radius;
+                    const float d = std::sqrt(dx * dx + dy * dy);
+                    if (d > radius)
+                        continue;
+                    if (d > radius - ringWidth)
+                        ++inRing;
+                    else
+                        ++inFill;
+                }
+            }
+            const float ringA = ring.aF() * inRing / (SAMPLES * SAMPLES);
+            const float fillA = fill.aF() * inFill / (SAMPLES * SAMPLES);
+            const float alpha = ringA + fillA;
+            uint8_t* px = &pixels[(static_cast<size_t>(y) * size + x) * 4];
+            if (alpha <= 0.f) {
+                px[0] = px[1] = px[2] = px[3] = 0;
+                continue;
+            }
+            px[0] = static_cast<uint8_t>((ring.r() * ringA + fill.r() * fillA) / alpha);
+            px[1] = static_cast<uint8_t>((ring.g() * ringA + fill.g() * fillA) / alpha);
+            px[2] = static_cast<uint8_t>((ring.b() * ringA + fill.b() * fillA) / alpha);
+            px[3] = static_cast<uint8_t>(std::min(255.f, alpha * 255.f + .5f));
+        }
+    }
+    return std::make_shared<Texture>(image);
+}
+
 TexturePtr TextureManager::getTexture(const std::string& fileName, const bool smooth)
 {
     TexturePtr texture;
@@ -122,6 +176,9 @@ TexturePtr TextureManager::getTexture(const std::string& fileName, const bool sm
         }
     }
 #endif
+
+    if (!texture && filePath.rfind("/generated/circle/", 0) == 0)
+        texture = makeCircleTexture(filePath);
 
     // texture not found, load it
     if (!texture) {

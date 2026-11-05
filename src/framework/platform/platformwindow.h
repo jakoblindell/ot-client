@@ -73,6 +73,11 @@ public:
     virtual void setMinimumSize(const Size& minimumSize) = 0;
     virtual void setFullscreen(bool fullscreen) = 0;
     virtual void setVerticalSync(bool enable) = 0;
+    // Screen pixels per window unit used for drawing (browser: the page's
+    // devicePixelRatio, capped by setMaxPixelRatio; ot-client#66). The
+    // display density is the HUD scale times this.
+    virtual float getPixelRatio() { return 1.f; }
+    virtual void setMaxPixelRatio(float) {}
     virtual void setIcon(const std::string& iconFile) = 0;
     virtual void setClipboardText(std::string_view text) = 0;
 

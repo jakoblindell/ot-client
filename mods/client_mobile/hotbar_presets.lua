@@ -316,6 +316,8 @@ end
 function createHotbarPresetRow(root, actionPanel)
     presetRow = g_ui.createWidget('MobileHotbarPresetRow', root)
     presetRow:setId('mobileHotbarPresets')
+    setRoundFace(presetRow.preset, 'silver')
+    setRoundFace(presetRow.edit, 'silver')
     presetRow.preset.onMouseRelease = function(widget, pos, button)
         if not widget:containsPoint(pos) then
             return false
