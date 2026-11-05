@@ -397,6 +397,11 @@ end
 
 --- Translates hotkey text for display
 local function translateDisplayHotkey(text)
+    -- touch mode (ot-client#64): no keyboard shortcuts on the slots; the
+    -- keys still work with a keyboard
+    if g_platform.isMobile() then
+        return ''
+    end
     if HotkeyShortcuts[text] then
         text = HotkeyShortcuts[text]
     elseif string.len(text) > 5 then

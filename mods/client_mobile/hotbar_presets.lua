@@ -78,6 +78,7 @@ local function updatePresetButton()
     presetRow.preset:setText('P' .. settings.current)
     presetRow.edit:setVisible(settings.editButton)
     presetRow.edit:setOn(editing)
+    presetRow.edit.icon:setImageSource(editing and '/images/ui/ot/icons/edit_on' or '/images/ui/ot/icons/edit')
 end
 
 -- Shows preset `index` in the main hotbar

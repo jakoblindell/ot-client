@@ -235,9 +235,16 @@ MobileHotbarPresetRow < UIWidget
   MobileHotbarRoundButton
     id: edit
     !tooltip: tr('Edit hotbar')
-    icon-source: /images/ui/ot/icons/edit
-    $on:
-      icon-source: /images/ui/ot/icons/edit_on
+
+    // (a child, so it stays centred when the button is sized; icon-source
+    // drew it into a corner)
+    UIWidget
+      id: icon
+      anchors.fill: parent
+      margin: 10
+      image-source: /images/ui/ot/icons/edit
+      image-smooth: true
+      phantom: true
 
 MobileHotbarEditOverlay < UIWidget
   phantom: false
