@@ -102,6 +102,7 @@ local hub
 local currentPage
 local helpBox
 local tasksTab -- the Tasks tab shown now (nil: another page)
+local settingsShown -- Settings is the page shown now
 local tasksListening
 
 local function options()
@@ -110,6 +111,7 @@ end
 
 local function close()
     tasksTab = nil
+    settingsShown = false
     if helpBox then
         helpBox:destroy()
         helpBox = nil
@@ -139,6 +141,7 @@ local function applyContrast()
         local on = g_settings.getBoolean(CONTRAST_SETTING)
         hub.panel:setOn(on)
         hub.panel.contrast:setChecked(on)
+        hub.panel.contrast.icon:setImageSource(on and '/images/ui/ot/icons/contrast_on' or '/images/ui/ot/icons/contrast')
     end
 end
 
@@ -320,6 +323,13 @@ local function addRow(list, row)
     controls:setWidth(math.max(40, width - 4))
 end
 
+-- In Settings, above the tabs' rows: the layout and the rest of the options
+local SETTINGS_ACTIONS = {
+    { text = 'Hotbar', action = function() close(); openHotbarSettings() end },
+    { text = 'Edit layout', action = function() close(); startEditLayout() end },
+    { text = 'All options', action = function() close(); showTopMenu() end },
+}
+
 -- One settings tab
 showSettings = function(pageId)
     if not hub then
@@ -345,8 +355,17 @@ showSettings = function(pageId)
             showSettings(page.id)
         end
     end
-    local scroll = panel.listScroll:getValue()
+    -- keep the place when a setting changed; from another page start at the top
+    local scroll = settingsShown and panel.listScroll:getValue() or 0
+    settingsShown = true
     panel.list:destroyChildren()
+    local actions = g_ui.createWidget('HubSettingsActions', panel.list)
+    actions:getLayout():setCellSize({ width = math.floor((panel.list:getWidth() - 2 * 6) / 3), height = 40 })
+    for _, entry in ipairs(SETTINGS_ACTIONS) do
+        local button = g_ui.createWidget('OtButton', actions)
+        button:setText(tr(entry.text))
+        button.onClick = entry.action
+    end
     for _, page in ipairs(SETTINGS) do
         if page.id == pageId then
             for _, row in ipairs(page.rows) do
@@ -397,6 +416,7 @@ showTasks = function(tabId, pageId)
     end
     local opening = tasksTab ~= tabId
     tasksTab = tabId
+    settingsShown = false
     local panel = hub.panel
     panel.title:setText(tr(page.title))
     panel.back:setText('< ' .. tr('Hub'))
@@ -429,28 +449,49 @@ showTasks = function(tabId, pageId)
     end
 end
 
-local HUB_BUTTONS = {
-    { text = 'Settings', action = function() showSettings(currentPage or 'gameplay') end },
-    { text = 'Edit layout', action = function() close(); startEditLayout() end },
-    { text = 'Hotbar', action = function() close(); openHotbarSettings() end },
-    { text = 'Automations', action = function()
-        close()
-        if modules.client_automations and modules.client_automations.open then
-            modules.client_automations.open()
-        end
-    end },
-    { text = 'Daily', action = function() showTasks('daily', 'daily') end },
-    { text = 'Journal', action = function() showTasks('hunting', 'journal') end },
-    { text = 'Outfit', action = function() close(); g_game.requestOutfit() end },
-    { text = 'Quest log', action = function()
-        close()
-        if modules.game_questlog and modules.game_questlog.show then
-            modules.game_questlog.show()
-        end
-    end },
-    { text = 'All options', action = function() close(); showTopMenu() end },
-    { text = 'Logout', danger = true, action = function() close(); modules.game_interface.tryLogout() end },
+-- The front page (ot-client#60): sections of four icon buttons. icon: a game
+-- item shown on the button; character: the player's outfit and level.
+-- Without an action the button shows "Soon".
+
+local HUB_SECTIONS = {
+    { title = 'ADVENTURE', buttons = {
+        { text = 'Character', character = true, action = function() close(); g_game.requestOutfit() end },
+        { text = 'Journal', icon = 2816, action = function() showTasks('hunting', 'journal') end },
+        { text = 'Hunt', icon = 3264, action = function()
+            close()
+            if modules.client_hunt and modules.client_hunt.toggle then
+                modules.client_hunt.toggle()
+            end
+        end },
+        { text = 'Daily', icon = 3218, action = function() showTasks('daily', 'daily') end },
+    } },
+    { title = 'SOCIAL', buttons = {
+        { text = 'Party', icon = 6578 },
+        { text = 'Guild', icon = 3415 },
+        { text = 'Channels', icon = 3505, action = function() close(); g_game.requestChannels() end },
+    } },
+    { title = 'HOME & SETTINGS', buttons = {
+        { text = 'House', icon = 5801 },
+        { text = 'Automations', icon = 2906, action = function()
+            close()
+            if modules.client_automations and modules.client_automations.open then
+                modules.client_automations.open()
+            end
+        end },
+        { text = 'Ignore List', icon = 3114 },
+        { text = 'Settings', icon = 3460, action = function() showSettings(currentPage or 'gameplay') end },
+    } },
 }
+
+-- "Premium account | Time 13:00"
+local function statusText()
+    local player = g_game.getLocalPlayer()
+    local premium = player and player:isPremium()
+    return string.format('{%s, %s}{   |   Time , #a8a8a8}{%s, #e0b84c}',
+        premium and tr('Premium account') or tr('Free account'),
+        premium and '#70d070' or '#e8e8e8',
+        os.date('%H:%M'))
+end
 
 -- The hub's front page
 function openHub()
@@ -476,26 +517,51 @@ function openHub()
     hub:focus()
     local panel = hub.panel
     tasksTab = nil
-    panel.title:setText(tr('Menu'))
+    settingsShown = false
+    panel.title:setText(tr('Hub'))
     panel.back:setVisible(false)
     panel.tabs:setVisible(false)
     panel.tabs:setHeight(0)
     panel.tabs:destroyChildren()
     panel.list:destroyChildren()
-    local grid = g_ui.createWidget('HubGrid', panel.list)
-    local cell = math.floor((panel.list:getWidth() - 8) / 2)
-    grid:getLayout():setCellSize({ width = cell, height = 56 })
-    for _, entry in ipairs(HUB_BUTTONS) do
-        if entry.danger then
-            local button = g_ui.createWidget('HubLogout', panel.list)
-            button.onClick = entry.action
-        else
-            local button = g_ui.createWidget('HubBigButton', grid)
+    local status = g_ui.createWidget('HubStatus', panel.list)
+    status:setColoredText(statusText())
+    local width = panel.list:getWidth()
+    local cell = math.floor((width - 3 * 8) / 4)
+    for _, section in ipairs(HUB_SECTIONS) do
+        g_ui.createWidget('HubSection', panel.list).text:setText(tr(section.title))
+        local grid = g_ui.createWidget('HubIconGrid', panel.list)
+        grid:getLayout():setCellSize({ width = cell, height = 78 })
+        for _, entry in ipairs(section.buttons) do
+            local button = g_ui.createWidget('HubIconButton', grid)
             button:setText(tr(entry.text))
-            button.onClick = entry.action
+            if entry.character then
+                local player = g_game.getLocalPlayer()
+                button.item:setVisible(false)
+                if player then
+                    button.creature:setOutfit(player:getOutfit())
+                    button.creature:setDirection(Directions.South)
+                    button.creature:setVisible(true)
+                    button.badge:setText('Lv ' .. player:getLevel())
+                    button.badge:setVisible(true)
+                end
+            else
+                button.item:setItemId(entry.icon)
+            end
+            if entry.action then
+                button.onClick = entry.action
+            else
+                button:setEnabled(false)
+                button.soon:setVisible(true)
+            end
         end
     end
-    -- (the icons' license asks for this)
+    local logout = g_ui.createWidget('HubLogout', panel.list)
+    logout.onClick = function()
+        close()
+        modules.game_interface.tryLogout()
+    end
+    -- (the toolbar icons' license asks for this)
     g_ui.createWidget('OtHint', panel.list):setText(tr('Icons by the game-icons.net artists (CC BY 3.0).'))
 end
 
