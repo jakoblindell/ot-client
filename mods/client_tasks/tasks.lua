@@ -269,10 +269,11 @@ local function renderAchievements(list)
     text(list, tr('%d of %d unlocked - %d of %d points', a.unlocked or 0, a.count or 0, a.points or 0, a.totalPoints or 0),
         'OtLabel'):setTextAutoResize(true)
     for _, category in ipairs(a.categories or {}) do
-        local entries = {}
-        for _, entry in ipairs(a.list or {}) do
+        local entries, order = {}, {}
+        for index, entry in ipairs(a.list or {}) do
             if entry.category == category.id then
                 table.insert(entries, entry)
+                order[entry] = index
             end
         end
         if #entries > 0 then
@@ -282,7 +283,7 @@ local function renderAchievements(list)
                 if (x.unlockedAt ~= nil) ~= (y.unlockedAt ~= nil) then
                     return x.unlockedAt ~= nil
                 end
-                return x.id < y.id
+                return order[x] < order[y]
             end)
             for _, entry in ipairs(entries) do
                 local points = plural(entry.points or 0, 'point')
