@@ -103,6 +103,7 @@ local currentPage
 local helpBox
 local tasksTab -- the Tasks tab shown now (nil: another page)
 local settingsShown -- Settings is the page shown now
+local journalAsked -- the Journal's lists were asked for since the hub opened
 local tasksListening
 
 local function options()
@@ -111,6 +112,7 @@ end
 
 local function close()
     tasksTab = nil
+    journalAsked = false
     settingsShown = false
     if helpBox then
         helpBox:destroy()
@@ -443,9 +445,46 @@ showTasks = function(tabId, pageId)
         end
     end
     panel.list:destroyChildren()
+    -- the Journal's filter: region (Quests and Chests) and Show completed
+    if page.filter and (tabId == 'quests' or tabId == 'chests') then
+        local region, completed = tasks().getFilter()
+        local filter = g_ui.createWidget('JournalFilter', panel.list)
+        filter.region:setText(region or tr('All regions'))
+        filter.region.onClick = function()
+            -- cycle: all, then each region
+            local list = tasks().getRegions()
+            local index = 0
+            for i, name in ipairs(list) do
+                if name == region then
+                    index = i
+                end
+            end
+            local nextRegion = list[index + 1]
+            tasks().setFilter(nextRegion, completed)
+            showTasks(tabId, pageId)
+        end
+        filter.completed:setChecked(completed)
+        local function toggleCompleted()
+            tasks().setFilter(region, not completed)
+            showTasks(tabId, pageId)
+        end
+        filter.completed.onClick = toggleCompleted
+        filter.completedLabel.onClick = toggleCompleted
+        if tabId == 'quests' then
+            -- quests have no region (yet): only Show completed
+            filter.label:setVisible(false)
+            filter.region:setVisible(false)
+            filter.completed:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+            filter.completed:setMarginLeft(0)
+        end
+    end
     tasks().render(tabId, panel.list)
     if opening then
         tasks().request()
+        if page.filter and tasks().requestJournal and not journalAsked then
+            journalAsked = true
+            tasks().requestJournal()
+        end
     end
 end
 
@@ -456,7 +495,7 @@ end
 local HUB_SECTIONS = {
     { title = 'ADVENTURE', buttons = {
         { text = 'Character', character = true, action = function() close(); g_game.requestOutfit() end },
-        { text = 'Journal', icon = 2816, action = function() showTasks('hunting', 'journal') end },
+        { text = 'Journal', icon = 2816, action = function() showTasks('quests', 'journal') end },
         { text = 'Hunt', icon = 3264, action = function()
             close()
             if modules.client_hunt and modules.client_hunt.toggle then

@@ -14,9 +14,11 @@ local TASKS_OPCODE = 106
 -- tabs (Quests and Chests come later, ot-server#44)
 PAGES = {
     daily = { title = 'Daily hunt', tabs = { { id = 'daily', text = 'Daily hunt' } } },
-    journal = { title = 'Journal', tabs = {
+    journal = { title = 'Journal', filter = true, tabs = {
+        { id = 'quests', text = 'Quests' },
         { id = 'hunting', text = 'Tasks' },
         { id = 'achievements', text = 'Achievements' },
+        { id = 'chests', text = 'Chests' },
     } },
 }
 TABS = PAGES.journal.tabs
@@ -24,6 +26,12 @@ TABS = PAGES.journal.tabs
 local daily -- the last status, and when it came (os.time) for the clocks
 local hunting
 local achievements
+-- The Journal's Quests and Chests (ot-client#62): sent in parts when asked
+local quests, chests, regions
+local pendingChests
+-- the filter: a region (nil: all) and whether completed ones show
+local filterRegion
+local showCompleted = true
 local receivedAt = 0
 local listeners = {}
 local tickEvent
@@ -59,6 +67,27 @@ function request()
     end
 end
 
+-- The Journal's quests and chests (long lists: only when the Journal opens)
+function requestJournal()
+    local protocol = g_game.getProtocolGame()
+    if g_game.isOnline() and protocol then
+        protocol:sendExtendedOpcode(TASKS_OPCODE, 'journal')
+    end
+end
+
+function getRegions()
+    return regions or {}
+end
+
+function getFilter()
+    return filterRegion, showCompleted
+end
+
+function setFilter(region, completed)
+    filterRegion = region
+    showCompleted = completed
+end
+
 -- fn() runs whenever a new status comes
 function addListener(fn)
     table.insert(listeners, fn)
@@ -88,6 +117,26 @@ local function onTasks(protocol, opcode, buffer)
     end
     if type(data.achievements) == 'table' then
         achievements = data.achievements
+    end
+    local journal = data.journal
+    if type(journal) == 'table' then
+        if journal.part == 'quests' then
+            quests = journal.quests or {}
+            regions = journal.regions or {}
+        elseif journal.part == 'chests' then
+            if journal.first then
+                pendingChests = {}
+            end
+            pendingChests = pendingChests or {}
+            for _, chest in ipairs(journal.chests or {}) do
+                table.insert(pendingChests, chest)
+            end
+            if journal.more then
+                return -- wait for the rest
+            end
+            chests = pendingChests
+            pendingChests = nil
+        end
     end
     changed()
 end
@@ -310,6 +359,77 @@ local function renderAchievements(list)
     end
 end
 
+-- Quests and Chests rows: a dot, the name, the status on the right, a line below
+local function journalRow(list, done, name, status, detail)
+    local row = g_ui.createWidget('JournalRow', list)
+    row.dot:setOn(done)
+    row.name:setText(name)
+    row.name:setOn(done)
+    row.status:setText(status or '')
+    if detail and detail ~= '' then
+        row.detail:setText(detail)
+        row.detail:setVisible(true)
+        -- the row grows with the text below the name
+        addEvent(function()
+            if not row:isDestroyed() then
+                row:setHeight(30 + row.detail:getHeight() + 8)
+            end
+        end)
+    end
+    return row
+end
+
+local function renderQuests(list)
+    if not quests then
+        text(list, tr('Opening your journal...'), 'OtHint')
+        return
+    end
+    local shown = 0
+    for _, quest in ipairs(quests) do
+        if showCompleted or not quest.complete then
+            local status
+            if quest.complete then
+                status = tr('Complete')
+            else
+                status = tr('%d/%d missions', quest.done or 0, quest.missions or 0)
+            end
+            local detail = quest.text
+            if not quest.started then
+                detail = tr('Not started.')
+            end
+            journalRow(list, quest.complete, quest.name or '', status, detail)
+            shown = shown + 1
+        end
+    end
+    if shown == 0 then
+        text(list, tr('No quests to show.'), 'OtHint')
+    end
+end
+
+local function renderChests(list)
+    if not chests then
+        text(list, tr('Opening your journal...'), 'OtHint')
+        return
+    end
+    local shown, opened, total = 0, 0, 0
+    for _, chest in ipairs(chests) do
+        if not filterRegion or chest.region == filterRegion then
+            total = total + 1
+            if chest.opened then
+                opened = opened + 1
+            end
+            if showCompleted or not chest.opened then
+                journalRow(list, chest.opened, chest.name or '', chest.reward)
+                shown = shown + 1
+            end
+        end
+    end
+    if shown == 0 then
+        text(list, tr('No chests to show.'), 'OtHint')
+    end
+    text(list, tr('%d of %d chests opened%s.', opened, total, filterRegion and (' in ' .. filterRegion) or ''), 'OtHint')
+end
+
 -- Fills `list` with the tab's page
 function render(tabId, list)
     if tabId == 'daily' then
@@ -319,6 +439,10 @@ function render(tabId, list)
         renderFinished(list)
     elseif tabId == 'achievements' then
         renderAchievements(list)
+    elseif tabId == 'quests' then
+        renderQuests(list)
+    elseif tabId == 'chests' then
+        renderChests(list)
     end
 end
 
@@ -333,6 +457,7 @@ local function onGameStart()
     daily = nil
     hunting = nil
     achievements = nil
+    quests, chests, regions, pendingChests = nil, nil, nil, nil
     request()
 end
 
@@ -340,6 +465,7 @@ local function onGameEnd()
     daily = nil
     hunting = nil
     achievements = nil
+    quests, chests, regions, pendingChests = nil, nil, nil, nil
 end
 
 function init()
