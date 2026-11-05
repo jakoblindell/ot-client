@@ -8,3 +8,6 @@ actions, combined with a corner badge.
 
 `spell-icons-round-64x64.png` is the client's own spell sheet
 (`data/images/game/spells/spell-icons-32x32.png`) cut to circles.
+
+`contrast.png` / `contrast_on.png` (a half-filled circle) are drawn for
+ot-client (no third-party art).

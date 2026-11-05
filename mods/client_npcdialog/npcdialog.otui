@@ -64,24 +64,39 @@ NpcTravelRow < UIWidget
     color: $ot-gold
     phantom: true
 
-NpcDialogWindow < MainWindow
-  id: npcDialog
-  width: 330
-  height: 200
-  @onEscape: modules.client_npcdialog.dismiss()
+// A word the NPC understands: gold text on stone, as wide as the word
+NpcDialogKeyword < OtButton
+  height: 40
+  color: $ot-gold
 
-  // In the title bar: ends the conversation (Escape only works when the
-  // window has focus, and the shop and travel views have no Bye)
-  NpcDialogButton
-    id: closeButton
+// One centred row of buttons (npcdialog.lua packs the buttons into rows)
+NpcDialogRow < UIWidget
+  height: 40
+
+  // the buttons, placed side by side by npcdialog.lua (sized to the row)
+  UIWidget
+    id: inner
     anchors.top: parent.top
-    anchors.right: parent.right
-    margin-top: -26
-    margin-right: -6
-    size: 18 16
-    text: x
-    text-offset: 0 -1
-    @onClick: modules.client_npcdialog.dismiss()
+    anchors.bottom: parent.bottom
+    anchors.horizontalCenter: parent.horizontalCenter
+
+// The dialog (ot-client#51): the NPC's portrait and name, the answer in an
+// inset, the words as centred buttons. Contrast: the hub's setting.
+NpcDialogWindow < UIWindow
+  id: npcDialog
+  width: 380
+  height: 200
+  anchors.centerIn: parent
+  image-source: /images/ui/2pixel_up_frame_borderimage
+  image-border: 4
+  padding: 12
+  focusable: true
+  @onEscape: modules.client_npcdialog.dismiss()
+  $on:
+    image-source: /images/ui/2pixel_up_frame_borderimage_dark
+    image-color: $ot-contrast-stone
+    border-width: 1
+    border-color: $ot-gold
 
   Panel
     id: content
@@ -91,22 +106,73 @@ NpcDialogWindow < MainWindow
     layout:
       type: verticalBox
       fit-children: true
-      spacing: 8
+      spacing: 10
 
-    Label
-      id: answer
-      text-wrap: true
-      text-auto-resize: true
-      color: $ot-text
+    UIWidget
+      id: header
+      height: 48
+
+      OtInset
+        id: portraitFrame
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        size: 48 48
+        padding: 0
+
+        UICreature
+          id: portrait
+          anchors.centerIn: parent
+          size: 44 44
+          fixed-creature-size: true
+          phantom: true
+
+      OtTitle
+        id: name
+        anchors.left: portraitFrame.right
+        anchors.verticalCenter: parent.verticalCenter
+        margin-left: 12
+
+      OtIconButton
+        id: closeButton
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        !text: 'X'
+        @onClick: modules.client_npcdialog.dismiss()
+
+      OtIconButton
+        id: contrast
+        anchors.right: closeButton.left
+        anchors.verticalCenter: parent.verticalCenter
+        margin-right: 6
+        @onClick: modules.client_npcdialog.toggleContrast()
+
+        UIWidget
+          id: icon
+          anchors.centerIn: parent
+          size: 24 24
+          image-source: /images/ui/ot/icons/contrast
+          phantom: true
+
+    OtInset
+      id: answerBox
+      padding: 10
+      layout:
+        type: verticalBox
+        fit-children: true
+
+      Label
+        id: answer
+        text-wrap: true
+        text-auto-resize: true
+        font: $ot-font-label
+        color: $ot-text
 
     Panel
       id: buttons
       layout:
-        type: grid
-        cell-size: 94 36
-        cell-spacing: 4
-        flow: true
+        type: verticalBox
         fit-children: true
+        spacing: 6
 
     // Shop: Buy / Sell tabs, the offers, the chosen one with an amount
     Panel
