@@ -524,7 +524,18 @@ std::string BitmapFont::wrapText(std::string_view text, int maxWidth, const Wrap
             unsigned char ch = (unsigned char)*cur;
             if (_isSpace(ch)) {
                 const int w = glyphWidth(' ');
-                if (lineW + w > maxW) { commitBreak(false); pushChar(' '); lineW = w; ++cur; continue; }
+                // The word before this space fit, the space does not: break the
+                // line here (dropping the space). The old code moved the previous
+                // word down and then reset lineW to the space alone, forgetting
+                // that word's width, so the next line ran past maxWidth and was
+                // cut off at the widget's edge (ot-client#49).
+                // The '\n' takes the space's place, so the text keeps its
+                // length and the colour positions stay where they are.
+                if (lineW + w > maxW) {
+                    out.push_back('\n');
+                    lineW = 0; lastBreakOut = -1; lastBreakLineW = 0; lastBreakHy = false; lastBreakHyCount = 0;
+                    ++cur; continue;
+                }
                 pushChar(' '); lineW += w; markBreak(false, 0); ++cur; continue;
             }
             if (_isHyphen(ch)) {
