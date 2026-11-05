@@ -21,6 +21,8 @@
 &ot-positive: #70d070
 &ot-negative: #e05050
 &ot-backdrop: #000000a0
+// Contrast mode (setOn on an OtPanel): the stone darkened, so light text stands out
+&ot-contrast-stone: #8c8c8c
 
 // --- Surfaces ---------------------------------------------------------------
 
@@ -40,6 +42,7 @@ OtPanel < UIWidget
   phantom: false
   $on:
     image-source: /images/ui/2pixel_up_frame_borderimage_dark
+    image-color: $ot-contrast-stone
     border-width: 1
     border-color: $ot-gold
 

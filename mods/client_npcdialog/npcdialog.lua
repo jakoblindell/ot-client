@@ -79,12 +79,74 @@ local function fitWindow()
     end)
 end
 
-local function addButton(parent, text, onClick, on)
-    local button = g_ui.createWidget('NpcDialogButton', parent)
-    button:setText(text)
-    button:setOn(on == true)
-    button.onClick = onClick
-    return button
+-- The talk view's buttons, as wide as their words, packed into centred rows
+-- (ot-client#51). entries: { text, onClick, on (gold edge), keyword (gold text) }
+local function layoutButtons(parent, entries)
+    parent:destroyChildren()
+    local room = window:getWidth() - window:getPaddingLeft() - window:getPaddingRight()
+    local spacing = 8
+    -- measure each button, then fill rows left to right
+    local rows, row, used = {}, nil, 0
+    for _, entry in ipairs(entries) do
+        local button = g_ui.createWidget(entry.keyword and 'NpcDialogKeyword' or 'NpcDialogButton')
+        button:setText(entry.text)
+        button:setOn(entry.on == true)
+        button.onClick = entry.onClick
+        local width = math.max(72, button:getTextSize().width + 36)
+        button:resize(width, 40)
+        if not row or used + spacing + width > room then
+            row = { buttons = {}, width = -spacing }
+            table.insert(rows, row)
+            used = -spacing
+        end
+        table.insert(row.buttons, button)
+        used = used + spacing + width
+        row.width = used
+    end
+    -- each row centred, its buttons side by side
+    for _, entry in ipairs(rows) do
+        local widget = g_ui.createWidget('NpcDialogRow', parent)
+        local inner = widget:getChildById('inner')
+        inner:setWidth(entry.width)
+        local x = 0
+        for _, button in ipairs(entry.buttons) do
+            inner:addChild(button)
+            button:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+            button:addAnchor(AnchorVerticalCenter, 'parent', AnchorVerticalCenter)
+            button:setMarginLeft(x)
+            x = x + button:getWidth() + spacing
+        end
+    end
+end
+
+local CONTRAST_SETTING = 'client_mobile_hubContrast' -- the hub's contrast (client_mobile)
+
+local function applyContrast()
+    if window then
+        local on = g_settings.getBoolean(CONTRAST_SETTING)
+        window:setOn(on)
+        window:recursiveGetChildById('contrast'):setOn(on)
+        window:recursiveGetChildById('contrast'):getChildById('icon'):setImageSource(
+            on and '/images/ui/ot/icons/contrast_on' or '/images/ui/ot/icons/contrast')
+    end
+end
+
+function toggleContrast()
+    g_settings.set(CONTRAST_SETTING, not g_settings.getBoolean(CONTRAST_SETTING))
+    applyContrast()
+end
+
+-- The NPC's outfit in the header, facing the player
+local function updatePortrait()
+    local portrait = window:recursiveGetChildById('portrait')
+    local creature = dialog and dialog.id and g_map.getCreatureById(dialog.id)
+    if creature then
+        local outfit = creature:getOutfit()
+        portrait:setOutfit(outfit)
+        portrait:setVisible(true)
+    else
+        portrait:setVisible(false)
+    end
 end
 
 local render
@@ -241,32 +303,34 @@ render = function()
     if not window or not dialog then
         return
     end
-    window:setText(dialog.npc)
+    window:recursiveGetChildById('name'):setText(dialog.npc or '')
+    updatePortrait()
     local answer = window:recursiveGetChildById('answer')
     answer:setColoredText(coloredAnswer(dialog.text or '', dialog.keywords or {}))
 
     local buttons = window:recursiveGetChildById('buttons')
-    buttons:destroyChildren()
+    local entries = {}
     if view == 'talk' then
         if dialog.question then
-            addButton(buttons, tr('Yes'), function() say('yes') end, true)
-            addButton(buttons, tr('No'), function() say('no') end)
+            table.insert(entries, { text = tr('Yes'), onClick = function() say('yes') end, on = true })
+            table.insert(entries, { text = tr('No'), onClick = function() say('no') end })
         end
         for _, keyword in ipairs(dialog.keywords or {}) do
-            addButton(buttons, keyword, function() say(keyword) end)
+            table.insert(entries, { text = keyword, onClick = function() say(keyword) end, keyword = true })
         end
         if #(dialog.buy or {}) + #(dialog.sell or {}) > 0 then
-            addButton(buttons, tr('Trade'), function()
+            table.insert(entries, { text = tr('Trade'), on = true, onClick = function()
                 tradeTab = #(dialog.buy or {}) > 0 and 'buy' or 'sell'
                 setView('trade')
-            end, true)
+            end })
         end
         if #(dialog.travel or {}) > 0 then
-            addButton(buttons, tr('Travel'), function() setView('travel') end, true)
+            table.insert(entries, { text = tr('Travel'), onClick = function() setView('travel') end, on = true })
         end
-        addButton(buttons, tr('Bye'), function() say('bye') end)
+        table.insert(entries, { text = tr('Bye'), onClick = function() say('bye') end })
     end
-    buttons:setVisible(#buttons:getChildren() > 0)
+    layoutButtons(buttons, entries)
+    buttons:setVisible(#entries > 0)
 
     window:recursiveGetChildById('trade'):setVisible(view == 'trade')
     window:recursiveGetChildById('travel'):setVisible(view == 'travel')
@@ -328,6 +392,7 @@ local function onDialog(protocol, opcode, buffer)
         selected = still
     end
     render()
+    applyContrast()
     window:show()
     window:raise()
 end
