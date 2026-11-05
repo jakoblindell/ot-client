@@ -1,7 +1,9 @@
--- Tasks in the hub (ot-client#44): the daily hunt from the taskmaster
--- (ot-server#21). The server sends the status as JSON with extended opcode
--- 106 ({"daily":{...}}) on every kill, at the taskmaster and when asked; the
--- hub's Tasks page (client_mobile/hub.lua) shows it with render().
+-- Tasks in the hub (ot-client#44, #47): the daily hunt (ot-server#21) and
+-- the hunting tasks with the hunter rank (ot-server#29) from the
+-- taskmaster. The server sends the status as JSON with extended opcode 106
+-- ({"daily":{...},"hunting":{...}}) on every kill, at the taskmaster and
+-- when asked; the hub's Tasks page (client_mobile/hub.lua) shows it with
+-- render().
 --
 -- More kinds of tasks (hunting tasks, exploration, level rewards) become
 -- more tabs: add them to TABS.
@@ -10,9 +12,11 @@ local TASKS_OPCODE = 106
 
 TABS = {
     { id = 'daily', text = 'Daily hunt' },
+    { id = 'hunting', text = 'Hunting tasks' },
 }
 
 local daily -- the last status, and when it came (os.time) for the clocks
+local hunting
 local receivedAt = 0
 local listeners = {}
 local tickEvent
@@ -71,6 +75,9 @@ local function onTasks(protocol, opcode, buffer)
     if type(data.daily) == 'table' then
         daily = data.daily
         receivedAt = os.time()
+    end
+    if type(data.hunting) == 'table' then
+        hunting = data.hunting
     end
     changed()
 end
@@ -139,10 +146,98 @@ local function renderDaily(list)
     text(list, line, 'OtLabel'):setTextAutoResize(true)
 end
 
+-- "4000 experience, 500 gold and 1 item"
+local function rewardLine(reward)
+    local parts = {}
+    if (reward.exp or 0) > 0 then
+        table.insert(parts, reward.exp .. ' experience')
+    end
+    if (reward.gold or 0) > 0 then
+        table.insert(parts, reward.gold .. ' gold')
+    end
+    local items = #(reward.items or {})
+    if items > 0 then
+        table.insert(parts, plural(items, 'item'))
+    end
+    if #parts == 0 then
+        return nil
+    end
+    if #parts == 1 then
+        return parts[1]
+    end
+    return table.concat(parts, ', ', 1, #parts - 1) .. ' and ' .. parts[#parts]
+end
+
+local function monsterList(monsters)
+    local names = {}
+    for _, monster in ipairs(monsters or {}) do
+        table.insert(names, capitalize(monster))
+    end
+    return table.concat(names, ', ')
+end
+
+local function renderHunting(list)
+    if not hunting then
+        text(list, tr('Asking the taskmaster...'), 'OtHint')
+        return
+    end
+    local h = hunting
+
+    heading(list, 'Hunter rank')
+    text(list, tr('%s - %s', h.rank or '', plural(h.points or 0, 'point')), 'OtLabel'):setTextAutoResize(true)
+    if h.nextRank then
+        text(list, tr('%s more for %s.', plural((h.nextPoints or 0) - (h.points or 0), 'point'), h.nextRank), 'OtHint')
+    end
+    if (h.bonus or 0) > 0 then
+        text(list, tr('Your rank adds %d%% to the experience and gold of task rewards.', math.floor(h.bonus * 100 + 0.5)), 'OtHint')
+    end
+
+    if h.task then
+        local task = h.task
+        heading(list, 'Your task')
+        text(list, capitalize(task.name or ''), 'OtLabel'):setTextAutoResize(true)
+        if #(task.monsters or {}) > 1 then
+            text(list, tr('Any of these count: %s.', monsterList(task.monsters)), 'OtHint')
+        end
+        local progress = g_ui.createWidget('TasksProgress', list)
+        local kills, required = task.kills or 0, math.max(1, task.required or 1)
+        progress.bar:setPercent(math.floor(100 * math.min(kills, required) / required))
+        progress.bar:setText(kills .. ' / ' .. required)
+        if kills >= required then
+            text(list, tr('Done! Report to a taskmaster for your reward.'))
+        else
+            text(list, tr('No time limit. Any blow you land counts.'), 'OtHint')
+        end
+        local reward = rewardLine(task.reward or {})
+        if reward then
+            text(list, tr('Reward: %s.', reward), 'OtHint')
+        end
+        return
+    end
+
+    heading(list, 'Tasks for you')
+    if #(h.available or {}) == 0 then
+        text(list, tr('No hunting task for you right now.'))
+    else
+        for _, task in ipairs(h.available) do
+            text(list, tr('%s: %d kills', capitalize(task.name or ''), task.kills or 0), 'OtLabel'):setTextAutoResize(true)
+            if #(task.monsters or {}) > 1 then
+                text(list, monsterList(task.monsters), 'OtHint')
+            end
+        end
+        text(list, tr('Ask a taskmaster: say "start" and the task\'s name.'), 'OtHint')
+    end
+    if (h.locked or 0) > 0 then
+        text(list, tr('A higher hunter rank unlocks %s.', plural(h.locked, 'more task')), 'OtHint')
+    end
+end
+
 -- Fills `list` with the tab's page
 function render(tabId, list)
     if tabId == 'daily' then
         renderDaily(list)
+    elseif tabId == 'hunting' then
+        renderHunting(list)
     end
 end
 
@@ -155,11 +250,13 @@ end
 
 local function onGameStart()
     daily = nil
+    hunting = nil
     request()
 end
 
 local function onGameEnd()
     daily = nil
+    hunting = nil
 end
 
 function init()
