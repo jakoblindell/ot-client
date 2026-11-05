@@ -10,6 +10,118 @@ HubGrid < UIWidget
 HubBigButton < OtButton
   height: 56
 
+// The front page (ot-client#60): a section's title between two lines
+HubSection < UIWidget
+  height: 26
+  margin-top: 6
+
+  Label
+    id: text
+    anchors.centerIn: parent
+    font: $ot-font-label
+    color: $ot-gold
+    text-auto-resize: true
+
+  UIWidget
+    anchors.left: parent.left
+    anchors.right: text.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 24
+    margin-right: 12
+    height: 1
+    background-color: #ffffff22
+
+  UIWidget
+    anchors.left: text.right
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 12
+    margin-right: 24
+    height: 1
+    background-color: #ffffff22
+
+// Four buttons a row
+HubIconGrid < UIWidget
+  layout:
+    type: grid
+    cell-size: 110 78
+    cell-spacing: 8
+    flow: true
+    fit-children: true
+
+// A button with a game item (or the character) above its name
+HubIconButton < OtButton
+  height: 78
+  text-align: bottom
+  text-offset: 0 -8
+
+  UIItem
+    id: item
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 4
+    size: 44 44
+    virtual: true
+    phantom: true
+
+  UICreature
+    id: creature
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 2
+    size: 44 44
+    fixed-creature-size: true
+    phantom: true
+    visible: false
+
+  // the character's level, over the portrait
+  Label
+    id: badge
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: parent.top
+    margin-top: 32
+    font: $ot-font-small
+    color: $ot-gold
+    background-color: #000000b0
+    text-auto-resize: true
+    text-offset: 0 0
+    padding: 1 4
+    phantom: true
+    visible: false
+
+  // not ready yet
+  Label
+    id: soon
+    anchors.top: parent.top
+    anchors.right: parent.right
+    margin-top: 4
+    margin-right: 6
+    font: $ot-font-small
+    color: $ot-text-muted
+    text-auto-resize: true
+    phantom: true
+    visible: false
+    !text: tr('Soon')
+
+  $disabled:
+    color: $ot-text-disabled
+
+// Settings: Hotbar, Edit layout, All options in one row
+HubSettingsActions < UIWidget
+  height: 40
+  margin-bottom: 6
+  layout:
+    type: grid
+    cell-size: 150 40
+    cell-spacing: 6
+    flow: true
+
+// Account and time, under the title
+HubStatus < Label
+  height: 24
+  font: $ot-font-label
+  text-align: center
+
 HubLogout < OtButtonDanger
   height: 44
   margin-top: 12
@@ -45,8 +157,15 @@ HubSheet < OtBackdrop
       anchors.top: parent.top
       anchors.right: close.left
       margin-right: 6
-      width: 84
-      !text: tr('Contrast')
+      width: 40
+
+      // the half-circle (ot-client#52), gold when contrast is on
+      UIWidget
+        id: icon
+        anchors.centerIn: parent
+        size: 24 24
+        image-source: /images/ui/ot/icons/contrast
+        phantom: true
 
     OtTabRow
       id: tabs
