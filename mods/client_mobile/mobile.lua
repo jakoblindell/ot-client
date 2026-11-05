@@ -13,8 +13,43 @@
 local TOOLBAR_HEIGHT = 44
 local GRID_CELL = 44
 local GRID_SPACING = 4
-local ROUND_SLOT = '/mods/client_mobile/images/slot_round'
-local ROUND_SLOT_PRESSED = '/mods/client_mobile/images/slot_round_pressed'
+-- Round buttons (hotbar slots, chat, P1 and the pencil): the face is made
+-- by the engine at the button's exact size ("/generated/circle/..."), so the
+-- ring stays smooth at any size (ot-client#66). Gold for the hotbar and
+-- chat, silver for the preset and edit buttons; brighter while pressed.
+local ROUND_FACES = {
+    gold = { ring = 'b08c3c', pressed = 'ffd470' },
+    silver = { ring = '9ea3ab', pressed = 'e6e9ee' },
+}
+local ROUND_FILL = '141414d7'
+
+local function roundFacePath(size, ring)
+    -- the ring is 3/48 of the size, as in the old 48 px image
+    return string.format('/generated/circle/%d/%.1f/%s/%s', size, size * 3 / 48, ring, ROUND_FILL)
+end
+
+-- Gives a button the round face of the kind ('gold' or 'silver'), and keeps
+-- it matched to the button's size when that changes
+function setRoundFace(widget, kind)
+    widget.roundFace = ROUND_FACES[kind] and kind or 'gold'
+    widget.roundFaceSize = nil
+    local function apply()
+        local size = math.min(widget:getWidth(), widget:getHeight())
+        if size <= 0 or widget.roundFaceSize == size then
+            return
+        end
+        widget.roundFaceSize = size
+        local face = ROUND_FACES[widget.roundFace]
+        local normal = roundFacePath(size, face.ring)
+        widget:mergeStyle({ ['image-source'] = normal, ['$pressed'] = { ['image-source'] = roundFacePath(size, face.pressed) } })
+        widget:setImageSource(normal)
+    end
+    if not widget.roundFaceHooked then
+        widget.roundFaceHooked = true
+        connect(widget, { onGeometryChange = apply })
+    end
+    apply()
+end
 
 -- Toolbar entries, left to right. A panel entry shows the widgets of one side
 -- panel whose id is listed (or starts with a listed prefix).
@@ -442,11 +477,7 @@ local function makeRound(button)
         return
     end
     button.mobileRound = true
-    button:mergeStyle({
-        ['image-source'] = ROUND_SLOT,
-        ['$pressed'] = { ['image-source'] = ROUND_SLOT_PRESSED },
-    })
-    button:setImageSource(ROUND_SLOT)
+    setRoundFace(button, 'gold')
     local item = button.item or button:getChildById('item')
     if item then
         -- The square slot frame of the item widget is replaced by the circle
@@ -1057,6 +1088,7 @@ function init()
     stats:setId('mobileStats')
 
     chatButton = g_ui.createWidget('MobileChatButton', root)
+    setRoundFace(chatButton, 'gold')
     chatButton:setId('mobileChatButton')
     chatButton.onClick = function()
         setChatVisible(not chatVisible)
