@@ -25,3 +25,4 @@ Module
     - client_typing
     - client_automations
     - client_tasks
+    - client_gallery

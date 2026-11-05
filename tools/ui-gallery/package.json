@@ -1,0 +1,11 @@
+{
+  "name": "ui-gallery",
+  "private": true,
+  "description": "UI screenshot tests for the browser client (ot-client#70)",
+  "scripts": {
+    "test": "node gallery.js"
+  },
+  "dependencies": {
+    "playwright": "1.56.1"
+  }
+}

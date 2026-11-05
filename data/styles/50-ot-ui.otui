@@ -8,7 +8,9 @@
 &ot-font-title: Verdana Bold-13px
 &ot-font-label: Verdana Bold-11px
 &ot-font-text: verdana-11px-rounded
-&ot-font-small: verdana-9px-rounded
+// (verdana-9px-rounded had a 1 like a J and a dark outline that blurred
+// dark text; seen in the UI gallery, ot-client#70)
+&ot-font-small: Verdana-10px-antialiased
 
 &ot-text: #e8e8e8
 &ot-text-strong: #ffffff
@@ -176,6 +178,8 @@ OtCheck < UICheckBox
   image-source: /images/ui/ot/checkbox
   image-clip: 0 0 56 56
   image-rect: 6 6 28 28
+  // drawn at half its size: smooth, or the tick's lines come out jagged
+  image-smooth: true
   focusable: false
   $checked:
     image-clip: 0 56 56 56

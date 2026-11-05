@@ -2,6 +2,11 @@ name: Web Build
 
 on:
   workflow_dispatch:
+    inputs:
+      update_baselines:
+        description: "UI screenshots: save this run's images as the new baseline (commits to the branch)"
+        type: boolean
+        default: false
   push:
     branches:
       - web-client-792
@@ -55,6 +60,62 @@ jobs:
             ${{ env.BUILD_LOG }}
             ${{ env.OUTPUT_DIR }}
           retention-days: 14
+
+  # UI screenshot tests (ot-client#70): the gallery pages on phones, a tablet
+  # and desktop, compared with tools/ui-gallery/baseline. The report is an
+  # artifact; changed pages fail the check. An intended change: run this
+  # workflow on the branch with "update_baselines".
+  ui-gallery:
+    name: UI screenshots
+    needs: build-browser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download browser artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: otclient-browser-${{ github.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Playwright and Chromium
+        working-directory: tools/ui-gallery
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Take and compare screenshots
+        working-directory: tools/ui-gallery
+        run: |
+          if [ "${{ inputs.update_baselines }}" = "true" ]; then
+            node gallery.js --bundle ../../build-emscripten-web --out ../../ui-gallery --update
+          else
+            node gallery.js --bundle ../../build-emscripten-web --out ../../ui-gallery
+          fi
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-gallery-${{ github.sha }}
+          path: ui-gallery
+          retention-days: 14
+
+      - name: Commit the new baselines
+        if: inputs.update_baselines
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/ui-gallery/baseline
+          git commit -m "UI gallery: new baseline images" || exit 0
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
   publish:
     name: Publish pre-release
