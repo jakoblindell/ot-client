@@ -24,6 +24,7 @@
 
 #ifdef __EMSCRIPTEN__
 
+#include <atomic>
 #include "platformwindow.h"
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
@@ -63,6 +64,8 @@ public:
     void setRunning(bool running) { m_running = running; }
 
     void handleResizeCallback(const EmscriptenUiEvent* event);
+    float getPixelRatio() override { return m_pixelRatio; }
+    void setMaxPixelRatio(float ratio) override;
     void handleMouseCallback(int eventType, const EmscriptenMouseEvent* event);
     void handleMouseWheelCallback(const EmscriptenWheelEvent* event);
     void handleMouseMotionCallback(const EmscriptenMouseEvent* event);
@@ -92,6 +95,13 @@ private:
 
     bool m_running;
     bool m_usingTouch = false;
+    // Canvas pixels per CSS pixel: the device's ratio, at most m_maxPixelRatio
+    float m_pixelRatio = 1.f;
+    float m_maxPixelRatio = 1.f;
+    // set from Lua's thread; the window's own thread (poll) applies it
+    std::atomic<float> m_wantedMaxPixelRatio{ 1.f };
+    std::atomic<bool> m_pixelRatioChanged{ false };
+    void applyCanvasSize(bool force);
     std::unordered_map<int64_t, Touch> m_touches;
     // The finger that acts as the mouse (fingers on touch controls do not)
     int64_t m_mouseTouchId = -1;

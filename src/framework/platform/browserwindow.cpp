@@ -168,11 +168,46 @@ void BrowserWindow::terminate() {
     m_running = false;
 }
 
+// The canvas in screen pixels: its CSS size times the pixel ratio (the
+// device's, capped by the Sharpness setting; ot-client#66)
+static float wantedPixelRatio(float maxRatio) {
+    const double device = emscripten_get_device_pixel_ratio();
+    return std::max(1.f, std::min(static_cast<float>(device), maxRatio));
+}
+
+void BrowserWindow::applyCanvasSize(bool force) {
+    double w, h;
+    emscripten_get_element_css_size("#canvas", &w, &h);
+    const float ratio = wantedPixelRatio(m_maxPixelRatio);
+    const Size size(static_cast<int>(w * ratio + 0.5), static_cast<int>(h * ratio + 0.5));
+    if (!force && size == m_size && ratio == m_pixelRatio)
+        return;
+    // keep the HUD scale: the density follows the pixel ratio
+    if (ratio != m_pixelRatio) {
+        const float hudScale = m_displayDensity / m_pixelRatio;
+        m_pixelRatio = ratio;
+        m_displayDensity = hudScale * ratio;
+    }
+    emscripten_set_canvas_element_size("#canvas", size.width(), size.height());
+    if (m_running)
+        glViewport(0, 0, size.width(), size.height());
+    m_size = size;
+    if (m_running && m_onResize)
+        m_onResize(m_size);
+}
+
+// Called from Lua (another thread): the canvas and GL change in poll(), on
+// the thread that owns the GL context
+void BrowserWindow::setMaxPixelRatio(float ratio) {
+    m_wantedMaxPixelRatio = std::max(1.f, ratio);
+    m_pixelRatioChanged = true;
+}
+
 void BrowserWindow::internalInitGL() {
     double w, h;
     emscripten_get_element_css_size("#canvas", &w, &h);
-    m_size = Size(int(w), int(h));
-    emscripten_set_canvas_element_size("#canvas", int(w), int(h));
+    m_size = Size(int(w * m_pixelRatio + 0.5), int(h * m_pixelRatio + 0.5));
+    emscripten_set_canvas_element_size("#canvas", m_size.width(), m_size.height());
 
 
     EmscriptenWebGLContextAttributes attr;
@@ -189,6 +224,11 @@ void BrowserWindow::internalInitGL() {
 void BrowserWindow::poll() {
     if (!g_app.isRunning())
         return;
+
+    if (m_pixelRatioChanged.exchange(false)) {
+        m_maxPixelRatio = m_wantedMaxPixelRatio;
+        applyCanvasSize(true);
+    }
 
 
     if (!m_running) {
@@ -372,20 +412,13 @@ void BrowserWindow::handleMouseWheelCallback(const EmscriptenWheelEvent* event) 
 
 
 void BrowserWindow::handleResizeCallback(const EmscriptenUiEvent* event) {
-    double w, h;
-    emscripten_get_element_css_size("#canvas", &w, &h);
-    if (m_size.width() != int(w) || m_size.height() != int(h)) {
-        emscripten_set_canvas_element_size("#canvas", int(w), int(h));
-        glViewport(0, 0, int(w), int(h));
-        m_size = Size(int(w), int(h));
-        m_onResize(m_size);
-    }
+    applyCanvasSize(false);
 }
 
 void BrowserWindow::handleMouseMotionCallback(const EmscriptenMouseEvent* mouseEvent) {
     m_inputEvent.reset();
     m_inputEvent.type = Fw::MouseMoveInputEvent;
-    Point newMousePos(mouseEvent->clientX / m_displayDensity, mouseEvent->clientY / m_displayDensity);
+    Point newMousePos(mouseEvent->clientX * m_pixelRatio / m_displayDensity, mouseEvent->clientY * m_pixelRatio / m_displayDensity);
     m_inputEvent.mouseMoved = newMousePos - m_inputEvent.mousePos;
     m_inputEvent.mousePos = newMousePos;
     if (m_onInputEvent)
@@ -409,7 +442,7 @@ void BrowserWindow::handleTouchCallback(int eventType, const EmscriptenTouchEven
     for (int i = 0; i < event->numTouches; ++i) {
         const auto& touch = event->touches[i];
         if (touch.isChanged)
-            touches.emplace_back(touch.identifier, Point(touch.targetX / m_displayDensity, touch.targetY / m_displayDensity));
+            touches.emplace_back(touch.identifier, Point(touch.targetX * m_pixelRatio / m_displayDensity, touch.targetY * m_pixelRatio / m_displayDensity));
     }
     if (touches.empty())
         return;

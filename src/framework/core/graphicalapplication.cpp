@@ -348,7 +348,11 @@ void GraphicalApplication::resize(const Size& size)
     m_onInputEvent = false;
 
     g_mainDispatcher.addEvent([size, scale] {
-        g_drawPool.get(DrawPoolType::FOREGROUND)->setFramebuffer(size / scale);
+        auto* foreground = g_drawPool.get(DrawPoolType::FOREGROUND);
+        foreground->setFramebuffer(size / scale);
+        // a whole-number scale stretches the UI pixel-exact (crisp); others
+        // need smoothing (ot-client#66)
+        foreground->setFramebufferSmooth(scale != static_cast<float>(static_cast<int>(scale)));
     });
 }
 
@@ -404,8 +408,9 @@ void GraphicalApplication::doMapScreenshot(std::string fileName)
     if (m_drawEvents) m_drawEvents->doMapScreenshot(fileName);
 }
 
-float GraphicalApplication::getHUDScale() const { return g_window.getDisplayDensity(); }
+// The HUD scale is in CSS pixels; the density is that times the pixel ratio
+float GraphicalApplication::getHUDScale() const { return g_window.getDisplayDensity() / g_window.getPixelRatio(); }
 void GraphicalApplication::setHUDScale(const float v) {
-    g_window.setDisplayDensity(v);
+    g_window.setDisplayDensity(v * g_window.getPixelRatio());
     resize(g_graphics.getViewportSize());
 }

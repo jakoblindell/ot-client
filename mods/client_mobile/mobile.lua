@@ -48,6 +48,28 @@ local HIDDEN_WIDGETS = {
 -- it can still be changed in the options: phones 1x, small tablets 1.5x,
 -- large tablets 2x (the client's own mobile default is 1.5x everywhere)
 local SCALE_KEY = 'client_mobile_scale_applied'
+-- Sharpness (ot-client#66): how many screen pixels per CSS pixel the client
+-- draws. Normal (1) is the lightest for battery; High follows the screen,
+-- up to 2.
+local SHARPNESS_KEY = 'sharpness'
+
+function getSharpness()
+    local value = tonumber(g_settings.getString(SHARPNESS_KEY))
+    if not value and g_platform.getBrowserConfigString then
+        -- the deployment's default (client-config.js: sharpness: 2)
+        value = tonumber(g_platform.getBrowserConfigString('sharpness'))
+    end
+    return value == 2 and 2 or 1
+end
+
+function setSharpness(value)
+    g_settings.set(SHARPNESS_KEY, tostring(value))
+    g_settings.save()
+    if g_window.setMaxPixelRatio then
+        g_window.setMaxPixelRatio(value)
+    end
+end
+
 local function applyDefaultScale()
     if g_settings.getBoolean(SCALE_KEY) then
         return
@@ -56,7 +78,9 @@ local function applyDefaultScale()
     if not options or not options.setOption then
         return
     end
-    local shortSide = math.min(g_window.getWidth(), g_window.getHeight())
+    -- in CSS pixels (the canvas has the Sharpness setting's pixel ratio)
+    local ratio = g_window.getPixelRatio and g_window.getPixelRatio() or 1
+    local shortSide = math.min(g_window.getWidth(), g_window.getHeight()) / ratio
     -- hudScale option value v gives a scale of max(v / 2 + 0.5, 1)
     local value = shortSide >= 800 and 3 or shortSide >= 600 and 2 or 0
     options.setOption('hudScale', value, true)
@@ -981,6 +1005,10 @@ end
 
 function init()
     initTouchMode()
+    -- every browser, touch or not
+    if g_window.setMaxPixelRatio then
+        g_window.setMaxPixelRatio(getSharpness())
+    end
     if not g_platform.isMobile() then
         return
     end
