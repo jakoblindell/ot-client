@@ -273,9 +273,12 @@ function init()
     g_ui.importStyle('/mods/client_mobile/mobile')
     g_ui.importStyle('/mods/client_mobile/hotbar_sheet')
     g_ui.importStyle('gallery')
+    -- through the options (they apply their own scale shortly after start,
+    -- over a direct g_app.setHUDScale); option value v is a scale of v / 2 + 0.5
     local scale = tonumber(g_platform.getBrowserConfigString('galleryHudScale'))
-    if scale then
-        g_app.setHUDScale(scale)
+    local options = modules.client_options
+    if scale and options and options.setOption then
+        options.setOption('hudScale', math.floor((scale - 0.5) * 2 + 0.5), true)
     end
     -- once the window has its size (laying out pages in a window that is
     -- not sized yet never finished) and the login screen has opened
