@@ -32,7 +32,17 @@ function g_game.chooseRsa(host)
         if G.currentRsa == CIPSOFT_RSA then
             g_game.setCustomOs(-1)
         end
-        g_game.setRsa(OTSERV_RSA)
+        -- Our server's own login key (ot-server#17): the deployment gives its
+        -- public half in /play/rsa-public.js (window.otclientConfig.rsaPublicKey);
+        -- without it, the public OpenTibia key (development servers)
+        local ours = g_platform.getBrowserConfigString and g_platform.getBrowserConfigString('rsaPublicKey') or ''
+        if ours:match('^%d+$') then
+            g_crypt.rsaSetPublicKey(ours, '65537')
+            -- (G.currentRsa stays OTSERV_RSA, so chooseRsa keeps running for each login)
+            G.currentRsa = OTSERV_RSA
+        else
+            g_game.setRsa(OTSERV_RSA)
+        end
     end
 
     -- Hack fix to resolve some 760 login issues

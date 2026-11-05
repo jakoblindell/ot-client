@@ -171,6 +171,26 @@ public:
         }, key.c_str());
 #endif
     }
+    // A text setting from the web page (window.otclientConfig[key]); "" when
+    // not set (and always "" outside the browser). For example the login
+    // key's public half (rsaPublicKey, ot-server#17).
+    std::string getBrowserConfigString(const std::string& key) {
+#ifndef __EMSCRIPTEN__
+        (void)key;
+        return {};
+#else
+        char* value = (char*)MAIN_THREAD_EM_ASM_PTR({
+            var config = window.otclientConfig;
+            var value = config ? config[UTF8ToString($0)] : undefined;
+            if (value === undefined || value === null) return 0;
+            return stringToNewUTF8(String(value));
+        }, key.c_str());
+        if (!value) return {};
+        std::string result(value);
+        free(value);
+        return result;
+#endif
+    }
     // The first connected game controller (browser Gamepad API, standard
     // mapping): the pressed buttons as bits (bit 0 is button 0), -1 when
     // there is none. Browsers report a controller only after one of its
