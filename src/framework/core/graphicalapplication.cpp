@@ -154,6 +154,7 @@ void GraphicalApplication::mainLoop() {
         AutoStat s(STATS_RENDER, "DrawPool");
         g_drawPool.draw();
     }
+    takePendingScreenshot();
 
     if (m_graphicFrameCounter.update()) {
         g_dispatcher.addEvent([this, fps = FPS()] {
@@ -271,6 +272,7 @@ void GraphicalApplication::run()
             AutoStat s(STATS_RENDER, "DrawPool");
             g_drawPool.draw();
         }
+        takePendingScreenshot();
 
         // update screen pixels
         {
@@ -383,23 +385,34 @@ void GraphicalApplication::doScreenshot(std::string file)
         file = "screenshot.png";
     }
 
-    g_mainDispatcher.addEvent([file] {
-        auto resolution = g_graphics.getViewportSize();
-        const int width = resolution.width();
-        const int height = resolution.height();
-        auto pixels = std::make_shared<std::vector<uint8_t>>(width * height * 4 * sizeof(GLubyte), 0);
-        glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels->data());
+    // taken right after the next frame is drawn (takePendingScreenshot): in
+    // the browser the canvas is cleared once a frame is shown, so reading it
+    // at any other time gives a black picture (ot-client#67)
+    g_mainDispatcher.addEvent([this, file] { m_screenshotFile = file; });
+}
 
-        g_asyncDispatcher->detach_task([resolution, pixels, file] {
-            try {
-                Image image(resolution, 4, pixels->data());
-                image.flipVertically();
-                image.setOpacity(255);
-                image.savePNG(file);
-            } catch (stdext::exception& e) {
-                g_logger.error(std::string("Can't do screenshot: ") + e.what());
-            }
-        });
+void GraphicalApplication::takePendingScreenshot()
+{
+    if (m_screenshotFile.empty())
+        return;
+    const std::string file = m_screenshotFile;
+    m_screenshotFile.clear();
+
+    auto resolution = g_graphics.getViewportSize();
+    const int width = resolution.width();
+    const int height = resolution.height();
+    auto pixels = std::make_shared<std::vector<uint8_t>>(width * height * 4 * sizeof(GLubyte), 0);
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels->data());
+
+    g_asyncDispatcher->detach_task([resolution, pixels, file] {
+        try {
+            Image image(resolution, 4, pixels->data());
+            image.flipVertically();
+            image.setOpacity(255);
+            image.savePNG(file);
+        } catch (stdext::exception& e) {
+            g_logger.error(std::string("Can't do screenshot: ") + e.what());
+        }
     });
 }
 
