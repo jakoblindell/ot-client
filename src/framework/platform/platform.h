@@ -171,6 +171,38 @@ public:
         }, key.c_str());
 #endif
     }
+    // The browser and device, as JSON (bug reports, ot-client#67): user
+    // agent, screen and window sizes, pixel ratio, orientation, language,
+    // installed-app mode, CPU cores and memory when the browser says. "{}"
+    // outside the browser.
+    std::string getBrowserInfo() {
+#ifndef __EMSCRIPTEN__
+        return "{}";
+#else
+        char* value = (char*)MAIN_THREAD_EM_ASM_PTR({
+            var info = {};
+            try {
+                // (no commas outside parentheses: they would split the macro)
+                info.userAgent = navigator.userAgent;
+                info.language = navigator.language;
+                info.screen = screen.width + 'x' + screen.height;
+                info.window = window.innerWidth + 'x' + window.innerHeight;
+                info.pixelRatio = window.devicePixelRatio;
+                info.orientation = (screen.orientation && screen.orientation.type) || '';
+                info.touchPoints = navigator.maxTouchPoints || 0;
+                info.standalone = !!(window.matchMedia('(display-mode: standalone)').matches || navigator.standalone);
+                info.cores = navigator.hardwareConcurrency || 0;
+                info.memoryGB = navigator.deviceMemory || 0;
+                info.connection = (navigator.connection && navigator.connection.effectiveType) || '';
+            } catch (e) {}
+            return stringToNewUTF8(JSON.stringify(info));
+        });
+        if (!value) return "{}";
+        std::string result(value);
+        free(value);
+        return result;
+#endif
+    }
     // A text setting from the web page (window.otclientConfig[key]); "" when
     // not set (and always "" outside the browser). For example the login
     // key's public half (rsaPublicKey, ot-server#17).

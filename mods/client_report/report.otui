@@ -1,0 +1,62 @@
+// Report a problem (ot-client#67): what went wrong, sent with a screenshot,
+// the device details and the client's log
+ReportSheet < OtBackdrop
+
+  OtPanel
+    id: panel
+    anchors.centerIn: parent
+    size: 460 292
+
+    OtTitle
+      id: title
+      anchors.top: parent.top
+      anchors.left: parent.left
+      !text: tr('Report a problem')
+
+    OtHint
+      id: help
+      anchors.top: title.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 6
+      !text: tr('Say what went wrong and what you were doing. A screenshot, your device details and the client log are sent with it.')
+
+    MultilineTextEdit
+      id: text
+      anchors.top: help.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: status.top
+      margin-top: 8
+      margin-bottom: 6
+      font: $ot-font-text
+      text-wrap: true
+      max-length: 2000
+
+    OtHint
+      id: status
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: footer.top
+      margin-bottom: 6
+
+    UIWidget
+      id: footer
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      height: 40
+      layout:
+        type: horizontalBox
+        spacing: 8
+        align-right: true
+
+      OtButton
+        id: cancel
+        width: 110
+        !text: tr('Cancel')
+
+      OtButtonPrimary
+        id: send
+        width: 110
+        !text: tr('Send')

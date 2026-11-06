@@ -337,6 +337,12 @@ local SETTINGS_ACTIONS = {
     { text = 'Hotbar', action = function() close(); openHotbarSettings() end },
     { text = 'Edit layout', action = function() close(); startEditLayout() end },
     { text = 'All options', action = function() close(); showTopMenu() end },
+    { text = 'Report a problem', action = function()
+        close()
+        if modules.client_report then
+            modules.client_report.open()
+        end
+    end },
 }
 
 -- One settings tab

@@ -179,9 +179,12 @@ void Logger::log(Fw::LogLevel level, const std::string_view message)
     }
 
     std::size_t now = std::time(nullptr);
-    m_logMessages.emplace_back(level, outmsg, now);
-    if (m_logMessages.size() > MAX_LOG_HISTORY)
-        m_logMessages.pop_front();
+    {
+        std::lock_guard lock(m_historyMutex);
+        m_logMessages.emplace_back(level, outmsg, now);
+        if (m_logMessages.size() > MAX_LOG_HISTORY)
+            m_logMessages.pop_front();
+    }
 
     if (m_onLog) {
         // schedule log callback, because this callback can run lua code that may affect the current state
@@ -224,6 +227,18 @@ void Logger::logFunc(Fw::LogLevel level, const std::string_view message, const s
     }
 
     log(level, ss.str());
+}
+
+std::string Logger::getRecentMessages(const int count)
+{
+    std::lock_guard lock(m_historyMutex);
+    const auto total = static_cast<int>(m_logMessages.size());
+    std::string out;
+    for (int i = std::max(0, total - std::max(0, count)); i < total; ++i) {
+        out += m_logMessages[i].message;
+        out += '\n';
+    }
+    return out;
 }
 
 void Logger::fireOldMessages()
