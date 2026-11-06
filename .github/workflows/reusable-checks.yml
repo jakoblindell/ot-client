@@ -19,6 +19,10 @@ jobs:
 
       - name: Setup reviewdog
         uses: reviewdog/action-setup@v1.5.0
+        with:
+          # a fixed version: "latest" asks GitHub first, and a failed lookup
+          # failed the whole job
+          reviewdog_version: v0.21.2
 
       - name: Setup dependencies
         run: |
