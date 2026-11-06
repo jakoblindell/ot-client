@@ -909,7 +909,12 @@ void UIWidget::drawIcon(const Rect& screenCoords) const
         return;
 
     Rect drawRect;
-    if (m_iconRect.isValid()) {
+    if (m_iconRect.isValid() && m_iconAlign != Fw::AlignNone && m_iconRect.topLeft().isNull()) {
+        // icon-size with icon-align: that size, aligned (icon-size alone
+        // keeps its old top-left place, which some windows rely on)
+        drawRect.resize(m_iconRect.size());
+        drawRect.alignIn(screenCoords, m_iconAlign);
+    } else if (m_iconRect.isValid()) {
         drawRect = screenCoords;
         drawRect.translate(m_iconRect.topLeft());
         drawRect.resize(m_iconRect.size());

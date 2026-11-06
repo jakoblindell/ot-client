@@ -1,0 +1,8 @@
+Module
+  name: client_gallery
+  description: UI gallery for screenshot tests (ot-client#70): our components on a plain background, shown instead of the login when the page asks for it (window.otclientConfig.gallery)
+  author: ot-client
+  sandboxed: true
+  scripts: [ gallery ]
+  @onLoad: init()
+  @onUnload: terminate()
