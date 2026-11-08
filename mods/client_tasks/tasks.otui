@@ -68,13 +68,16 @@ JournalRow < UIWidget
 
 // Journal footer: the region filter and Show completed
 JournalFilter < UIWidget
-  height: 40
-  margin-bottom: 6
+  height: 46
+  padding-top: 6
+  border-width-top: 1
+  border-color: #ffffff22
 
   OtLabel
     id: label
     anchors.left: parent.left
     anchors.verticalCenter: parent.verticalCenter
+    margin-top: 3
     text-auto-resize: true
     !text: tr('Show:')
 

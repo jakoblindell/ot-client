@@ -308,13 +308,35 @@ local function renderFinished(list)
     end
 end
 
+-- Quests and Chests rows: a dot, the name, the status on the right, a line below
+local function journalRow(list, done, name, status, detail)
+    local row = g_ui.createWidget('JournalRow', list)
+    row.dot:setOn(done)
+    row.name:setText(name)
+    row.name:setOn(done)
+    row.status:setText(status or '')
+    if detail and detail ~= '' then
+        row.detail:setText(detail)
+        row.detail:setVisible(true)
+        -- the row grows with the text below the name
+        addEvent(function()
+            if not row:isDestroyed() then
+                row:setHeight(30 + row.detail:getHeight() + 8)
+            end
+        end)
+    end
+    return row
+end
+
+-- Achievements in the Journal's rows: a dot (green when unlocked), the name,
+-- points or progress on the right, the text and the date below. Hidden ones
+-- show nothing but their points until unlocked (ot-server#30).
 local function renderAchievements(list)
     if not achievements then
         text(list, tr('Asking the server...'), 'OtHint')
         return
     end
     local a = achievements
-    heading(list, 'Achievements')
     text(list, tr('%d of %d unlocked - %d of %d points', a.unlocked or 0, a.count or 0, a.points or 0, a.totalPoints or 0),
         'OtLabel'):setTextAutoResize(true)
     for _, category in ipairs(a.categories or {}) do
@@ -337,46 +359,22 @@ local function renderAchievements(list)
             for _, entry in ipairs(entries) do
                 local points = plural(entry.points or 0, 'point')
                 if entry.hidden then
-                    text(list, tr('??? - %s', points), 'OtHint')
+                    journalRow(list, false, '???', points, tr('A hidden achievement.'))
                 else
-                    local row = text(list, tr('%s - %s', entry.name or '', points),
-                        entry.unlockedAt and 'TasksAchievementDone' or 'OtLabel')
-                    row:setTextAutoResize(true)
+                    local done = entry.unlockedAt ~= nil
+                    local status = points
+                    if entry.target and not done then
+                        status = (entry.progress or 0) .. ' / ' .. entry.target .. '  -  ' .. points
+                    end
                     local detail = entry.text or ''
-                    if entry.unlockedAt then
+                    if done then
                         detail = detail .. '  ' .. os.date('%Y-%m-%d', entry.unlockedAt)
                     end
-                    text(list, detail, 'OtHint')
-                    if entry.target and not entry.unlockedAt then
-                        local progress = g_ui.createWidget('TasksProgress', list)
-                        local value, goal = entry.progress or 0, math.max(1, entry.target)
-                        progress.bar:setPercent(math.floor(100 * math.min(value, goal) / goal))
-                        progress.bar:setText(value .. ' / ' .. goal)
-                    end
+                    journalRow(list, done, entry.name or '', status, detail)
                 end
             end
         end
     end
-end
-
--- Quests and Chests rows: a dot, the name, the status on the right, a line below
-local function journalRow(list, done, name, status, detail)
-    local row = g_ui.createWidget('JournalRow', list)
-    row.dot:setOn(done)
-    row.name:setText(name)
-    row.name:setOn(done)
-    row.status:setText(status or '')
-    if detail and detail ~= '' then
-        row.detail:setText(detail)
-        row.detail:setVisible(true)
-        -- the row grows with the text below the name
-        addEvent(function()
-            if not row:isDestroyed() then
-                row:setHeight(30 + row.detail:getHeight() + 8)
-            end
-        end)
-    end
-    return row
 end
 
 local function renderQuests(list)
