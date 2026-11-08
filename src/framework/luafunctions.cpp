@@ -145,6 +145,7 @@ void Application::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_platform", "getBrowserConfigFlag", &Platform::getBrowserConfigFlag, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getBrowserConfigString", &Platform::getBrowserConfigString, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getBrowserInfo", &Platform::getBrowserInfo, &g_platform);
+    g_lua.bindSingletonFunction("g_platform", "downloadFile", &Platform::downloadFile, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getGamepadButtons", &Platform::getGamepadButtons, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getGamepadStick", &Platform::getGamepadStick, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getAppInstallState", &Platform::getAppInstallState, &g_platform);
@@ -409,6 +410,7 @@ void Application::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_app", "setAnimatedTextScale", &GraphicalApplication::setAnimatedTextScale, &g_app);
     g_lua.bindSingletonFunction("g_app", "setStaticTextScale", &GraphicalApplication::setStaticTextScale, &g_app);
     g_lua.bindSingletonFunction("g_app", "doScreenshot", &GraphicalApplication::doScreenshot, &g_app);
+    g_lua.bindSingletonFunction("g_app", "doScreenshotArea", &GraphicalApplication::doScreenshotArea, &g_app);
     g_lua.bindSingletonFunction("g_app", "doMapScreenshot", &GraphicalApplication::doMapScreenshot, &g_app);
 
     // PlatformWindow

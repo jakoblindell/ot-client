@@ -188,13 +188,20 @@ local function renderOutfit(list, player)
     end
 end
 
+-- Moments (client_moments, ot-client#25): what to capture and the pictures
+local render
 local function renderScreenshots(list)
-    hint(list, tr('Coming later: pictures of your level-ups, achievements, quest chests and deaths, taken by themselves, with your choice of which ones.'))
+    local moments = modules.client_moments
+    if moments and moments.renderTab then
+        moments.renderTab(list, function() render() end)
+    else
+        hint(list, tr('Screenshots are not available.'))
+    end
 end
 
 -- The page ------------------------------------------------------------------------
 
-local function render()
+render = function()
     local player = g_game.getLocalPlayer()
     local list, panel = hubPage(tr('Character'))
     if not list or not player then

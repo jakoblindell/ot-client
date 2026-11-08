@@ -1,0 +1,8 @@
+Module
+  name: client_moments
+  description: Moments (ot-client#25): a screenshot of the game when something happens (level ups, skills, deaths, achievements, quest chests, unjustified kills), kept on the device
+  author: ot-client
+  sandboxed: true
+  scripts: [ moments ]
+  @onLoad: init()
+  @onUnload: terminate()
