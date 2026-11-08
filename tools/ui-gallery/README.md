@@ -20,6 +20,15 @@ with saved baseline images on every pull request (ot-client#70).
 | `controls` | checks, progress bars, a stepper, setting rows in a panel, contrast panel |
 | `text` | title, heading, label, text, hint, the colour tokens |
 | `touch` | round hotbar slots at 32–64 px, chat, P1 and pencil buttons, health/mana bars, toolbar |
+| `hub` | the hub's front page |
+| `journal` | Journal › Quests, with sample quests |
+| `achievements` | Journal › Achievements: unlocked, in progress, hidden |
+| `npc` | the NPC dialog with a sample NPC (text, keywords, shop) |
+| `hotbar` | the hotbar settings sheet |
+
+Screen pages get their data the way the game would, through the extended
+opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock
+is pinned to 2026-01-01 12:00 so the hub's time never changes a screenshot.
 
 Devices (all landscape):
 
