@@ -1,11 +1,11 @@
--- The hub's character sheet (ot-client#60): outfit, level and vocation,
--- premium, skills, blessings, frags and the skull, later screenshots
--- ("Moments", #25).
+-- The hub's character sheet (ot-client#60): "Name - Level N", then tabs:
+-- Skills, Frags, Blessings, Outfit, Screenshots (later: Moments, #25).
 --
--- Level and skills come from the game. Vocation, blessings, frags and the
--- skull's time are not in the 7.92 protocol: the server sends them when asked
--- (extended opcode 106, "character", ot-server#50); the answer arrives through
--- client_tasks (onCharacterData).
+-- Level, experience, soul, magic level, speed and the skills come from the
+-- game. Vocation, food time, blessings, frags, the skull's time and what a
+-- death would cost are not in the 7.92 protocol: the server sends them when
+-- asked (extended opcode 106, "character", ot-server#50); the answer arrives
+-- through client_tasks (onCharacterData).
 
 local OPCODE = 106
 
@@ -21,8 +21,33 @@ local SKILLS = {
     { 'Fishing', Skill.Fishing },
 }
 
+local TABS = {
+    { id = 'skills', text = 'Skills' },
+    { id = 'frags', text = 'Frags' },
+    { id = 'blessings', text = 'Blessings' },
+    { id = 'outfit', text = 'Outfit' },
+    { id = 'screenshots', text = 'Screenshots' },
+}
+
+local MUTED = '#a8a8a8'
+local GOOD = '#70d070'
+local BAD = '#e05050'
+local SOUL = '#78b4ff'
+local WARN = '#e8a050'
+
 local data -- the server's answer, nil until it comes
-local header -- the page's first widget: the page is open while it is
+local currentTab = 'skills'
+local title -- the page's first widget: the page is open while it is
+
+-- 64611933 -> "64,611,933"
+local function thousands(value)
+    local text = tostring(math.floor(value))
+    local sign, digits = text:match('^(-?)(%d+)$')
+    if not digits then
+        return text
+    end
+    return sign .. digits:reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', '')
+end
 
 -- "1 day 3 h", "12 min"
 local function duration(seconds)
@@ -38,110 +63,181 @@ local function duration(seconds)
     return math.max(1, minutes) .. ' min'
 end
 
-local function row(list, style, name, value)
-    local widget = g_ui.createWidget(style, list)
+-- A row: the name, and the value as {text, colour} parts
+local function row(list, name, ...)
+    local widget = g_ui.createWidget('CharacterRow', list)
     widget.name:setText(name)
-    widget.value:setText(value or '')
+    -- "{text, colour}" for each part (the colour after the last comma)
+    local parts = {}
+    for _, part in ipairs({ ... }) do
+        table.insert(parts, '{' .. part[1] .. ', ' .. (part[2] or '#ffffff') .. '}')
+    end
+    widget.value:setColoredText(table.concat(parts))
     return widget
 end
 
-local function skillRow(list, name, level, percent)
-    local widget = row(list, 'CharacterSkillRow', name, tostring(level))
-    -- (the row is laid out a moment later: size the line then)
-    addEvent(function()
-        if not widget:isDestroyed() then
-            widget.fill:setWidth(math.floor(widget:getWidth() * math.max(0, math.min(100, percent or 0)) / 100))
-        end
-    end)
+local function hint(list, text)
+    local widget = g_ui.createWidget('OtHint', list)
+    widget:setText(text)
+    widget:setMarginTop(8)
+    return widget
 end
 
-local function section(list, title)
-    g_ui.createWidget('HubSection', list).text:setText(tr(title))
+local function loading(list)
+    hint(list, tr('Loading...'))
 end
 
-local function render()
-    local player = g_game.getLocalPlayer()
-    local list = hubPage(tr('Character'))
-    if not list or not player then
-        header = nil
-        return
-    end
+-- Tabs ----------------------------------------------------------------------------
 
-    header = g_ui.createWidget('CharacterHeader', list)
-    header.outfit:setOutfit(player:getOutfit())
-    header.outfit:setDirection(Directions.South)
-    header.name:setText(player:getName())
-    local vocation = data and data.vocation or ''
-    if vocation == 'None' then
-        vocation = ''
+local function renderSkills(list, player)
+    local level = player:getLevel()
+    row(list, tr('Level'), { tostring(level) },
+        { string.format('   %.1f%% %s %d', player:getLevelPercent(), tr('towards'), level + 1), MUTED })
+    local experience = player:getExperience()
+    local nextLevel = math.floor((50 * level * level * level - 150 * level * level + 400 * level) / 3)
+    row(list, tr('Experience'), { thousands(experience) },
+        { '   ' .. thousands(math.max(0, nextLevel - experience)) .. ' ' .. tr('to go'), MUTED })
+    row(list, tr('Soul points'), { tostring(player:getSoul()), SOUL })
+    row(list, tr('Magic level'), { tostring(player:getMagicLevel()) },
+        { string.format('   %d%%', player:getMagicLevelPercent()), MUTED })
+    if data and data.food then
+        local food = tonumber(data.food) or 0
+        row(list, tr('Food'), { string.format('%d:%02d', math.floor(food / 60), food % 60), food > 0 and GOOD or BAD })
     end
-    -- (the fonts are not UTF-8: no middle dot)
-    header.vocation:setText(tr('Level') .. ' ' .. player:getLevel() .. (vocation ~= '' and (', ' .. vocation) or ''))
-    if player:isPremium() then
-        local days = data and tonumber(data.premiumDays) or nil
-        header.premium:setText(tr('Premium account') .. (days and days > 0 and days < 65535 and (', ' .. days .. ' ' .. tr('days left')) or ''))
-        header.premium:setColor('#70d070')
+    row(list, tr('Speed'), { tostring(player:getSpeed()) })
+    for _, skill in ipairs(SKILLS) do
+        row(list, tr(skill[1]), { tostring(player:getSkillLevel(skill[2])) },
+            { string.format('   %d%%', player:getSkillLevelPercent(skill[2])), MUTED })
+    end
+end
+
+local function renderFrags(list)
+    local frags = data and data.frags
+    if not frags then
+        return loading(list)
+    end
+    local red = frags.red or {}
+    local function frag(label, count, limit)
+        count = tonumber(count) or 0
+        -- red when one more would mean a red skull
+        local color = limit and count >= limit - 1 and count > 0 and BAD or '#ffffff'
+        row(list, label, { count .. ' / ' .. tostring(limit or '-'), color })
+    end
+    frag(tr('Daily'), frags.day, red.day)
+    frag(tr('Weekly'), frags.week, red.week)
+    frag(tr('Monthly'), frags.month, red.month)
+    local skull = tonumber(data.skull) or 0
+    local left = tonumber(data.skullLeft) or 0
+    local ends = left > 0 and ('   ' .. tr('ends in') .. ' ' .. duration(left)) or ''
+    if skull == SkullWhite then
+        row(list, tr('Skull'), { tr('White') }, { ends, MUTED })
+    elseif skull == SkullRed then
+        row(list, tr('Skull'), { tr('Red'), BAD }, { ends, MUTED })
     else
-        header.premium:setText(tr('Free account'))
-        header.premium:setColor('#a8a8a8')
+        row(list, tr('Skull'), { tr('None'), GOOD })
     end
-    header.outfitButton.onClick = function()
+    local ban = frags.ban or {}
+    hint(list, tr('A red skull comes at the numbers above; a banishment at %s, %s and %s.',
+        tostring(ban.day or '-'), tostring(ban.week or '-'), tostring(ban.month or '-')))
+end
+
+local function renderBlessings(list)
+    if not data or not data.blessings then
+        return loading(list)
+    end
+    local count = 0
+    for i = 1, #BLESSINGS do
+        if data.blessings[i] == true then
+            count = count + 1
+        end
+    end
+    row(list, tr('Pilgrimage'), { count .. ' / ' .. #BLESSINGS, count == #BLESSINGS and GOOD or (count > 0 and WARN or MUTED) })
+    for i, name in ipairs(BLESSINGS) do
+        local widget = g_ui.createWidget('CharacterBlessing', list)
+        widget:setText('+  ' .. tr(name))
+        widget:setOn(data.blessings[i] == true)
+    end
+    local death = data.death
+    if death then
+        local items
+        if death.redSkull then
+            items = { tr('all items drop (red skull)'), BAD }
+        elseif death.amulet then
+            items = { tr('items protected (amulet of loss)'), GOOD }
+        else
+            items = { tr('%d%% chance per item', tonumber(death.itemChance) or 10), WARN }
+        end
+        local deathRow = row(list, tr('On death'), { string.format('%.1f%% %s', tonumber(death.loss) or 0, tr('experience')), WARN },
+            { '   ', MUTED }, items)
+        deathRow:setMarginTop(6)
+    end
+    if count > 0 then
+        hint(list, tr('Your next death takes the blessings you have.'))
+    else
+        hint(list, tr('Each blessing lowers what a death costs. Ask the monks in the temples about the pilgrimage.'))
+    end
+end
+
+local function renderOutfit(list, player)
+    local outfit = g_ui.createWidget('CharacterOutfit', list)
+    outfit.outfit:setOutfit(player:getOutfit())
+    outfit.outfit:setDirection(Directions.South)
+    outfit.change.onClick = function()
         closeHub()
         g_game.requestOutfit()
     end
+end
 
-    section(list, 'SKILLS')
-    skillRow(list, tr('Experience level'), player:getLevel(), player:getLevelPercent())
-    skillRow(list, tr('Magic level'), player:getMagicLevel(), player:getMagicLevelPercent())
-    for _, skill in ipairs(SKILLS) do
-        skillRow(list, tr(skill[1]), player:getSkillLevel(skill[2]), player:getSkillLevelPercent(skill[2]))
+local function renderScreenshots(list)
+    hint(list, tr('Coming later: pictures of your level-ups, achievements, quest chests and deaths, taken by themselves, with your choice of which ones.'))
+end
+
+-- The page ------------------------------------------------------------------------
+
+local function render()
+    local player = g_game.getLocalPlayer()
+    local list, panel = hubPage(tr('Character'))
+    if not list or not player then
+        title = nil
+        return
     end
 
-    section(list, 'BLESSINGS')
-    for i, name in ipairs(BLESSINGS) do
-        local has = data and data.blessings and data.blessings[i] == true
-        local widget = row(list, 'CharacterCheckRow', tr(name), data and (has and tr('Yes') or tr('No')) or '...')
-        widget.dot:setOn(has)
-        widget.name:setMarginLeft(24)
+    -- the tabs, in the hub's tab row
+    panel.tabs:setVisible(true)
+    panel.tabs:setHeight(36)
+    local width = math.min(160, math.floor((panel.tabs:getWidth() - 4 * (#TABS - 1)) / #TABS))
+    panel.tabs:getLayout():setCellSize({ width = width, height = 36 })
+    for _, tab in ipairs(TABS) do
+        local button = g_ui.createWidget('OtTab', panel.tabs)
+        button:setText(tr(tab.text))
+        button:setChecked(tab.id == currentTab)
+        button.onClick = function()
+            currentTab = tab.id
+            render()
+        end
     end
 
-    section(list, 'FRAGS')
-    local frags = data and data.frags
-    if frags then
-        local red, ban = frags.red or {}, frags.ban or {}
-        local function frag(label, count, redAt, banAt)
-            local widget = row(list, 'CharacterRow', label,
-                string.format('%d   (%s %s, %s %s)', count or 0, tr('red skull at'), tostring(redAt or '-'), tr('ban at'), tostring(banAt or '-')))
-            if redAt and count and count >= redAt - 1 and count > 0 then
-                widget.value:setColor('#e05050')
-            end
-        end
-        frag(tr('Last 24 hours'), frags.day, red.day, ban.day)
-        frag(tr('Last 7 days'), frags.week, red.week, ban.week)
-        frag(tr('Last 30 days'), frags.month, red.month, ban.month)
-        local skull = tonumber(data.skull) or 0
-        local text = tr('None')
-        if skull == SkullWhite then
-            text = tr('White') .. (data.skullLeft and data.skullLeft > 0 and (', ' .. tr('ends in') .. ' ' .. duration(data.skullLeft)) or '')
-        elseif skull == SkullRed then
-            text = tr('Red') .. (data.skullLeft and data.skullLeft > 0 and (', ' .. tr('ends in') .. ' ' .. duration(data.skullLeft)) or '')
-        elseif skull ~= 0 then
-            text = tr('Yes')
-        end
-        local skullRow = row(list, 'CharacterRow', tr('Skull'), text)
-        if skull == SkullRed then
-            skullRow.value:setColor('#e05050')
-        end
+    -- (the fonts are not UTF-8: a plain hyphen, no dash)
+    title = g_ui.createWidget('CharacterTitle', list)
+    local vocation = data and data.vocation or ''
+    title:setText(player:getName() .. ' - ' .. tr('Level') .. ' ' .. player:getLevel()
+        .. ((vocation ~= '' and vocation ~= 'None') and (', ' .. vocation) or ''))
+
+    if currentTab == 'skills' then
+        renderSkills(list, player)
+    elseif currentTab == 'frags' then
+        renderFrags(list)
+    elseif currentTab == 'blessings' then
+        renderBlessings(list)
+    elseif currentTab == 'outfit' then
+        renderOutfit(list, player)
     else
-        g_ui.createWidget('OtHint', list):setText(tr('Loading...'))
+        renderScreenshots(list)
     end
-
-    section(list, 'SCREENSHOTS')
-    g_ui.createWidget('OtHint', list):setText(tr('Coming later: pictures of your level-ups, deaths and quest rewards.'))
 end
 
 local function isOpen()
-    return header ~= nil and not header:isDestroyed()
+    return title ~= nil and not title:isDestroyed()
 end
 
 -- The server's answer (client_tasks passes it on)

@@ -219,47 +219,15 @@ HubHelp < OtBackdrop
 
 // The character sheet (character.lua, ot-client#60) ---------------------------
 
-// Outfit, name, level and vocation, premium, and the Outfit button
-CharacterHeader < UIWidget
-  height: 92
+// "Name - Level 159", gold, above the sheet's tabs
+CharacterTitle < Label
+  height: 26
+  font: $ot-font-title
+  color: $ot-gold
+  text-align: center
 
-  UICreature
-    id: outfit
-    anchors.left: parent.left
-    anchors.verticalCenter: parent.verticalCenter
-    size: 80 80
-    phantom: true
-
-  OtTitle
-    id: name
-    anchors.left: outfit.right
-    anchors.top: parent.top
-    margin-left: 10
-    margin-top: 10
-
-  OtLabel
-    id: vocation
-    anchors.left: name.left
-    anchors.top: name.bottom
-    margin-top: 6
-    text-auto-resize: true
-
-  Label
-    id: premium
-    anchors.left: name.left
-    anchors.top: vocation.bottom
-    margin-top: 6
-    font: $ot-font-text
-    text-auto-resize: true
-
-  OtButton
-    id: outfitButton
-    anchors.right: parent.right
-    anchors.verticalCenter: parent.verticalCenter
-    width: 110
-    !text: tr('Outfit')
-
-// A name and a value
+// A name, and on the right a value (coloured text: the value bright, extra
+// words muted)
 CharacterRow < UIWidget
   height: 34
   border-width-bottom: 1
@@ -277,44 +245,34 @@ CharacterRow < UIWidget
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
     margin-right: 6
-    font: $ot-font-text
-    color: $ot-text
+    font: $ot-font-label
+    color: $ot-text-strong
     text-auto-resize: true
 
-// A skill: the value and how far to the next (a thin gold line)
-CharacterSkillRow < CharacterRow
+// One blessing under Pilgrimage: green when you have it
+CharacterBlessing < Label
+  height: 22
+  margin-left: 18
+  font: $ot-font-label
+  color: $ot-text-muted
+  $on:
+    color: $ot-positive
 
-  UIWidget
-    id: track
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.bottom
-    margin-bottom: 1
-    height: 3
-    background-color: #ffffff10
+// The Outfit tab: the outfit large, and the button that changes it
+CharacterOutfit < UIWidget
+  height: 150
+
+  UICreature
+    id: outfit
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: parent.top
+    size: 96 96
     phantom: true
 
-  UIWidget
-    id: fill
-    anchors.left: parent.left
-    anchors.bottom: parent.bottom
-    margin-bottom: 1
-    height: 3
-    width: 0
-    background-color: $ot-gold-dark
-    phantom: true
-
-// Has it or not: a dot (green when on) before the name
-CharacterCheckRow < CharacterRow
-
-  UIWidget
-    id: dot
-    anchors.left: parent.left
-    anchors.verticalCenter: parent.verticalCenter
-    margin-left: 4
-    size: 10 10
-    border-width: 5
-    border-color: #6a6a6a
-    $on:
-      border-color: $ot-positive
-
+  OtButtonPrimary
+    id: change
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: outfit.bottom
+    margin-top: 8
+    width: 180
+    !text: tr('Change outfit')

@@ -515,7 +515,7 @@ function hubPage(title)
     panel.tabs:setHeight(0)
     panel.list:destroyChildren()
     panel.listScroll:setValue(0)
-    return panel.list
+    return panel.list, panel
 end
 
 -- The front page (ot-client#60): sections of four icon buttons. icon: a game
