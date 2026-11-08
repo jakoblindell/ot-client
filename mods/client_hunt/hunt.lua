@@ -120,9 +120,10 @@ local function itemIdOf(key)
     return tonumber(key:match('^(%d+)'))
 end
 
--- A list of items: name, count and value; a tap opens the price row
+-- A list of items: name, count and value; a tap opens the price row (and for
+-- supplies the count), which stays open while its numbers change
+local openKey
 local function itemRows(list, map, supply)
-    local openKey
     local function render()
         list:destroyChildren()
         for _, entry in ipairs(topItems(map, supply)) do
@@ -151,7 +152,6 @@ local function itemRows(list, map, supply)
                     if value and value >= 0 then
                         setCustomPrice(entry.key, math.floor(value))
                     end
-                    openKey = nil
                     updatePanel()
                     showReport(reportTab)
                 end
@@ -160,6 +160,18 @@ local function itemRows(list, map, supply)
                     openKey = nil
                     updatePanel()
                     showReport(reportTab)
+                end
+                -- supplies: the count can be corrected (what the tracker missed)
+                if supply then
+                    local counter = g_ui.createWidget('HuntCountRow', list)
+                    counter.count:setText(tostring(entry.count))
+                    local function change(by)
+                        setSupplyCount(entry.key, entry.count + by)
+                        updatePanel()
+                        showReport(reportTab)
+                    end
+                    counter.minus.onClick = function() change(-1) end
+                    counter.plus.onClick = function() change(1) end
                 end
             end
         end
@@ -181,6 +193,48 @@ local function textRow(list, name, value, color)
     return row
 end
 
+-- Past hunts (End hunt keeps them): date and time, profit, xp per hour; a tap
+-- opens its details
+local openHunt
+local function historyRows(list, panel)
+    local hunts = huntHistory()
+    panel.summary:setText(#hunts == 0 and tr('End a hunt to keep it here.') or tr('%d hunts. Tap one for its details.', #hunts))
+    for index, hunt in ipairs(hunts) do
+        local hours = math.max(hunt.seconds or 0, 1) / 3600
+        local row = textRow(list, os.date('%d %b %H:%M', hunt.started or hunt.ended or 0) .. '  ' .. duration(hunt.seconds or 0),
+            (hunt.profit >= 0 and '+' or '') .. short(hunt.profit) .. ' gp', hunt.profit >= 0 and '#70d070' or '#e05050')
+        row.value:setText(short((hunt.xp or 0) / hours) .. ' xp/h')
+        row.value:setColor('#78b4ff')
+        row.onClick = function()
+            openHunt = openHunt ~= index and index or nil
+            showReport('history')
+        end
+        if openHunt == index then
+            textRow(list, '   ' .. tr('Experience'), short(hunt.xp or 0), '#78b4ff')
+            textRow(list, '   ' .. tr('Kills'), tostring(hunt.kills or 0), '#ff8080')
+            textRow(list, '   ' .. tr('Loot'), short(hunt.loot or 0) .. ' gp', '#e0b84c')
+            textRow(list, '   ' .. tr('Supplies'), short(hunt.supplies or 0) .. ' gp', '#e05050')
+            local monsters = {}
+            for name, count in pairs(type(hunt.monsters) == 'table' and hunt.monsters or {}) do
+                table.insert(monsters, { name = name, count = tonumber(count) or 0 })
+            end
+            table.sort(monsters, function(a, b) return a.count > b.count end)
+            for _, monster in ipairs(monsters) do
+                textRow(list, '   ' .. monster.name:gsub('^%l', string.upper), tostring(monster.count), '#a8a8a8')
+            end
+            local actions = g_ui.createWidget('HuntHistoryActions', list)
+            local delete = g_ui.createWidget('OtButtonDanger', actions)
+            delete:setWidth(110)
+            delete:setText(tr('Delete'))
+            delete.onClick = function()
+                deleteHunt(hunt.key)
+                openHunt = nil
+                showReport('history')
+            end
+        end
+    end
+end
+
 showReport = function(tab)
     reportTab = tab or reportTab
     if not session then
@@ -191,7 +245,7 @@ showReport = function(tab)
         report.onClick = closeReport
         report.onEscape = closeReport
         report.panel.close.onClick = closeReport
-        for _, entry in ipairs({ { 'stats', 'Stats' }, { 'monsters', 'Monsters' }, { 'loot', 'Loot' }, { 'supplies', 'Supplies' } }) do
+        for _, entry in ipairs({ { 'stats', 'Stats' }, { 'monsters', 'Monsters' }, { 'loot', 'Loot' }, { 'supplies', 'Supplies' }, { 'history', 'History' } }) do
             local button = g_ui.createWidget('OtTab', report.panel.tabs)
             button:setId(entry[1])
             button:setText(tr(entry[2]))
@@ -206,8 +260,8 @@ showReport = function(tab)
         end
     end
     local panel = report.panel
-    panel:setSize({ width = math.min(440, rootWidget:getWidth() - 16), height = math.min(400, rootWidget:getHeight() - 16) })
-    panel.tabs:getLayout():setCellSize({ width = math.floor((panel:getWidth() - 24 - 12) / 4), height = 36 })
+    panel:setSize({ width = math.min(520, rootWidget:getWidth() - 16), height = math.min(420, rootWidget:getHeight() - 16) })
+    panel.tabs:getLayout():setCellSize({ width = math.floor((panel:getWidth() - 24 - 16) / 5), height = 36 })
     for _, button in ipairs(panel.tabs:getChildren()) do
         button:setChecked(button:getId() == reportTab)
     end
@@ -220,6 +274,31 @@ showReport = function(tab)
     local list = panel.listFrame.list
     list:destroyChildren()
     if reportTab == 'stats' then
+        local actions = g_ui.createWidget('HuntActionRow', list)
+        local pause = g_ui.createWidget('OtButton', actions)
+        pause:setWidth(110)
+        pause:setText(session.state == 'paused' and tr('Resume') or tr('Pause'))
+        pause:setEnabled(session.state ~= 'idle')
+        pause.onClick = function()
+            pauseSession()
+            updatePanel()
+            showReport('stats')
+        end
+        local finish = g_ui.createWidget('OtButtonPrimary', actions)
+        finish:setWidth(120)
+        finish:setText(tr('End hunt'))
+        finish.onClick = function()
+            endHunt()
+            updatePanel()
+            showReport('history')
+        end
+        local panelButton = g_ui.createWidget('OtButton', actions)
+        panelButton:setWidth(120)
+        panelButton:setText(window and window:isVisible() and tr('Hide panel') or tr('Show panel'))
+        panelButton.onClick = function()
+            toggle()
+            showReport('stats')
+        end
         local level, left = timeToLevel(t)
         panel.summary:setText(session.started and tr('Started %s', os.date('%H:%M', session.started)) or tr('Starts with your first kill.'))
         textRow(list, 'Experience', short(t.xp) .. '  (' .. short(t.xpPerHour) .. '/h)', '#78b4ff')
@@ -239,14 +318,24 @@ showReport = function(tab)
         panel.summary:setText(tr('%d kills, %d kinds', t.kills, species))
         for _, monster in ipairs(monsters) do
             local name = monster.name:gsub('^%l', string.upper)
-            textRow(list, name, tostring(monster.count), '#78b4ff')
+            local row = textRow(list, name, tostring(monster.count), '#78b4ff')
+            local loot = monsterLootValue(monster.name)
+            if loot > 0 then
+                row.value:setText(short(loot) .. ' (' .. short(loot / monster.count) .. ')')
+                row.value:setColor('#e0b84c')
+            end
+        end
+        if #monsters > 0 then
+            g_ui.createWidget('OtHint', list):setText(tr('Kills, then loot: total (per kill), from the loot messages.'))
         end
     elseif reportTab == 'loot' then
         panel.summary:setText(tr('%s gp. Tap an item to set its price.', short(t.loot)))
         itemRows(list, session.onlyLooted and session.looted or session.dropped, false)
-    else
-        panel.summary:setText(tr('%s gp used. Tap an item to set its price.', short(t.supplies)))
+    elseif reportTab == 'supplies' then
+        panel.summary:setText(tr('%s gp used. Tap an item to set its price or count.', short(t.supplies)))
         itemRows(list, session.supplies, true)
+    else
+        historyRows(list, panel)
     end
     report:raise()
 end
