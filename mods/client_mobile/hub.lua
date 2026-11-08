@@ -495,13 +495,36 @@ showTasks = function(tabId, pageId)
     end
 end
 
+-- A page of its own under the hub (the character sheet, character.lua): the
+-- title and "< Hub", no tabs, an empty list to fill. nil when the hub is closed.
+function hubPage(title)
+    if not hub then
+        return nil
+    end
+    tasksTab = nil
+    settingsShown = false
+    local panel = hub.panel
+    panel.title:setText(title)
+    panel.back:setText('< ' .. tr('Hub'))
+    panel.back:setVisible(true)
+    panel.back.onClick = function()
+        openHub()
+    end
+    panel.tabs:destroyChildren()
+    panel.tabs:setVisible(false)
+    panel.tabs:setHeight(0)
+    panel.list:destroyChildren()
+    panel.listScroll:setValue(0)
+    return panel.list, panel
+end
+
 -- The front page (ot-client#60): sections of four icon buttons. icon: a game
 -- item shown on the button; character: the player's outfit and level.
 -- Without an action the button shows "Soon".
 
 local HUB_SECTIONS = {
     { title = 'ADVENTURE', buttons = {
-        { text = 'Character', character = true, action = function() close(); g_game.requestOutfit() end },
+        { text = 'Character', character = true, action = function() showCharacter() end },
         { text = 'Journal', icon = 2816, action = function() showTasks('quests', 'journal') end },
         { text = 'Hunt', icon = 3264, action = function()
             close()
