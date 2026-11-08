@@ -141,6 +141,14 @@ local function showHelp(text)
     end
 end
 
+-- The footer under the list (the Journal's filter): emptied for other pages
+local function clearFooter()
+    if hub then
+        hub.panel.footer:destroyChildren()
+        hub.panel.footer:setHeight(0)
+    end
+end
+
 local function applyContrast()
     if hub then
         local on = g_settings.getBoolean(CONTRAST_SETTING)
@@ -368,6 +376,7 @@ showSettings = function(pageId)
     local scroll = settingsShown and panel.listScroll:getValue() or 0
     settingsShown = true
     panel.list:destroyChildren()
+    clearFooter()
     local actions = g_ui.createWidget('HubSettingsActions', panel.list)
     actions:getLayout():setCellSize({ width = math.floor((panel.list:getWidth() - 2 * 6) / 3), height = 40 })
     for _, entry in ipairs(SETTINGS_ACTIONS) do
@@ -452,10 +461,14 @@ showTasks = function(tabId, pageId)
         end
     end
     panel.list:destroyChildren()
-    -- the Journal's filter: region (Quests and Chests) and Show completed
+    clearFooter()
+    -- the Journal's filter, in the footer (it stays put while the list
+    -- scrolls): region (Quests and Chests) and Show completed
     if page.filter and (tabId == 'quests' or tabId == 'chests') then
         local region, completed = tasks().getFilter()
-        local filter = g_ui.createWidget('JournalFilter', panel.list)
+        local filter = g_ui.createWidget('JournalFilter', panel.footer)
+        filter:fill('parent')
+        panel.footer:setHeight(46)
         filter.region:setText(region or tr('All regions'))
         filter.region.onClick = function()
             -- cycle: all, then each region
@@ -570,6 +583,7 @@ function openHub()
     panel.tabs:setHeight(0)
     panel.tabs:destroyChildren()
     panel.list:destroyChildren()
+    clearFooter()
     local status = g_ui.createWidget('HubStatus', panel.list)
     status:setColoredText(statusText())
     local width = panel.list:getWidth()
