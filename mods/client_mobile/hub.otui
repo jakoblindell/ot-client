@@ -218,3 +218,63 @@ HubHelp < OtBackdrop
       anchors.right: parent.right
       !text: tr('Tap to close')
       phantom: true
+
+// The character sheet (character.lua, ot-client#60) ---------------------------
+
+// "Name - Level 159", gold, above the sheet's tabs
+CharacterTitle < Label
+  height: 26
+  font: $ot-font-title
+  color: $ot-gold
+  text-align: center
+
+// A name, and on the right a value (coloured text: the value bright, extra
+// words muted)
+CharacterRow < UIWidget
+  height: 34
+  border-width-bottom: 1
+  border-color: #ffffff14
+
+  OtLabel
+    id: name
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 4
+    text-auto-resize: true
+
+  Label
+    id: value
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-right: 6
+    font: $ot-font-label
+    color: $ot-text-strong
+    text-auto-resize: true
+
+// One blessing under Pilgrimage: green when you have it
+CharacterBlessing < Label
+  height: 22
+  margin-left: 18
+  font: $ot-font-label
+  color: $ot-text-muted
+  $on:
+    color: $ot-positive
+
+// The Outfit tab: the outfit large, and the button that changes it
+CharacterOutfit < UIWidget
+  height: 150
+
+  UICreature
+    id: outfit
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: parent.top
+    size: 96 96
+    phantom: true
+
+  OtButtonPrimary
+    id: change
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: outfit.bottom
+    margin-top: 8
+    width: 180
+    !text: tr('Change outfit')
