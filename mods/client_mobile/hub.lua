@@ -503,10 +503,11 @@ local HUB_SECTIONS = {
     { title = 'ADVENTURE', buttons = {
         { text = 'Character', character = true, action = function() close(); g_game.requestOutfit() end },
         { text = 'Journal', icon = 2816, action = function() showTasks('quests', 'journal') end },
+        -- the full hunt report (stats, monsters, loot, supplies, past hunts)
         { text = 'Hunt', icon = 3264, action = function()
             close()
-            if modules.client_hunt and modules.client_hunt.toggle then
-                modules.client_hunt.toggle()
+            if modules.client_hunt and modules.client_hunt.openReport then
+                modules.client_hunt.openReport()
             end
         end },
         { text = 'Daily', icon = 3218, action = function() showTasks('daily', 'daily') end },

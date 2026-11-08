@@ -169,3 +169,52 @@ HuntPriceRow < UIWidget
     margin-left: 6
     width: 80
     !text: tr('Default')
+
+// The hunt's controls at the top of Stats: Pause/Resume, End hunt, the panel
+HuntActionRow < UIWidget
+  height: 46
+  layout:
+    type: horizontalBox
+    spacing: 6
+
+// Correcting a supply's count, under its price row: - used +
+HuntCountRow < UIWidget
+  height: 44
+
+  OtIconButton
+    id: minus
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 26
+    !text: '-'
+
+  OtValue
+    id: count
+    anchors.left: minus.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 6
+    width: 80
+
+  OtIconButton
+    id: plus
+    anchors.left: count.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 6
+    !text: '+'
+
+  OtHint
+    id: hint
+    anchors.left: plus.right
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 10
+    text-auto-resize: true
+    !text: tr('used, if the count is wrong')
+
+// A past hunt opened: Delete under its details
+HuntHistoryActions < UIWidget
+  height: 46
+  layout:
+    type: horizontalBox
+    spacing: 6
+    align-right: true
