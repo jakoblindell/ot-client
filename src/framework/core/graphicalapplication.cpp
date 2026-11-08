@@ -22,6 +22,8 @@
 
 #include "graphicalapplication.h"
 
+#include <cmath>
+
 #include "asyncdispatcher.h"
 #include "clock.h"
 #include "eventdispatcher.h"
@@ -347,12 +349,20 @@ void GraphicalApplication::resize(const Size& size)
     g_ui.resize(size / scale);
     m_onInputEvent = false;
 
-    g_mainDispatcher.addEvent([size, scale] {
+    // The UI is drawn at the screen's real pixel size where the screen has
+    // more than one per CSS pixel (Sharpness High, ot-client#69): its
+    // framebuffer gets the whole part of the pixel ratio as real pixels per
+    // UI coordinate. Smooth images (icons, the round buttons) gain from it;
+    // bitmap text and pixel art look the same.
+    const float pixelScale = std::max(1.f, std::floor(g_window.getPixelRatio() + 0.01f));
+    g_mainDispatcher.addEvent([size, scale, pixelScale] {
         auto* foreground = g_drawPool.get(DrawPoolType::FOREGROUND);
+        foreground->setFramebufferPixelScale(pixelScale);
         foreground->setFramebuffer(size / scale);
-        // a whole-number scale stretches the UI pixel-exact (crisp); others
-        // need smoothing (ot-client#66)
-        foreground->setFramebufferSmooth(scale != static_cast<float>(static_cast<int>(scale)));
+        // what is left to stretch: by a whole number pixel-exact (crisp);
+        // others need smoothing (ot-client#66)
+        const float stretch = scale / pixelScale;
+        foreground->setFramebufferSmooth(std::abs(stretch - std::round(stretch)) > 0.01f);
     });
 }
 

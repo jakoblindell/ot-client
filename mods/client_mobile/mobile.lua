@@ -23,10 +23,21 @@ local ROUND_FACES = {
 }
 local ROUND_FILL = '141414d7'
 
+-- Real pixels per UI pixel: the interface is drawn at the screen's pixel size
+-- on Sharpness High (ot-client#69), so the faces are made that much bigger
+local function uiPixelScale()
+    local ratio = g_window.getPixelRatio and g_window.getPixelRatio() or 1
+    return math.max(1, math.floor(ratio + 0.01))
+end
+
 local function roundFacePath(size, ring)
+    size = size * uiPixelScale()
     -- the ring is 3/48 of the size, as in the old 48 px image
     return string.format('/generated/circle/%d/%.1f/%s/%s', size, size * 3 / 48, ring, ROUND_FILL)
 end
+
+-- every button with a round face (to remake them when Sharpness changes)
+local roundFaced = setmetatable({}, { __mode = 'k' })
 
 -- Gives a button the round face of the kind ('gold' or 'silver'), and keeps
 -- it matched to the button's size when that changes
@@ -35,10 +46,11 @@ function setRoundFace(widget, kind)
     widget.roundFaceSize = nil
     local function apply()
         local size = math.min(widget:getWidth(), widget:getHeight())
-        if size <= 0 or widget.roundFaceSize == size then
+        local key = size .. 'x' .. uiPixelScale()
+        if size <= 0 or widget.roundFaceSize == key then
             return
         end
-        widget.roundFaceSize = size
+        widget.roundFaceSize = key
         local face = ROUND_FACES[widget.roundFace]
         local normal = roundFacePath(size, face.ring)
         widget:mergeStyle({ ['image-source'] = normal, ['$pressed'] = { ['image-source'] = roundFacePath(size, face.pressed) } })
@@ -48,7 +60,20 @@ function setRoundFace(widget, kind)
         widget.roundFaceHooked = true
         connect(widget, { onGeometryChange = apply })
     end
+    widget.roundFaceApply = apply
+    roundFaced[widget] = true
     apply()
+end
+
+-- Remakes the round faces for the screen's pixel size as it is now
+local function refreshRoundFaces()
+    for widget in pairs(roundFaced) do
+        if widget:isDestroyed() then
+            roundFaced[widget] = nil
+        elseif widget.roundFaceApply then
+            widget.roundFaceApply()
+        end
+    end
 end
 
 -- Toolbar entries, left to right. A panel entry shows the widgets of one side
@@ -103,6 +128,8 @@ function setSharpness(value)
     if g_window.setMaxPixelRatio then
         g_window.setMaxPixelRatio(value)
     end
+    -- the new pixel ratio applies with the next frame: then remake the faces
+    scheduleEvent(refreshRoundFaces, 300)
 end
 
 local function applyDefaultScale()

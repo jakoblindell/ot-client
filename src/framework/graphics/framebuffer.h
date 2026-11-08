@@ -43,6 +43,12 @@ public:
     bool isSmooth() const { return m_smooth; }
 
     bool resize(const Size& size);
+    // Real pixels per coordinate: the texture is that much bigger than the
+    // size given to resize, and what is drawn into it keeps its coordinates
+    // (the UI at the screen's pixel size, ot-client#69). Drops the texture.
+    void setPixelScale(float scale) { if (m_pixelScale != scale) { m_pixelScale = scale; m_texture = nullptr; } }
+    float getPixelScale() const { return m_pixelScale; }
+    Size getLogicalSize() const { return m_logicalSize; }
     bool isValid() const { return m_texture != nullptr; }
     bool canDraw() const;
     bool isAutoClear() const { return m_autoClear; }
@@ -75,6 +81,10 @@ private:
     void prepare(const Rect& dest, const Rect& src, const Color& colorClear = Color::alpha, uint8_t flipDirection = 0);
 
     Size m_oldSize;
+    float m_oldPixelScale{ 1.f };
+    float m_pixelScale{ 1.f };
+    Size m_logicalSize; // what is drawn into it uses these coordinates
+    Matrix3 m_projection; // for m_logicalSize
 
     Matrix3 m_textureMatrix, m_oldTextureMatrix;
     TexturePtr m_texture;

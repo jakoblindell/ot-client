@@ -228,15 +228,17 @@ void Painter::setAlphaWriting(const bool enable)
     updateGlAlphaWriting();
 }
 
-void Painter::setResolution(const Size& resolution, const Matrix3& projectionMatrix)
+void Painter::setResolution(const Size& resolution, const Matrix3& projectionMatrix, const float pixelScale)
 {
-    if (resolution == m_resolution)
+    if (resolution == m_resolution && pixelScale == m_pixelScale)
         return;
 
     setProjectionMatrix(projectionMatrix == DEFAULT_MATRIX3 ? getTransformMatrix(resolution) : projectionMatrix);
 
     m_resolution = resolution;
+    m_pixelScale = pixelScale;
     updateGlViewport();
+    updateGlClipRect();
 }
 
 Matrix3 Painter::getTransformMatrix(const Size& resolution) const
@@ -285,15 +287,19 @@ void Painter::updateGlCompositionMode() const
 
 void Painter::updateGlClipRect() const
 {
+    // (in real pixels: the coordinates times the pixel scale)
+    const float scale = m_pixelScale;
     if (m_clipRect.isValid()) {
         glEnable(GL_SCISSOR_TEST);
-        glScissor(m_clipRect.left(), m_resolution.height() - m_clipRect.bottom() - 1, m_clipRect.width(), m_clipRect.height());
+        glScissor(static_cast<int>(m_clipRect.left() * scale),
+                  static_cast<int>((m_resolution.height() - m_clipRect.bottom() - 1) * scale),
+                  static_cast<int>(m_clipRect.width() * scale), static_cast<int>(m_clipRect.height() * scale));
     } else {
-        glScissor(0, 0, m_resolution.width(), m_resolution.height());
+        glScissor(0, 0, static_cast<int>(m_resolution.width() * scale), static_cast<int>(m_resolution.height() * scale));
         glDisable(GL_SCISSOR_TEST);
     }
 }
 void Painter::updateGlTexture() const { if (m_glTextureId != 0) glBindTexture(GL_TEXTURE_2D, m_glTextureId); }
 void Painter::updateGlBlendEquation() const { glBlendEquation(static_cast<GLenum>(m_blendEquation)); }
 void Painter::updateGlAlphaWriting() const { glColorMask(1, 1, 1, m_alphaWriting); }
-void Painter::updateGlViewport() const { glViewport(0, 0, m_resolution.width(), m_resolution.height()); }
+void Painter::updateGlViewport() const { glViewport(0, 0, static_cast<int>(m_resolution.width() * m_pixelScale), static_cast<int>(m_resolution.height() * m_pixelScale)); }

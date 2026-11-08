@@ -54,13 +54,17 @@ bool FrameBuffer::resize(const Size& size)
 {
     assert(size.isValid());
 
-    if (m_texture && m_texture->getSize() == size)
+    // the texture holds m_pixelScale real pixels per coordinate
+    const Size textureSize(static_cast<int>(size.width() * m_pixelScale), static_cast<int>(size.height() * m_pixelScale));
+    if (m_texture && m_texture->getSize() == textureSize && m_logicalSize == size)
         return false;
 
-    m_texture = std::make_shared<Texture>(size);
+    m_logicalSize = size;
+    m_texture = std::make_shared<Texture>(textureSize);
     m_texture->setSmooth(m_smooth);
     m_texture->setUpsideDown(true);
-    m_textureMatrix = g_painter->getTransformMatrix(size);
+    m_textureMatrix = g_painter->getTransformMatrix(textureSize);
+    m_projection = g_painter->getTransformMatrix(size);
 
     m_screenCoordsBuffer.clear();
     m_screenCoordsBuffer.addRect(Rect{ 0, 0, size });
@@ -87,8 +91,10 @@ void FrameBuffer::bind()
 
     m_oldSize = g_painter->getResolution();
     m_oldTextureMatrix = g_painter->getProjectionMatrix();
+    m_oldPixelScale = g_painter->getPixelScale();
 
-    g_painter->setResolution(getSize(), m_textureMatrix);
+    // drawn in its own coordinates, at m_pixelScale real pixels each
+    g_painter->setResolution(m_logicalSize, m_projection, m_pixelScale);
     g_painter->setAlphaWriting(m_useAlphaWriting);
 
     if (m_autoClear) {
@@ -109,7 +115,7 @@ bool FrameBuffer::canDraw() const {
 void FrameBuffer::release() const
 {
     internalRelease();
-    g_painter->setResolution(m_oldSize, m_oldTextureMatrix);
+    g_painter->setResolution(m_oldSize, m_oldTextureMatrix, m_oldPixelScale);
 }
 
 void FrameBuffer::draw()

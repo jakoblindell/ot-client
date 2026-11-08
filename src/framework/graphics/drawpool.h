@@ -109,6 +109,8 @@ public:
     void setFramebuffer(const Size& size);
     void removeFramebuffer();
     void setFramebufferSmooth(bool smooth);
+    // real pixels per UI coordinate in the framebuffer (ot-client#69)
+    void setFramebufferPixelScale(float scale);
 
     void onBeforeDraw(std::function<void()>&& f) { m_beforeDraw = std::move(f); }
     void onAfterDraw(std::function<void()>&& f) { m_afterDraw = std::move(f); }
