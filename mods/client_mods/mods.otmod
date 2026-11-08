@@ -26,3 +26,5 @@ Module
     - client_automations
     - client_tasks
     - client_gallery
+    - client_report
+    - client_moments

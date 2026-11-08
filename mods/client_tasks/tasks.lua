@@ -118,6 +118,26 @@ local function onTasks(protocol, opcode, buffer)
     if type(data.achievements) == 'table' then
         achievements = data.achievements
     end
+    -- a one-time token for a bug report (client_report, ot-client#67)
+    if type(data.reportToken) == 'table' and modules.client_report then
+        modules.client_report.onToken(data.reportToken)
+        return
+    end
+    -- a moment to take a picture of (client_moments, ot-client#25)
+    if type(data.moment) == 'table' then
+        if modules.client_moments and modules.client_moments.onMoment then
+            modules.client_moments.onMoment(data.moment)
+        end
+        return
+    end
+    -- the hub's character sheet (client_mobile, character.lua)
+    if type(data.character) == 'table' then
+        local mobile = modules.client_mobile
+        if mobile and mobile.onCharacterData then
+            mobile.onCharacterData(data.character)
+        end
+        return
+    end
     local journal = data.journal
     if type(journal) == 'table' then
         if journal.part == 'quests' then

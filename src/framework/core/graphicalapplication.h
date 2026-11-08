@@ -132,6 +132,9 @@ public:
     }
     void setDrawEvents(const ApplicationDrawEventsPtr& drawEvents) { m_drawEvents = drawEvents; }
     void doScreenshot(std::string file);
+    // only a part of the screen (window pixels, top-left origin), ot-client#25
+    void doScreenshotArea(std::string file, int x, int y, int width, int height);
+    void takePendingScreenshot();
     void doMapScreenshot(std::string file);
 #ifdef __EMSCRIPTEN__
     void mainLoop();
@@ -144,6 +147,8 @@ protected:
 private:
     bool canDrawMap() const;
     bool m_onInputEvent{ false };
+    std::string m_screenshotFile; // set by doScreenshot, taken after the next frame
+    Rect m_screenshotArea; // invalid: the whole screen
     bool m_optimize{ true };
     bool m_forceEffectOptimization{ true };
     bool m_drawEffectOnTop{ false };
