@@ -80,7 +80,9 @@ jobs:
   ui-gallery:
     name: UI screenshots
     needs: build-browser
-    runs-on: ubuntu-latest
+    # (pinned: the baselines were made here, and Playwright 1.56 has no
+    # Chromium for Ubuntu 26.04, what ubuntu-latest became)
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
