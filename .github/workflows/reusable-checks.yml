@@ -38,7 +38,11 @@ jobs:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REVIEWDOG_REPORTER: github-pr-check
         run: |
-          reviewdog -reporter="${REVIEWDOG_REPORTER}" -runners=luac -fail-level=error -filter-mode=added
+          # The checks that block a merge report in this log: posting them to
+          # GitHub sometimes fails (404 from the check-runs API) and failed
+          # the job although the code was fine.
+          reviewdog -reporter=local -runners=luac -fail-level=error -filter-mode=added -diff="git diff origin/${GITHUB_BASE_REF}...HEAD"
+          reviewdog -reporter=local -runners=xmllint -fail-level=error -filter-mode=added -diff="git diff origin/${GITHUB_BASE_REF}...HEAD"
+          # Advice only: annotated on the pull request when GitHub takes them
           reviewdog -reporter="${REVIEWDOG_REPORTER}" -runners=luacheck -filter-mode=added || true
-          reviewdog -reporter="${REVIEWDOG_REPORTER}" -runners=xmllint -fail-level=error -filter-mode=added
           reviewdog -reporter="${REVIEWDOG_REPORTER}" -runners=cppcheck -filter-mode=added || true
