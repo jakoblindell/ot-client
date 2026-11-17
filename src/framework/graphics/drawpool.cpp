@@ -445,8 +445,18 @@ void DrawPool::setFramebuffer(const Size& size) {
 
 void DrawPool::setFramebufferSmooth(const bool smooth) {
     if (m_framebuffer && m_framebuffer->isSmooth() != smooth) {
-        const Size size = m_framebuffer->getTexture() ? m_framebuffer->getSize() : Size();
+        const Size size = m_framebuffer->getLogicalSize();
         m_framebuffer->setSmooth(smooth); // drops the texture: make it again
+        if (size.isValid() && m_framebuffer->resize(size))
+            m_framebuffer->prepare({}, {});
+        repaint();
+    }
+}
+
+void DrawPool::setFramebufferPixelScale(const float scale) {
+    if (m_framebuffer && m_framebuffer->getPixelScale() != scale) {
+        const Size size = m_framebuffer->getLogicalSize();
+        m_framebuffer->setPixelScale(scale); // drops the texture: make it again
         if (size.isValid() && m_framebuffer->resize(size))
             m_framebuffer->prepare({}, {});
         repaint();
