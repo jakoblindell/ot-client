@@ -48,6 +48,9 @@ public:
     Color getColor() const { return m_color; }
     Rect getClipRect() const { return m_clipRect; }
     Size getResolution() const { return m_resolution; }
+    // Real pixels per coordinate (the UI drawn at the screen's pixel size,
+    // ot-client#69): the viewport and clip rects are that much bigger
+    float getPixelScale() const { return m_pixelScale; }
     BlendEquation getBlendEquation() const { return m_blendEquation; }
     CompositionMode getCompositionMode() const { return m_compositionMode; }
     PainterShaderProgram* getShaderProgram() const { return m_shaderProgram; }
@@ -58,7 +61,7 @@ public:
     void setTexture(uint32_t textureId, uint16_t textureMatrixId);
     void setOpacity(const float opacity) { m_opacity = opacity; }
     void setClipRect(const Rect& clipRect);
-    void setResolution(const Size& resolution, const Matrix3& projectionMatrix = DEFAULT_MATRIX3);
+    void setResolution(const Size& resolution, const Matrix3& projectionMatrix = DEFAULT_MATRIX3, float pixelScale = 1.f);
     void setDrawProgram(PainterShaderProgram* drawProgram) { m_drawProgram = drawProgram; }
     void setAlphaWriting(bool enable);
     void setBlendEquation(BlendEquation blendEquation);
@@ -105,6 +108,7 @@ protected:
     CompositionMode m_compositionMode{ CompositionMode::NORMAL };
     Color m_color{ Color::white };
     Size m_resolution;
+    float m_pixelScale{ 1.f };
     Rect m_clipRect;
 
     friend class FrameBuffer;

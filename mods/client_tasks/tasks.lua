@@ -123,6 +123,14 @@ local function onTasks(protocol, opcode, buffer)
         modules.client_report.onToken(data.reportToken)
         return
     end
+    -- the hub's character sheet (client_mobile, character.lua)
+    if type(data.character) == 'table' then
+        local mobile = modules.client_mobile
+        if mobile and mobile.onCharacterData then
+            mobile.onCharacterData(data.character)
+        end
+        return
+    end
     local journal = data.journal
     if type(journal) == 'table' then
         if journal.part == 'quests' then
