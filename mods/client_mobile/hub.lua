@@ -533,6 +533,8 @@ function hubPage(title)
     panel.tabs:setVisible(false)
     panel.tabs:setHeight(0)
     panel.list:destroyChildren()
+    -- (the Journal's filter lives in the footer)
+    clearFooter()
     panel.listScroll:setValue(0)
     return panel.list, panel
 end
