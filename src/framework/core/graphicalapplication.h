@@ -132,6 +132,7 @@ public:
     }
     void setDrawEvents(const ApplicationDrawEventsPtr& drawEvents) { m_drawEvents = drawEvents; }
     void doScreenshot(std::string file);
+    void takePendingScreenshot();
     void doMapScreenshot(std::string file);
 #ifdef __EMSCRIPTEN__
     void mainLoop();
@@ -144,6 +145,7 @@ protected:
 private:
     bool canDrawMap() const;
     bool m_onInputEvent{ false };
+    std::string m_screenshotFile; // set by doScreenshot, taken after the next frame
     bool m_optimize{ true };
     bool m_forceEffectOptimization{ true };
     bool m_drawEffectOnTop{ false };

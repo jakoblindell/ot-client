@@ -118,6 +118,11 @@ local function onTasks(protocol, opcode, buffer)
     if type(data.achievements) == 'table' then
         achievements = data.achievements
     end
+    -- a one-time token for a bug report (client_report, ot-client#67)
+    if type(data.reportToken) == 'table' and modules.client_report then
+        modules.client_report.onToken(data.reportToken)
+        return
+    end
     local journal = data.journal
     if type(journal) == 'table' then
         if journal.part == 'quests' then

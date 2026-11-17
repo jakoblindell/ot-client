@@ -1,0 +1,8 @@
+Module
+  name: client_report
+  description: Report a problem from inside the client, with a screenshot, device details and the client's log (ot-client#67)
+  author: ot-client
+  sandboxed: true
+  scripts: [ report ]
+  @onLoad: init()
+  @onUnload: terminate()

@@ -106,7 +106,8 @@ HubIconButton < OtButton
   $disabled:
     color: $ot-text-disabled
 
-// Settings: Hotbar, Edit layout, All options in one row
+// Settings: Hotbar, Edit layout, All options, Report a problem (as many
+// rows as they need)
 HubSettingsActions < UIWidget
   height: 40
   margin-bottom: 6
@@ -115,6 +116,7 @@ HubSettingsActions < UIWidget
     cell-size: 150 40
     cell-spacing: 6
     flow: true
+    fit-children: true
 
 // Account and time, under the title
 HubStatus < Label
