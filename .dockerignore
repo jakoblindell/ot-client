@@ -21,4 +21,4 @@ Dockerfile*
 *.obj
 *.lib
 *.ilk
-*.exp
+*.exp/vcpkg-cache.new/

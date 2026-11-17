@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "../global.h"
 
 #include <fstream>
@@ -55,6 +57,9 @@ public:
     void warning(const std::string_view what) { log(Fw::LogWarning, what); }
     void error(const std::string_view what) { log(Fw::LogError, what); }
     void fatal(const std::string_view what) { log(Fw::LogFatal, what); }
+    // The last count log lines, oldest first, one per line (bug reports,
+    // ot-client#67)
+    std::string getRecentMessages(int count);
 
     // fmt-compatible overloads (for C++ only)
     template<typename... Args>
@@ -135,6 +140,7 @@ public:
 
 private:
     std::deque<LogMessage> m_logMessages;
+    std::mutex m_historyMutex;
     OnLogCallback m_onLog;
     std::ofstream m_outFile;
     Fw::LogLevel m_level{ Fw::LogDebug };

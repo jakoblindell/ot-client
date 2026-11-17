@@ -106,7 +106,8 @@ HubIconButton < OtButton
   $disabled:
     color: $ot-text-disabled
 
-// Settings: Hotbar, Edit layout, All options in one row
+// Settings: Hotbar, Edit layout, All options, Report a problem (as many
+// rows as they need)
 HubSettingsActions < UIWidget
   height: 40
   margin-bottom: 6
@@ -115,6 +116,7 @@ HubSettingsActions < UIWidget
     cell-size: 150 40
     cell-spacing: 6
     flow: true
+    fit-children: true
 
 // Account and time, under the title
 HubStatus < Label
@@ -175,12 +177,21 @@ HubSheet < OtBackdrop
       margin-top: 10
       visible: false
 
+    // Under the list, for a page's controls that stay put (the Journal's
+    // filter); no height when empty
+    UIWidget
+      id: footer
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      height: 0
+
     ScrollablePanel
       id: list
       anchors.top: tabs.bottom
       anchors.left: parent.left
       anchors.right: listScroll.left
-      anchors.bottom: parent.bottom
+      anchors.bottom: footer.top
       margin-top: 10
       margin-right: 6
       vertical-scrollbar: listScroll
@@ -190,7 +201,7 @@ HubSheet < OtBackdrop
     VerticalScrollBar
       id: listScroll
       anchors.top: tabs.bottom
-      anchors.bottom: parent.bottom
+      anchors.bottom: footer.top
       anchors.right: parent.right
       margin-top: 10
       step: 52

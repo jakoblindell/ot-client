@@ -56,8 +56,14 @@ COPY . /workspace
 ARG BUILD_TYPE=Release
 ENV BUILD_DIR=/workspace/build-emscripten
 RUN mkdir -p ${BUILD_DIR}
-# Force complete rebuild by clearing all vcpkg and emscripten caches
-RUN source /opt/emsdk/emsdk_env.sh \
+# vcpkg keeps each library it builds in /workspace/vcpkg-cache and takes it
+# from there next time (same version, flags and compiler). The CI restores
+# the folder from the Actions cache and saves it after the build
+# (Dockerfile.browser.sh copies it back out); empty, everything is built.
+ENV VCPKG_BINARY_SOURCES="clear;files,/workspace/vcpkg-cache,readwrite"
+# A clean build every time; finished libraries come from the cache above
+RUN mkdir -p /workspace/vcpkg-cache \
+ && source /opt/emsdk/emsdk_env.sh \
  && rm -rf ${VCPKG_ROOT}/buildtrees ${VCPKG_ROOT}/packages ${BUILD_DIR}/vcpkg_installed \
  && rm -rf /opt/emsdk/upstream/emscripten/cache \
  && cmake -G Ninja -S /workspace -B ${BUILD_DIR} \

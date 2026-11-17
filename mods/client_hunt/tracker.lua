@@ -135,6 +135,7 @@ local function newSession()
         elapsed = 0, -- seconds tracked before the current stretch
         stretchStart = nil, -- g_clock.seconds() when tracking (re)started
         xp = 0, kills = {}, dropped = {}, looted = {}, supplies = {},
+        monsterDrops = {}, -- per monster: what its loot messages listed
         onlyLooted = true, -- loot = what you picked up, not what dropped
     }
 end
@@ -213,6 +214,109 @@ function totals()
     }
 end
 
+-- What one monster's loot messages were worth so far
+function monsterLootValue(monster)
+    local value = 0
+    for key, count in pairs(session and session.monsterDrops and session.monsterDrops[monster] or {}) do
+        value = value + itemPrice(key) * count
+    end
+    return value
+end
+
+-- The player corrects a supply's count (one the tracker missed or counted
+-- wrong); 0 takes it off the list
+function setSupplyCount(key, count)
+    if not session then
+        return
+    end
+    count = math.max(0, math.floor(count))
+    session.supplies[key] = count > 0 and count or nil
+    changed()
+end
+
+-- Past hunts, per character: kept when a hunt is ended, newest first ---------------
+
+local HISTORY_SETTING = 'client_hunt_history'
+local HISTORY_KEEP = 30
+
+-- (kept as a map, "h<time>" -> hunt: the settings file keeps keyed tables,
+-- not plain lists)
+local function storedHunts()
+    local all = g_settings.getNode(HISTORY_SETTING) or {}
+    local stored = all[g_game.getCharacterName()]
+    return type(stored) == 'table' and stored or {}
+end
+
+local function saveHunts(stored)
+    local all = g_settings.getNode(HISTORY_SETTING) or {}
+    all[g_game.getCharacterName()] = stored
+    g_settings.setNode(HISTORY_SETTING, all)
+    g_settings.save()
+end
+
+-- The past hunts, newest first; each knows its key (for deleteHunt)
+function huntHistory()
+    local list = {}
+    for key, hunt in pairs(storedHunts()) do
+        if type(hunt) == 'table' then
+            hunt.key = key
+            -- numbers may come back as text
+            for _, field in ipairs({ 'started', 'ended', 'seconds', 'xp', 'kills', 'loot', 'supplies', 'profit' }) do
+                hunt[field] = tonumber(hunt[field]) or 0
+            end
+            table.insert(list, hunt)
+        end
+    end
+    table.sort(list, function(a, b) return a.ended > b.ended end)
+    return list
+end
+
+function deleteHunt(key)
+    local stored = storedHunts()
+    stored[key] = nil
+    saveHunts(stored)
+end
+
+-- Ends the hunt: its totals go to the history (when anything happened) and a
+-- new one starts
+function endHunt()
+    if not session then
+        return
+    end
+    local t = totals()
+    if t.kills > 0 or t.xp > 0 or t.loot > 0 or t.supplies > 0 then
+        -- the five most killed, "name" -> kills
+        local sorted = {}
+        for name, count in pairs(session.kills) do
+            table.insert(sorted, { name = name, count = count })
+        end
+        table.sort(sorted, function(a, b) return a.count > b.count end)
+        local monsters = {}
+        for i = 1, math.min(5, #sorted) do
+            monsters[sorted[i].name] = sorted[i].count
+        end
+        local stored = storedHunts()
+        local now = os.time()
+        stored['h' .. now] = {
+            started = session.started or now, ended = now, seconds = math.floor(t.seconds),
+            xp = t.xp, kills = t.kills, loot = t.loot, supplies = t.supplies, profit = t.profit,
+            monsters = monsters,
+        }
+        -- the newest HISTORY_KEEP
+        local keys = {}
+        for key, hunt in pairs(stored) do
+            table.insert(keys, { key = key, ended = type(hunt) == 'table' and tonumber(hunt.ended) or 0 })
+        end
+        table.sort(keys, function(a, b) return a.ended > b.ended end)
+        for i = HISTORY_KEEP + 1, #keys do
+            stored[keys[i].key] = nil
+        end
+        saveHunts(stored)
+    end
+    resetSession()
+    changed()
+end
+
 -- Experience -------------------------------------------------------------------
 
 local function onExperienceChange(player, value, oldValue)
@@ -259,9 +363,12 @@ local function onTextMessage(mode, text)
     add(session.kills, monster, 1)
     items = items:gsub('%.$', '')
     if items ~= 'nothing' then
+        session.monsterDrops = session.monsterDrops or {}
+        session.monsterDrops[monster] = session.monsterDrops[monster] or {}
         for part in items:gmatch('[^,]+') do
             local key, count = parseLootItem((part:gsub('^%s+', ''):gsub('%s+$', '')))
             add(session.dropped, key, count)
+            add(session.monsterDrops[monster], key, count)
         end
     end
     changed()

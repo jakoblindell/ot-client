@@ -335,3 +335,7 @@ luajit-src/
 CMakeUserPresets.json
 **/.canary-shared-cache/
 /data/build.json
+
+# vcpkg built-library cache (CI, Dockerfile.browser.sh)
+/vcpkg-cache/
+/vcpkg-cache.new/
