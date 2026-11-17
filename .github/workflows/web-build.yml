@@ -38,6 +38,18 @@ jobs:
           printf '{"build":"%s","commit":"%s"}\n' "$BUILD" "${GITHUB_SHA::7}" > data/build.json
           cat data/build.json
 
+      # vcpkg's built libraries (abseil, protobuf, openal, ...): built once and
+      # kept, so a build only compiles the client (ot-client#87). A new key
+      # when the versions, the compiler or our triplets/ports change; older
+      # caches still give every library that did not change.
+      - name: Restore built libraries
+        uses: actions/cache@v4
+        with:
+          path: vcpkg-cache
+          key: vcpkg-wasm-${{ hashFiles('vcpkg.json', 'Dockerfile.browser', 'browser/triplets/**', 'browser/overlay-ports/**') }}
+          restore-keys: |
+            vcpkg-wasm-
+
       - name: Build browser bundle with Docker
         run: bash Dockerfile.browser.sh
 
