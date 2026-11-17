@@ -315,16 +315,25 @@ render = function()
             table.insert(entries, { text = tr('Yes'), onClick = function() say('yes') end, on = true })
             table.insert(entries, { text = tr('No'), onClick = function() say('no') end })
         end
+        local hasShop = #(dialog.buy or {}) + #(dialog.sell or {}) > 0
+        local hasTravel = #(dialog.travel or {}) > 0
         for _, keyword in ipairs(dialog.keywords or {}) do
-            table.insert(entries, { text = keyword, onClick = function() say(keyword) end, keyword = true })
+            -- the Trade and Travel buttons below already do these (the word
+            -- stays highlighted in the text)
+            local word = keyword:lower()
+            local covered = (hasShop and (word == 'trade' or word == 'offer' or word == 'offers'))
+                or (hasTravel and (word == 'travel' or word == 'passage'))
+            if not covered then
+                table.insert(entries, { text = keyword, onClick = function() say(keyword) end, keyword = true })
+            end
         end
-        if #(dialog.buy or {}) + #(dialog.sell or {}) > 0 then
+        if hasShop then
             table.insert(entries, { text = tr('Trade'), on = true, onClick = function()
                 tradeTab = #(dialog.buy or {}) > 0 and 'buy' or 'sell'
                 setView('trade')
             end })
         end
-        if #(dialog.travel or {}) > 0 then
+        if hasTravel then
             table.insert(entries, { text = tr('Travel'), onClick = function() setView('travel') end, on = true })
         end
         table.insert(entries, { text = tr('Bye'), onClick = function() say('bye') end })
