@@ -94,6 +94,8 @@ void LightView::resetShade(const Point& pos)
 void LightView::draw(const Rect& dest, const Rect& src)
 {
     m_pool->getHashController().put(src.hash());
+    // (the place too: moved alone, the light would stay where it was)
+    m_pool->getHashController().put(dest.hash());
     m_pool->getHashController().put(m_globalLightColor.hash());
     if (m_pool->getHashController().wasModified()) {
         updatePixels();

@@ -584,6 +584,22 @@ local function statusText()
         os.date('%H:%M'))
 end
 
+-- The sheet sized for the screen as it is now (it may have turned since)
+local function fitPanel()
+    hub.panel:setSize({ width = math.min(520, rootWidget:getWidth() - 16),
+        height = math.max(280, math.min(600, rootWidget:getHeight() - 16)) })
+end
+
+-- After a new screen size on a page with tabs: they share the new width
+local function fitTabs()
+    local tabs = hub.panel.tabs
+    local count = #tabs:getChildren()
+    if count > 0 then
+        local width = math.min(160, math.floor((tabs:getWidth() - 4 * (count - 1)) / count))
+        tabs:getLayout():setCellSize({ width = width, height = 36 })
+    end
+end
+
 -- The hub's front page
 function openHub()
     if not hub then
@@ -596,13 +612,35 @@ function openHub()
             g_settings.set(CONTRAST_SETTING, not g_settings.getBoolean(CONTRAST_SETTING))
             applyContrast()
         end
+        -- The screen turned or resized while open: fit it again (the front
+        -- page is built for its width, so it is built again)
+        hub.onGeometryChange = function(widget, oldRect, newRect)
+            -- (not its first layout, nor a move)
+            if oldRect.width <= 0 or (oldRect.width == newRect.width and oldRect.height == newRect.height) then
+                return
+            end
+            addEvent(function()
+                if hub ~= widget then
+                    return
+                end
+                -- (the front page is the one without a way back)
+                if not hub.panel.back:isVisible() then
+                    openHub()
+                else
+                    fitPanel()
+                    -- (once the tabs row has its new width)
+                    addEvent(function()
+                        if hub == widget then
+                            fitTabs()
+                        end
+                    end)
+                end
+            end)
+        end
     end
-    -- sized for the screen as it is now (it may have turned since)
-    local panel = hub.panel
-    panel:setSize({ width = math.min(520, rootWidget:getWidth() - 16),
-        height = math.max(280, math.min(600, rootWidget:getHeight() - 16)) })
-    local cell = math.floor((panel:getWidth() - 20 - 12 - 18) / 5)
-    panel.tabs:getLayout():setCellSize({ width = cell, height = 36 })
+    fitPanel()
+    local cell = math.floor((hub.panel:getWidth() - 20 - 12 - 18) / 5)
+    hub.panel.tabs:getLayout():setCellSize({ width = cell, height = 36 })
     applyContrast()
     hub:raise()
     hub:focus()
