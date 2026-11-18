@@ -11,6 +11,7 @@ end
 -- private variables
 local loadBox
 local enterGame
+local serverFieldsShown -- nil until applyServerFields runs (web only)
 local motdWindow
 local enterGameButton
 local clientBox
@@ -164,6 +165,95 @@ local function loadServerListModule()
     end
 end
 
+-- Developer tools on (corelib/util.lua): the server fields show on the web
+local function developerToolsOn()
+    return isDeveloperToolsEnabled == nil or isDeveloperToolsEnabled()
+end
+
+-- On the web, the client comes from the game's own website, so the login
+-- server is that site (ot-client#96): the page's host, and the login port the
+-- page gives (window.otclientConfig.loginPort) or 7171. The page can name
+-- another server with window.otclientConfig.server. Returns nil outside the
+-- browser. savedHost/savedPort: the last values used, kept only while the
+-- server fields are shown (developer tools) and they point at this server.
+local function webLoginServer(savedHost, savedPort)
+    if not g_platform.isBrowser() then
+        return nil
+    end
+    local host = g_platform.getBrowserConfigString('server')
+    if host == '' then
+        host = g_platform.getBrowserHost()
+    end
+    if host == '' then
+        return nil
+    end
+    local port = tonumber(g_platform.getBrowserConfigString('loginPort'))
+    if not port then
+        if developerToolsOn() and savedHost == host and tonumber(savedPort) then
+            port = tonumber(savedPort)
+        else
+            port = 7171
+        end
+    end
+    return host, port
+end
+
+-- On the web the server and port fields are hidden: players never need them.
+-- They show while developer tools are on, so other servers can be tried.
+-- Hidden, the server rows take no room: the window shrinks by their height.
+local SERVER_FIELDS = { 'serverLabel', 'serverListButton', 'serverHostTextEdit', 'portLabel', 'serverPortTextEdit' }
+-- the rows that take vertical room (the others sit beside them)
+local SERVER_ROWS = { 'serverLabel', 'serverHostTextEdit' }
+local savedLayout
+
+-- show: whether developer tools are on (default: the current setting)
+function EnterGame.applyServerFields(show)
+    if not enterGame or not g_platform.isBrowser() then
+        return
+    end
+    if show == nil then
+        show = developerToolsOn()
+    end
+    if serverFieldsShown == show then
+        return
+    end
+    if not savedLayout then
+        savedLayout = {}
+        for _, id in ipairs(SERVER_ROWS) do
+            local widget = enterGame:getChildById(id)
+            savedLayout[id] = { height = widget:getHeight(), marginTop = widget:getMarginTop() }
+        end
+    end
+    local rows = 0
+    for _, id in ipairs(SERVER_ROWS) do
+        rows = rows + savedLayout[id].height + savedLayout[id].marginTop
+    end
+    for _, id in ipairs(SERVER_FIELDS) do
+        enterGame:getChildById(id):setVisible(show)
+    end
+    -- the server rows collapse; the port (beside the client version) keeps its
+    -- size, since the rows below are placed after it
+    for _, id in ipairs(SERVER_ROWS) do
+        local widget = enterGame:getChildById(id)
+        widget:setHeight(show and savedLayout[id].height or 0)
+        widget:setMarginTop(show and savedLayout[id].marginTop or 0)
+    end
+    -- the first time (hidden) only the window shrinks; afterwards it grows
+    -- or shrinks by the same rows
+    if serverFieldsShown ~= nil or not show then
+        enterGame:setHeight(enterGame:getHeight() + (show and rows or -rows))
+    end
+    serverFieldsShown = show
+    if not show then
+        -- hidden fields always point at this site
+        local host, port = webLoginServer()
+        if host then
+            enterGame:getChildById('serverHostTextEdit'):setText(host)
+            enterGame:getChildById('serverPortTextEdit'):setText(port)
+        end
+    end
+end
+
 -- public functions
 function EnterGame.init()
     enterGame = g_ui.displayUI('entergame')
@@ -190,6 +280,12 @@ function EnterGame.init()
         port = 7171
     end
 
+    -- On the web the login server is the game's own website (ot-client#96)
+    local pageHost, pagePort = webLoginServer(host, port)
+    if pageHost then
+        host, port = pageHost, pagePort
+    end
+
     local servers = g_settings.getNode("ServerList") or {}
     local serverData = servers[host] or {}
     if serverData and serverData.account then
@@ -206,6 +302,7 @@ function EnterGame.init()
     enterGame:getChildById('serverHostTextEdit'):setText(host)
     enterGame:getChildById('serverPortTextEdit'):setText(port)
     enterGame:getChildById('stayLoggedBox'):setChecked(stayLogged)
+    EnterGame.applyServerFields()
     enterGame:getChildById('httpLoginBox'):setChecked(httpLogin)
 
     local installedClients = {}
@@ -789,6 +886,10 @@ function EnterGame.doLogin()
     G.stayLogged = enterGame:getChildById('stayLoggedBox'):isChecked()
     G.host = enterGame:getChildById('serverHostTextEdit'):getText()
     G.port = tonumber(enterGame:getChildById('serverPortTextEdit'):getText())
+    if serverFieldsShown == false then
+        -- the fields are hidden: always this site, whatever was saved
+        G.host, G.port = webLoginServer()
+    end
     local clientVersion = tonumber(clientBox:getText())
     G.clientVersion = clientVersion
     local httpLogin = enterGame:getChildById('httpLoginBox'):isChecked()

@@ -144,6 +144,7 @@ void Application::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_platform", "isConsole", &Platform::isConsole, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getBrowserConfigFlag", &Platform::getBrowserConfigFlag, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getBrowserConfigString", &Platform::getBrowserConfigString, &g_platform);
+    g_lua.bindSingletonFunction("g_platform", "getBrowserHost", &Platform::getBrowserHost, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getBrowserInfo", &Platform::getBrowserInfo, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "downloadFile", &Platform::downloadFile, &g_platform);
     g_lua.bindSingletonFunction("g_platform", "getGamepadButtons", &Platform::getGamepadButtons, &g_platform);

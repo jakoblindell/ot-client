@@ -508,11 +508,15 @@ end
 
 -- Shows or hides the developer tool buttons, closing open tools when hidden
 function applyDeveloperTools(playerChoice)
+    local enabled = isDeveloperToolsEnabled(playerChoice)
+    -- the login window's server fields (web, ot-client#96)
+    if EnterGame and EnterGame.applyServerFields then
+        EnterGame.applyServerFields(enabled)
+    end
     local topMenu = modules.client_topmenu and modules.client_topmenu.getTopMenu()
     if not topMenu then
         return
     end
-    local enabled = isDeveloperToolsEnabled(playerChoice)
     for _, id in ipairs(DEVELOPER_TOOL_BUTTONS) do
         local button = topMenu:recursiveGetChildById(id)
         if button then

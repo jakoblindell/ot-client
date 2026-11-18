@@ -248,6 +248,21 @@ public:
         return result;
 #endif
     }
+    // The host name of the page the web client was loaded from
+    // (location.hostname); "" outside the browser (ot-client#96).
+    std::string getBrowserHost() {
+#ifndef __EMSCRIPTEN__
+        return {};
+#else
+        char* value = (char*)MAIN_THREAD_EM_ASM_PTR({
+            return stringToNewUTF8(String(window.location.hostname || ''));
+        });
+        if (!value) return {};
+        std::string result(value);
+        free(value);
+        return result;
+#endif
+    }
     // The first connected game controller (browser Gamepad API, standard
     // mapping): the pressed buttons as bits (bit 0 is button 0), -1 when
     // there is none. Browsers report a controller only after one of its
