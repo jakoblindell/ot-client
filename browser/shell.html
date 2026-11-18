@@ -63,12 +63,7 @@
     </style>
   </head>
   <body>
-    <div
-      class="title"
-      id="title-text"
-      contenteditable
-      virtualkeyboardpolicy="manual"
-    ></div>
+    <div class="title" id="title-text"></div>
     <button id="start" onclick="startGame()">Start</button>
     <canvas
       class="backbuffer"
@@ -77,6 +72,170 @@
       tabindex="0"
     ></canvas>
     <script type="text/javascript">
+      // The on-screen keyboard for touch screens (ot-client#95).
+      //
+      // Phone browsers open their keyboard only when a text input is focused
+      // inside the tap itself. The engine runs in a worker and sees the tap
+      // too late, so it tells this page where its editable text fields are
+      // (window.otTextInputs, from UIManager::publishTextInputs). A tap on
+      // one focuses the hidden input below; what is typed into it goes to the
+      // engine as key events, and the input is emptied again.
+      (function () {
+        var input = document.createElement("input");
+        input.id = "touch-text-input";
+        input.setAttribute("autocomplete", "off");
+        input.setAttribute("autocapitalize", "off");
+        input.setAttribute("autocorrect", "off");
+        input.setAttribute("spellcheck", "false");
+        input.setAttribute("enterkeyhint", "done");
+        input.setAttribute("aria-hidden", "true");
+        // 16px: iOS zooms into inputs with smaller text
+        input.style.cssText =
+          "position:fixed;left:0;top:0;width:2px;height:2px;padding:0;margin:0;border:0;" +
+          "opacity:0;font-size:16px;pointer-events:none;z-index:0;";
+
+        // The input keeps one character, so that Backspace on an "empty"
+        // field still changes it (and arrives as an input event).
+        var SENTINEL = " ";
+        var last = SENTINEL;
+        var composing = false;
+        var focusedAt = 0;
+        var touchStart = null;
+        var engineFocused = false;
+
+        function reset() {
+          input.value = SENTINEL;
+          last = SENTINEL;
+          try {
+            input.setSelectionRange(SENTINEL.length, SENTINEL.length);
+          } catch (e) {}
+        }
+        function sendKey(type, key, code) {
+          window.dispatchEvent(new KeyboardEvent(type, { key: key, code: code || "", bubbles: true, cancelable: true }));
+        }
+        function press(key) {
+          sendKey("keydown", key, key);
+          if (key === "Enter") sendKey("keypress", key, key);
+          sendKey("keyup", key, key);
+        }
+        function typeText(text) {
+          Array.from(text).forEach(function (ch) {
+            sendKey("keypress", ch);
+          });
+        }
+        function setHidden(hidden) {
+          var type = hidden ? "password" : "text";
+          if (input.type !== type) {
+            input.type = type;
+            reset();
+          }
+        }
+
+        input.addEventListener("compositionstart", function () {
+          composing = true;
+        });
+        input.addEventListener("compositionend", function () {
+          composing = false;
+        });
+        input.addEventListener("input", function (ev) {
+          var value = input.value;
+          if (ev.inputType === "insertFromPaste") {
+            // pasting already goes to the engine through the page's paste handler
+            reset();
+            return;
+          }
+          // what changed since last time: characters removed at the end,
+          // then characters added (also covers keyboards that rewrite a word)
+          var same = 0;
+          while (same < last.length && same < value.length && last[same] === value[same]) same++;
+          for (var i = same; i < last.length; i++) press("Backspace");
+          typeText(value.slice(same));
+          last = value;
+          if (!composing && (value.length === 0 || value.length > 64 || value.indexOf(SENTINEL) !== 0)) reset();
+        });
+
+        // Real key events from the input (hardware keyboards, and phones that
+        // send them): text and Backspace already come from the input event
+        // above, so they stop here, before the engine's own listeners. Enter
+        // is sent once. Other keys (arrows, Tab, Escape, shortcuts) go on to
+        // the engine as before.
+        ["keydown", "keypress", "keyup"].forEach(function (type) {
+          window.addEventListener(type, function (ev) {
+            if (ev.target !== input || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+            var key = ev.key || "";
+            if (key === "Enter" || ev.keyCode === 13) {
+              ev.stopImmediatePropagation();
+              ev.preventDefault();
+              if (type === "keydown") press("Enter");
+              return;
+            }
+            if (key.length > 1 && key !== "Backspace" && key !== "Unidentified" && key !== "Process" && key !== "Dead") return;
+            ev.stopImmediatePropagation();
+          }, true);
+        });
+
+        function fieldAt(clientX, clientY) {
+          var data = window.otTextInputs;
+          var canvas = document.getElementById("canvas");
+          if (!data || !data.fields || !canvas) return null;
+          var r = canvas.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0) return null;
+          var x = (clientX - r.left) / r.width;
+          var y = (clientY - r.top) / r.height;
+          var hit = null;
+          // later fields are drawn later (on top)
+          data.fields.forEach(function (f) {
+            if (x >= f[0] && x <= f[0] + f[2] && y >= f[1] && y <= f[1] + f[3]) hit = f;
+          });
+          return hit;
+        }
+
+        window.addEventListener("touchstart", function (ev) {
+          var t = ev.changedTouches && ev.changedTouches[0];
+          touchStart = t ? { x: t.clientX, y: t.clientY } : null;
+        }, { capture: true, passive: true });
+
+        window.addEventListener("touchend", function (ev) {
+          var t = ev.changedTouches && ev.changedTouches[0];
+          if (!t) return;
+          // a drag (scrolling a list) is not a tap
+          if (touchStart && Math.abs(t.clientX - touchStart.x) + Math.abs(t.clientY - touchStart.y) > 12) return;
+          var field = fieldAt(t.clientX, t.clientY);
+          if (field) {
+            if (!input.isConnected) document.body.appendChild(input);
+            setHidden(field[4] === 1);
+            input.style.left = Math.max(0, Math.min(t.clientX, window.innerWidth - 4)) + "px";
+            input.style.top = Math.max(0, Math.min(t.clientY, window.innerHeight - 4)) + "px";
+            if (document.activeElement !== input) reset();
+            input.focus({ preventScroll: true });
+            focusedAt = Date.now();
+            engineFocused = false;
+          } else if (document.activeElement === input) {
+            input.blur();
+          }
+        }, { capture: true, passive: true });
+
+        // The engine's text field lost the focus (for example after Enter
+        // logs in): close the keyboard. Only once the engine has reported a
+        // focused field since the tap, and not right after it (the engine
+        // may not have seen the tap yet).
+        window.otTextInputsChanged = function () {
+          var data = window.otTextInputs || {};
+          if (document.activeElement !== input) return;
+          if (data.focus) {
+            engineFocused = true;
+            setHidden(data.focus === 2);
+          } else if (engineFocused && Date.now() - focusedAt > 800) {
+            input.blur();
+          }
+        };
+
+        document.addEventListener("DOMContentLoaded", function () {
+          document.body.appendChild(input);
+        });
+        if (document.body) document.body.appendChild(input);
+      })();
+
       var canvas = document.getElementById("canvas");
       function reportRuntimeError(prefix, error) {
         const payload = [prefix, error]

@@ -297,58 +297,8 @@ void BrowserWindow::poll() {
                 Module["ccall"]("paste_return", "number",["string", "number"],[event.clipboardData.getData("text/plain"), $0]);
             });
         }, this);
-        MAIN_THREAD_ASYNC_EM_ASM({
-            if (navigator && "virtualKeyboard" in navigator && (/iphone|ipod|ipad|android/i).test(navigator.userAgent)) {
-                navigator.virtualKeyboard.overlaysContent = true;
-                const textInput = document.getElementById("title-text");
-                const DOM_VK_BACK_SPACE = 8;
-                const DOM_VK_RETURN = 13;
-                const DOM_ANDROID_CODE = 229; //https://stackoverflow.com/questions/36753548/keycode-on-android-is-always-229
-                textInput.addEventListener("input", function(ev) {
-                    textInput.innerHTML = "";
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                });
-                textInput.addEventListener("keydown", function(ev) {
-                    if (ev.which === DOM_VK_BACK_SPACE) {
-                        const options = {
-                            code: 'Backspace',
-                            key : 'Backspace',
-                            keyCode : DOM_VK_BACK_SPACE,
-                            which : DOM_VK_BACK_SPACE
-                        };
-                        window.dispatchEvent(new KeyboardEvent('keydown', options));
-                        window.dispatchEvent(new KeyboardEvent('keyup', options));
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                    }
-                    if (ev.which === DOM_VK_RETURN) {
-                        const options = {
-                            charCode: DOM_VK_RETURN,
-                            code : 'Enter',
-                            key : 'Enter',
-                            keyCode : DOM_VK_RETURN,
-                            which : DOM_VK_RETURN
-                        };
-                        window.dispatchEvent(new KeyboardEvent('keydown', options));
-                        window.dispatchEvent(new KeyboardEvent('keypress', options));
-                        window.dispatchEvent(new KeyboardEvent('keyup', options));
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                    }
-                    if (ev.which === DOM_ANDROID_CODE) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                    }
-                });
-                textInput.addEventListener("keyup", function(ev) {
-                    if (ev.which === DOM_VK_BACK_SPACE || ev.which === DOM_VK_RETURN || ev.which === DOM_ANDROID_CODE) {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                    }
-                });
-            }
-        });
+        // (the on-screen keyboard for touch screens is in browser/shell.html,
+        // fed by UIManager::publishTextInputs, ot-client#95)
         // clang-format on
 
         m_onResize(m_size);

@@ -1664,16 +1664,6 @@ bool UITextEdit::onMousePress(const Point& mousePos, const Fw::MouseButton butto
                 setCursorPos(pos, false);
             }
         }
-#ifdef __EMSCRIPTEN__
-        if (g_window.isVisible()) {
-            MAIN_THREAD_ASYNC_EM_ASM({
-                if (navigator && "virtualKeyboard" in navigator) {
-                    document.getElementById("title-text").focus();
-                    navigator.virtualKeyboard.show();
-                }
-            });
-        }
-#endif
         return true;
     }
 
