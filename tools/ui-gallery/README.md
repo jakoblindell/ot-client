@@ -25,6 +25,7 @@ with saved baseline images on every pull request (ot-client#70).
 | `achievements` | Journal › Achievements: unlocked, in progress, hidden |
 | `npc` | the NPC dialog with a sample NPC (text, keywords, shop) |
 | `hotbar` | the hotbar settings sheet |
+| `outfit` | the outfit screen for touch screens, with sample outfits |
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock

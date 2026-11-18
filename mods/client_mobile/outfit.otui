@@ -1,0 +1,90 @@
+// The outfit screen for touch screens (ot-client#101): fits a phone in both
+// orientations. outfit.lua places the parts for the screen's shape.
+
+// One colour of the grid: the colour itself (set from Lua), a gold edge
+// when chosen
+MobileOutfitColor < UICheckBox
+  focusable: false
+  border-width: 1
+  border-color: #00000080
+  $checked:
+    border-width: 2
+    border-color: $ot-gold
+
+MobileOutfitSheet < OtBackdrop
+  OtPanel
+    id: panel
+
+    OtTitle
+      id: title
+      !text: tr('Your outfit')
+
+    OtIconButton
+      id: close
+      !text: 'X'
+
+    OtInset
+      id: preview
+
+      UICreature
+        id: creature
+        anchors.centerIn: parent
+        phantom: true
+
+    OtIconButton
+      id: prev
+      !text: '<'
+
+    OtLabel
+      id: name
+      text-align: center
+
+    OtIconButton
+      id: next
+      !text: '>'
+
+    UIWidget
+      id: addons
+
+      OtCheck
+        id: addon1
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+
+      OtLabel
+        id: addon1Label
+        anchors.left: addon1.right
+        anchors.verticalCenter: parent.verticalCenter
+        text-auto-resize: true
+        !text: tr('Addon 1')
+
+      OtCheck
+        id: addon2
+        anchors.left: addon1Label.right
+        anchors.verticalCenter: parent.verticalCenter
+        margin-left: 12
+
+      OtLabel
+        id: addon2Label
+        anchors.left: addon2.right
+        anchors.verticalCenter: parent.verticalCenter
+        text-auto-resize: true
+        !text: tr('Addon 2')
+
+    OtTabRow
+      id: parts
+
+    UIWidget
+      id: colors
+      layout:
+        type: grid
+        cell-size: 20 20
+        flow: true
+
+    OtButton
+      id: cancel
+      !text: tr('Cancel')
+
+    OtButtonPrimary
+      id: ok
+      !text: tr('OK')
