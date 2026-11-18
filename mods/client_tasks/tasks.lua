@@ -123,6 +123,13 @@ local function onTasks(protocol, opcode, buffer)
         modules.client_report.onToken(data.reportToken)
         return
     end
+    -- a moment to take a picture of (client_moments, ot-client#25)
+    if type(data.moment) == 'table' then
+        if modules.client_moments and modules.client_moments.onMoment then
+            modules.client_moments.onMoment(data.moment)
+        end
+        return
+    end
     -- the hub's character sheet (client_mobile, character.lua)
     if type(data.character) == 'table' then
         local mobile = modules.client_mobile

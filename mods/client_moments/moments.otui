@@ -1,0 +1,84 @@
+// Moments (moments.lua, ot-client#25): the character sheet's Screenshots tab
+
+// What to capture: a check and its name, two to a row
+MomentToggles < UIWidget
+  layout:
+    type: grid
+    cell-size: 200 40
+    cell-spacing: 2
+    flow: true
+    fit-children: true
+
+MomentToggle < UIWidget
+  phantom: true
+
+  OtCheck
+    id: check
+    anchors.left: parent.left
+    anchors.verticalCenter: parent.verticalCenter
+
+  OtLabel
+    id: label
+    anchors.left: check.right
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 4
+    text-auto-resize: true
+    phantom: false
+
+// The pictures, two to a row
+MomentGrid < UIWidget
+  margin-top: 8
+  layout:
+    type: grid
+    cell-size: 200 196
+    cell-spacing: 8
+    flow: true
+    fit-children: true
+
+// One picture: the screenshot, its caption, Save and Delete
+MomentCard < OtInset
+  padding: 4
+
+  UIWidget
+    id: picture
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 110
+    image-smooth: true
+    image-fixed-ratio: true
+    phantom: false
+
+  OtLabel
+    id: caption
+    anchors.top: picture.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    margin-top: 4
+    height: 16
+    text-auto-resize: false
+
+  OtHint
+    id: detail
+    anchors.top: caption.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+    height: 14
+    text-wrap: false
+    text-auto-resize: false
+
+  OtButton
+    id: save
+    anchors.left: parent.left
+    anchors.bottom: parent.bottom
+    width: 86
+    height: 32
+    !text: tr('Save')
+
+  OtButtonDanger
+    id: delete
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    width: 86
+    height: 32
+    !text: tr('Delete')

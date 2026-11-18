@@ -171,6 +171,31 @@ public:
         }, key.c_str());
 #endif
     }
+    // Browser: hands a file of the virtual file system (an absolute path, like
+    // getWriteDir() .. "moments/1.png") to the browser as a download named
+    // name (Moments' Save, ot-client#25). false outside the browser.
+    bool downloadFile(const std::string& path, const std::string& name) {
+#ifndef __EMSCRIPTEN__
+        (void)path; (void)name;
+        return false;
+#else
+        return MAIN_THREAD_EM_ASM_INT({
+            try {
+                var data = FS.readFile(UTF8ToString($0));
+                var link = document.createElement('a');
+                link.href = URL.createObjectURL(new Blob([data]));
+                link.download = UTF8ToString($1);
+                document.body.appendChild(link);
+                link.click();
+                setTimeout(function () { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
+                return 1;
+            } catch (e) {
+                return 0;
+            }
+        }, path.c_str(), name.c_str()) == 1;
+#endif
+    }
+
     // The browser and device, as JSON (bug reports, ot-client#67): user
     // agent, screen and window sizes, pixel ratio, orientation, language,
     // installed-app mode, CPU cores and memory when the browser says. "{}"
