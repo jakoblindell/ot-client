@@ -1029,6 +1029,7 @@ local function onGameEnd()
     stopGameInfo()
     setupOfferReady = false
     stopUiSetup()
+    closeOutfitSheet()
     stopEditLayout()
     setHotbarEditing(false)
 end
@@ -1074,6 +1075,7 @@ function init()
     g_ui.importStyle('mobile')
     g_ui.importStyle('hotbar_sheet')
     g_ui.importStyle('hub')
+    g_ui.importStyle('outfit')
     initTap()
     -- Long press on a hotbar slot opens the touch sheet instead of the menu
     if modules.game_actionbar then

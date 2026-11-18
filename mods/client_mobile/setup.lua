@@ -69,6 +69,8 @@ local function showSheet(title, text, skipText, skipAction, startText, startActi
         panel.skip.onClick = function()
             closeSheet()
             skipAction()
+            -- an outfit screen that waited for the setup (outfit.lua)
+            outfitSheetAfterSetup()
         end
     else
         panel.start:addAnchor(AnchorLeft, 'parent', AnchorLeft)
@@ -78,6 +80,9 @@ local function showSheet(title, text, skipText, skipAction, startText, startActi
     panel.start.onClick = function()
         closeSheet()
         startAction()
+        if not steps then
+            outfitSheetAfterSetup()
+        end
     end
     sheet:raise()
 end
@@ -220,10 +225,29 @@ function isUiSetupRunning()
     return steps ~= nil
 end
 
+-- The setup's sheet or its steps are on the screen (the outfit screen waits)
+function isUiSetupBusy()
+    return steps ~= nil or sheet ~= nil
+end
+
+-- The outfit screen (outfit.lua) is open on the first login: the offer
+-- waits until it closes, so the two never overlap
+local waitingForOutfit = false
+onOutfitSheetClosed(function()
+    if waitingForOutfit then
+        waitingForOutfit = false
+        addEvent(offerUiSetup)
+    end
+end)
+
 -- On login and after turning the screen: offered once per character and
 -- orientation, unless the player already arranged this orientation
 function offerUiSetup()
     if steps or sheet or not g_game.isOnline() or setupDone() then
+        return
+    end
+    if isOutfitSheetOpen() then
+        waitingForOutfit = true
         return
     end
     if hasSavedLayout() then
@@ -241,6 +265,7 @@ end
 
 -- Logged out in the middle of it
 function stopUiSetup()
+    waitingForOutfit = false
     closeSheet()
     if steps then
         stopPlacingPiece()

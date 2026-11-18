@@ -22,7 +22,7 @@ const path = require('path');
 const http = require('http');
 const { chromium } = require(process.env.PW_MODULE || 'playwright');
 
-const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar'];
+const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit'];
 
 // Landscape, as the game is played. mobile: the touch layout (chosen from the
 // user agent). config: extra window.otclientConfig settings.
