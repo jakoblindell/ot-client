@@ -482,11 +482,11 @@ function translateVocation(id)
   return 0
 end
 
--- Developer tools (terminal, debug info, OTUI editor): shown by default for
--- now. A player can turn them off in Options > Misc; the deployment can force
--- them on or off for everyone with window.otclientConfig = { developerTools:
--- false } in the web page.
-DEVELOPER_TOOLS_DEFAULT = true
+-- Developer tools (terminal, debug info, OTUI editor; on the web also the
+-- login's server fields): off by default. A player can turn them on in
+-- Options > Misc; the deployment can force them on or off for everyone with
+-- window.otclientConfig = { developerTools: true/false } in the web page.
+DEVELOPER_TOOLS_DEFAULT = false
 DEVELOPER_TOOL_BUTTONS = { 'terminalButton', 'debugInfoButton', 'otuiEditorButton' }
 
 function isDeveloperToolsForced()
