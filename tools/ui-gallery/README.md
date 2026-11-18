@@ -30,7 +30,7 @@ Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock
 is pinned to 2026-01-01 12:00 so the hub's time never changes a screenshot.
 
-Devices (all landscape):
+Devices:
 
 | Device | Screen | Pixel ratio | Notes |
 |---|---|---|---|
@@ -38,6 +38,8 @@ Devices (all landscape):
 | `phone-big` | 932×430 | 3 | |
 | `phone-big-sharp` | 932×430 | 3 | Sharpness High |
 | `tablet` | 1180×820 | 2 | |
+| `iphone-portrait` | 393×660 | 3 | iPhone in portrait (the page area under Safari's toolbars) |
+| `iphone-rotated` | 393×660 → 852×375 | 3 | opened in portrait, turned to landscape before the screenshot |
 | `desktop` | 1366×768 | 1 | |
 | `desktop-scale-1.5` | 1366×768 | 1 | interface scale 1.5 |
 

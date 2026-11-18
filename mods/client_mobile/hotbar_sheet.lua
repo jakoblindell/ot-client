@@ -390,10 +390,23 @@ function openHotbarSheet(button)
     sheet.onEscape = closeSheet
 
     local panel = sheet.panel
-    local width = math.min(460, rootWidget:getWidth() - 16)
-    local height = math.max(300, math.min(640, rootWidget:getHeight() - 16))
-    panel:setSize({ width = width, height = height })
-    panel.tabs:getLayout():setCellSize({ width = math.floor((width - 24 - 18) / 4), height = 40 })
+    local function fit()
+        local width = math.min(460, rootWidget:getWidth() - 16)
+        local height = math.max(300, math.min(640, rootWidget:getHeight() - 16))
+        panel:setSize({ width = width, height = height })
+        panel.tabs:getLayout():setCellSize({ width = math.floor((width - 24 - 18) / 4), height = 40 })
+    end
+    fit()
+    -- The screen turned or resized while open: fit it again
+    sheet.onGeometryChange = function(widget, oldRect, newRect)
+        if oldRect.width > 0 and (oldRect.width ~= newRect.width or oldRect.height ~= newRect.height) then
+            addEvent(function()
+                if sheet == widget then
+                    fit()
+                end
+            end)
+        end
+    end
     local _, buttonId = slotIds()
     panel.title:setText(tr('Slot %s', button.hotkeyLabel and button.hotkeyLabel:getText() ~= '' and
         button.hotkeyLabel:getText() or tostring(buttonId)))

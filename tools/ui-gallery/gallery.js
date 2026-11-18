@@ -24,15 +24,22 @@ const { chromium } = require(process.env.PW_MODULE || 'playwright');
 
 const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar'];
 
-// Landscape, as the game is played. mobile: the touch layout (chosen from the
-// user agent). config: extra window.otclientConfig settings.
+// Mostly landscape, as the game is played, plus an iPhone in portrait and one
+// turned to landscape after the page loaded (the screen resized under a
+// running client). mobile: the touch layout (chosen from the user agent).
+// config: extra window.otclientConfig settings. rotateTo: the screen size
+// the page is resized to once it is ready, before the screenshot.
 const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
 const IPAD = 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const DEVICES = [
     { name: 'phone-small', width: 667, height: 375, ratio: 2, mobile: true, ua: ANDROID },
     { name: 'phone-big', width: 932, height: 430, ratio: 3, mobile: true, ua: ANDROID },
     { name: 'phone-big-sharp', width: 932, height: 430, ratio: 3, mobile: true, ua: ANDROID, config: { sharpness: 2 } },
     { name: 'tablet', width: 1180, height: 820, ratio: 2, mobile: true, ua: IPAD },
+    // iPhone 15 Pro, the page area under Safari's toolbars
+    { name: 'iphone-portrait', width: 393, height: 660, ratio: 3, mobile: true, ua: IPHONE },
+    { name: 'iphone-rotated', width: 393, height: 660, ratio: 3, mobile: true, ua: IPHONE, rotateTo: { width: 852, height: 375 } },
     { name: 'desktop', width: 1366, height: 768, ratio: 1, mobile: false },
     { name: 'desktop-scale-1.5', width: 1366, height: 768, ratio: 1, mobile: false, config: { galleryHudScale: 1.5 } },
 ];
@@ -98,6 +105,10 @@ async function capture(context, base, device, page, file) {
         // the page's loading text sits over the canvas
         await tab.addStyleTag({ content: '#title-text, #start { display: none !important; }' });
         await Promise.race([ready, new Promise((_, reject) => setTimeout(() => reject(new Error('no "[gallery] ready" within 120 s')), 120000))]);
+        if (device.rotateTo) {
+            await tab.setViewportSize(device.rotateTo);
+            await tab.waitForTimeout(1500);
+        }
         await tab.waitForTimeout(300);
         await tab.screenshot({ path: file });
         return null;
@@ -182,7 +193,7 @@ function report(outDir, results, devices, pages) {
         return `<td class="${r.status === 'changed' ? 'bad' : r.status === 'new' ? 'new' : ''}">${status}${images.join('')}</td>`;
     };
     const rows = pages.map((p) => `<tr><th>${p}</th>${devices.map((d) => cell(results[d.name + '/' + p])).join('')}</tr>`).join('\n');
-    const head = devices.map((d) => `<th>${d.name}<br><small>${d.width}×${d.height} @${d.ratio}x${d.config ? ' ' + JSON.stringify(d.config) : ''}</small></th>`).join('');
+    const head = devices.map((d) => `<th>${d.name}<br><small>${d.width}×${d.height}${d.rotateTo ? ' → ' + d.rotateTo.width + '×' + d.rotateTo.height : ''} @${d.ratio}x${d.config ? ' ' + JSON.stringify(d.config) : ''}</small></th>`).join('');
     fs.writeFileSync(path.join(outDir, 'report.html'), `<!doctype html><meta charset="utf-8"><title>UI gallery</title>
 <style>body{font:14px system-ui;background:#111;color:#ddd;margin:16px}table{border-collapse:collapse}td,th{border:1px solid #333;padding:6px;vertical-align:top}
 img{max-width:360px;display:block;margin-top:4px;image-rendering:pixelated}td.bad{background:#401818}td.new{background:#183018}pre{white-space:pre-wrap;max-width:360px;font-size:11px}</style>
