@@ -190,6 +190,25 @@ function EnterGame.init()
         port = 7171
     end
 
+    -- On the web, the client comes from the game's own website, so the login
+    -- server is that site (ot-client#96). The page can say otherwise with
+    -- window.otclientConfig.server and .loginPort.
+    if g_platform.isBrowser() then
+        local pageHost = g_platform.getBrowserConfigString('server')
+        if pageHost == '' then
+            pageHost = g_platform.getBrowserHost()
+        end
+        local pagePort = tonumber(g_platform.getBrowserConfigString('loginPort'))
+        if pageHost ~= '' then
+            if pagePort then
+                port = pagePort
+            elseif host ~= pageHost then
+                port = 7171
+            end
+            host = pageHost
+        end
+    end
+
     local servers = g_settings.getNode("ServerList") or {}
     local serverData = servers[host] or {}
     if serverData and serverData.account then
