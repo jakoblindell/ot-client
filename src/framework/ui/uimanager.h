@@ -54,6 +54,9 @@ public:
     bool touchEnd(int64_t touchId, const Point& pos, bool cancelled, bool longPress);
     // Ends the current mouse press without a click or drop (touch long press)
     void cancelMousePress();
+    // Web build: tells the page where the editable text fields are, so a tap
+    // on one can open the phone's keyboard (ot-client#95). No-op elsewhere.
+    void publishTextInputs();
 
     void clearStyles();
     bool importStyle(const std::string& fl, bool checkDeviceStyles = true);

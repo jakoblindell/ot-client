@@ -23,6 +23,12 @@
 #include <framework/graphics/drawpoolmanager.h>
 
 #include "uiwidget.h"
+#include "uitextedit.h"
+#include "framework/core/clock.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/threading.h>
+#endif
 #include "framework/core/eventdispatcher.h"
 #include "framework/core/modulemanager.h"
 #include "framework/core/resourcemanager.h"
@@ -278,6 +284,89 @@ void UIManager::cancelMousePress()
         else
             updatePressedWidget(nullptr, {}, false);
     }
+}
+
+// The page's main thread has to open the phone's keyboard inside the tap
+// itself, before the engine (in a worker) has seen the tap. So the engine
+// tells the page, a few times a second, where the editable text fields are
+// (as fractions of the canvas), which ones hide their text, and whether a
+// text field has the focus. The page hit-tests taps against that list
+// (browser/shell.html).
+void UIManager::publishTextInputs()
+{
+#ifdef __EMSCRIPTEN__
+    static ticks_t lastCheck = 0;
+    static std::string lastPublished;
+
+    const ticks_t now = g_clock.millis();
+    if (now - lastCheck < 100)
+        return;
+    lastCheck = now;
+
+    if (!m_rootWidget)
+        return;
+    const Rect rootRect = m_rootWidget->getRect();
+    if (rootRect.width() <= 0 || rootRect.height() <= 0)
+        return;
+
+    std::string fields;
+    const auto add = [&](const UITextEditPtr& textEdit, const Rect& visible) {
+        // a field covered by another widget (a window on top) does not count
+        const auto top = m_rootWidget->recursiveGetChildByPos(visible.center(), false);
+        bool onTop = false;
+        for (auto widget = top; widget; widget = widget->getParent()) {
+            if (widget == textEdit) {
+                onTop = true;
+                break;
+            }
+        }
+        if (!onTop)
+            return;
+        if (!fields.empty())
+            fields += ',';
+        fields += fmt::format("[{:.4f},{:.4f},{:.4f},{:.4f},{}]",
+                              static_cast<double>(visible.x() - rootRect.x()) / rootRect.width(),
+                              static_cast<double>(visible.y() - rootRect.y()) / rootRect.height(),
+                              static_cast<double>(visible.width()) / rootRect.width(),
+                              static_cast<double>(visible.height()) / rootRect.height(),
+                              textEdit->isTextHidden() ? 1 : 0);
+    };
+    const std::function<void(const UIWidgetPtr&, Rect)> visit = [&](const UIWidgetPtr& widget, Rect clip) {
+        if (!widget->isVisible())
+            return;
+        const Rect rect = widget->getRect().intersection(clip);
+        if (!rect.isValid() || rect.width() <= 0 || rect.height() <= 0)
+            return;
+        if (widget->isClipping())
+            clip = rect;
+        if (const auto textEdit = std::dynamic_pointer_cast<UITextEdit>(widget)) {
+            if (textEdit->isEditable() && textEdit->isEnabled())
+                add(textEdit, rect);
+        }
+        for (const auto& child : widget->getChildren())
+            visit(child, clip);
+    };
+    visit(m_rootWidget, rootRect);
+
+    // the focused text field: the last one along the focus chain (a field
+    // can have a focused child of its own, such as a hidden-text overlay)
+    int focus = 0; // 0 none, 1 a text field, 2 a field that hides its text
+    for (auto widget = m_rootWidget; widget; widget = widget->getFocusedChild()) {
+        if (const auto textEdit = std::dynamic_pointer_cast<UITextEdit>(widget)) {
+            if (textEdit->isEditable())
+                focus = textEdit->isTextHidden() ? 2 : 1;
+        }
+    }
+
+    std::string published = fmt::format("{{\"fields\":[{}],\"focus\":{}}}", fields, focus);
+    if (published == lastPublished)
+        return;
+    lastPublished = published;
+    MAIN_THREAD_EM_ASM({
+        window.otTextInputs = JSON.parse(UTF8ToString($0));
+        if (window.otTextInputsChanged) window.otTextInputsChanged();
+    }, published.c_str());
+#endif
 }
 
 void  UIManager::updatePressedWidgetHTML(const UIWidgetList& newPressed, const Point& clickedPos, bool fireClicks) {

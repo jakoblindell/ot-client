@@ -309,6 +309,10 @@ void GraphicalApplication::poll()
 
     g_particles.poll();
 
+#ifdef __EMSCRIPTEN__
+    g_ui.publishTextInputs();
+#endif
+
     if (!g_window.isVisible()) {
         g_textDispatcher.poll();
     }
