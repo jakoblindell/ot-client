@@ -247,7 +247,7 @@ void MapView::drawLights() {
 }
 
 void MapView::drawCreatureInformation() {
-    g_drawPool.scale(g_app.getCreatureInformationScale());
+    g_drawPool.scale(g_app.getCreatureInformationScaleFor(m_posInfo.scaleFactor * std::min(m_posInfo.horizontalStretchFactor, m_posInfo.verticalStretchFactor)));
 
     uint32_t flags = Otc::DrawThings;
     if (m_drawNames) { flags |= Otc::DrawNames; }

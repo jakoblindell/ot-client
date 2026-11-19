@@ -111,6 +111,18 @@ public:
 
     float getCreatureInformationScale() const { return m_creatureInformationScale; }
     void setCreatureInformationScale(const float v) { m_creatureInformationScale = v; }
+    // Names and bars sized with the map (the touch layout, ot-client#112):
+    // their scale is this factor times the map's zoom. 0: the fixed scale
+    // above, as on desktop
+    float getCreatureInformationMapScale() const { return m_creatureInformationMapScale; }
+    void setCreatureInformationMapScale(const float v) { m_creatureInformationMapScale = std::max(0.f, v); }
+    // The scale names and bars are drawn at, for a map drawn mapZoom times
+    // its sprites' size
+    float getCreatureInformationScaleFor(const float mapZoom) const {
+        if (m_creatureInformationMapScale <= 0.f || mapZoom <= 0.f)
+            return m_creatureInformationScale;
+        return std::max(0.5f, m_creatureInformationMapScale * mapZoom);
+    }
 
     float getAnimatedTextScale() const { return m_animatedTextScale; }
     void setAnimatedTextScale(const float v) { m_animatedTextScale = v; }
@@ -156,6 +168,7 @@ private:
     bool m_loadingAsyncTexture{ false };
 
     float m_creatureInformationScale{ DEFAULT_DISPLAY_DENSITY };
+    float m_creatureInformationMapScale{ 0.f };
     float m_animatedTextScale{ DEFAULT_DISPLAY_DENSITY };
     float m_staticTextScale{ DEFAULT_DISPLAY_DENSITY };
 
