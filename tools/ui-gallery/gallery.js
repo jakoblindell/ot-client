@@ -23,7 +23,14 @@ const http = require('http');
 const { chromium } = require(process.env.PW_MODULE || 'playwright');
 
 const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar',
-    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization'];
+    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard'];
+
+// Pages shown with the on-screen keyboard open (touch devices only): the
+// page tells the game the part of the canvas above the keyboard, as
+// shell.html does from visualViewport (keyboardVisibleTop/Bottom). Assumed
+// keyboard heights: 300 px in portrait, 210 px in landscape (iPhone).
+const KEYBOARD_PAGES = new Set(['letter-keyboard', 'house-list-keyboard']);
 
 // Mostly landscape, as the game is played, plus an iPhone in portrait and one
 // turned to landscape after the page loaded (the screen resized under a
@@ -93,6 +100,20 @@ async function capture(context, base, device, page, file, clipped) {
     try {
         const config = Object.assign({ gallery: page }, device.config || {});
         await tab.addInitScript((c) => { window.otclientConfig = Object.assign(window.otclientConfig || {}, c); }, config);
+        if (KEYBOARD_PAGES.has(page)) {
+            // (again and again: the page clears them when its own text input
+            // loses focus, and the screen may turn)
+            await tab.addInitScript(() => {
+                const set = () => {
+                    const c = (window.otclientConfig = window.otclientConfig || {});
+                    const w = window.innerWidth, h = window.innerHeight;
+                    c.keyboardVisibleTop = '0';
+                    c.keyboardVisibleBottom = ((h - (h > w ? 300 : 210)) / h).toFixed(4);
+                };
+                set();
+                setInterval(set, 100);
+            });
+        }
         let markChecked;
         const checked = new Promise((resolve) => { markChecked = resolve; });
         const ready = new Promise((resolve, reject) => {
@@ -189,6 +210,9 @@ async function compare(browser, a, b, diffFile) {
 function report(outDir, results, devices, pages) {
     const cell = (r) => {
         const rel = (f) => path.relative(outDir, f).split(path.sep).join('/');
+        if (!r || r.status === 'skipped') {
+            return '<td>-</td>';
+        }
         if (r.error) {
             return `<td class="bad"><b>failed</b><pre>${r.error.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre></td>`;
         }
@@ -239,6 +263,10 @@ async function main() {
             });
             for (const page of pages) {
                 const key = device.name + '/' + page;
+                if (KEYBOARD_PAGES.has(page) && !device.mobile) {
+                    results[key] = { status: 'skipped' };
+                    continue;
+                }
                 const name = `${device.name}--${page}.png`;
                 const file = path.join(outDir, 'new', name);
                 const clipped = [];

@@ -44,13 +44,103 @@ local function fitWindow(window, areaTop, areaBottom, keyboard)
     end
 end
 
+-- Touch layouts (ot-client#124, option 1): a small modal over the dimmed game
+-- (TouchTextWindow): 16 px from the screen's edges in portrait, 470 px wide
+-- in landscape, at most 400 px high. While the keyboard is open it sits at
+-- the top of the part still visible and its text shrinks, so Save and close
+-- stay in reach. With little height (landscape with the keyboard) title,
+-- Save and close share one header row over the text.
+local TOUCH_MARGIN = 16
+local TOUCH_KEYBOARD_MARGIN = 6
+local TOUCH_LANDSCAPE_WIDTH = 470
+local TOUCH_MAX_HEIGHT = 400
+local TOUCH_COMPACT_BELOW = 220
+
+local function setTouchCompact(window, compact)
+    if window.compact == compact then
+        return
+    end
+    window.compact = compact
+    local panel = window.panel
+    local title = panel:getChildById('title')
+    local writer = panel:getChildById('writer')
+    local text = panel:getChildById('text')
+    local count = panel:getChildById('count')
+    local save = panel:getChildById('saveButton')
+
+    title:breakAnchors()
+    title:addAnchor(AnchorVerticalCenter, 'closeButton', AnchorVerticalCenter)
+    if compact then
+        title:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+        title:setMarginLeft(4)
+    else
+        title:addAnchor(AnchorHorizontalCenter, 'parent', AnchorHorizontalCenter)
+        title:setMarginLeft(0)
+    end
+
+    writer:setVisible(not compact and writer:getText() ~= '')
+
+    -- Save under the text, or in the header beside close
+    save:setVisible(window.editable)
+    save:breakAnchors()
+    if compact then
+        save:addAnchor(AnchorTop, 'closeButton', AnchorTop)
+        save:addAnchor(AnchorRight, 'closeButton', AnchorLeft)
+        save:setMarginRight(6)
+        save:setWidth(96)
+    else
+        save:addAnchor(AnchorBottom, 'parent', AnchorBottom)
+        save:addAnchor(AnchorRight, 'parent', AnchorRight)
+        save:setMarginRight(0)
+        save:setWidth(120)
+    end
+    local footer = window.editable and not compact
+    count:setVisible(footer and count:getText() ~= '')
+
+    text:breakAnchors()
+    text:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+    text:addAnchor(AnchorRight, 'textScroll', AnchorLeft)
+    text:addAnchor(AnchorTop, writer:isVisible() and 'writer' or 'closeButton', AnchorBottom)
+    text:setMarginTop(compact and 4 or 6)
+    if footer then
+        text:addAnchor(AnchorBottom, 'saveButton', AnchorTop)
+        text:setMarginBottom(8)
+    else
+        text:addAnchor(AnchorBottom, 'parent', AnchorBottom)
+        text:setMarginBottom(0)
+    end
+end
+
+local function fitTouchWindow(window, areaTop, areaBottom, keyboard)
+    local root = rootWidget
+    if not root or window:isDestroyed() then
+        return
+    end
+    local rootWidth, rootHeight = root:getWidth(), root:getHeight()
+    local width = rootWidth - 2 * TOUCH_MARGIN
+    if rootWidth > rootHeight then
+        width = math.min(TOUCH_LANDSCAPE_WIDTH, width)
+    end
+    local margin = keyboard and TOUCH_KEYBOARD_MARGIN or TOUCH_MARGIN
+    local height = math.max(0, math.min(TOUCH_MAX_HEIGHT, areaBottom - areaTop - 2 * margin))
+    setTouchCompact(window, height < TOUCH_COMPACT_BELOW)
+    local panel = window.panel
+    panel:setSize({ width = width, height = height })
+    local y = keyboard and areaTop + margin or areaTop + math.floor((areaBottom - areaTop - height) / 2)
+    panel:setPosition({ x = root:getX() + math.floor((rootWidth - width) / 2), y = y })
+end
+
 local function fitWindows()
     if not rootWidget then
         return
     end
     local areaTop, areaBottom, keyboard = visibleArea()
     for _, window in pairs(windows) do
-        fitWindow(window, areaTop, areaBottom, keyboard)
+        if window.touch then
+            fitTouchWindow(window, areaTop, areaBottom, keyboard)
+        else
+            fitWindow(window, areaTop, areaBottom, keyboard)
+        end
     end
 end
 
@@ -76,6 +166,119 @@ local function removeWindow(window)
     if #windows == 0 then
         stopKeyboardCheck()
     end
+end
+
+-- A touch text window (TouchTextWindow): Save sends the text, close (and
+-- Escape) cancels. Returns the window and its text field.
+local function openTouchWindow(title, editable, onSave)
+    local window = g_ui.createWidget('TouchTextWindow', rootWidget)
+    window.touch = true
+    window.editable = editable
+    window.panel = window:getChildById('panel')
+    window.panel:getChildById('title'):setText(title)
+    local textEdit = window.panel:getChildById('text')
+
+    local function destroy()
+        if not window:isDestroyed() then
+            window:destroy()
+        end
+        removeWindow(window)
+    end
+
+    window.panel:getChildById('closeButton').onClick = destroy
+    window.panel:getChildById('saveButton').onClick = function()
+        if editable then
+            onSave(textEdit:getText())
+        end
+        destroy()
+    end
+    window.onEscape = destroy
+    if not editable then
+        window.onEnter = destroy
+    end
+    return window, textEdit
+end
+
+local function focusTouchWindow(window, textEdit, editable)
+    window:focus()
+    window.panel:focus()
+    if editable then
+        textEdit:focus()
+        textEdit:setCursorPos(#textEdit:getText())
+    end
+end
+
+local function touchEditText(id, maxLength, text, writer, time)
+    local writeable = #text < maxLength and maxLength > 0
+    local window, textEdit = openTouchWindow(writeable and tr('Edit Text') or tr('Show Text'), writeable,
+        function(newText)
+            g_game.editText(id, newText)
+        end)
+    local panel = window.panel
+
+    textEdit:setMaxLength(maxLength)
+    textEdit:setText(text)
+    textEdit:setEditable(writeable)
+    textEdit:setCursorVisible(writeable)
+
+    local line
+    if #writer > 0 and #time > 0 then
+        line = tr('Written by %s, %s', writer, time)
+    elseif #writer > 0 then
+        line = tr('Written by %s', writer)
+    elseif #time > 0 then
+        line = tr('Written on %s', time)
+    end
+    if #text == 0 and not writeable then
+        line = (line and line .. '. ' or '') .. tr('It is empty.')
+    end
+    panel:getChildById('writer'):setText(line or '')
+
+    -- how much of the limit the text uses
+    if writeable then
+        local count = panel:getChildById('count')
+        local function update()
+            count:setText(string.format('%d / %d', #textEdit:getText(), maxLength))
+        end
+        update()
+        textEdit.onTextChange = update
+    end
+
+    focusTouchWindow(window, textEdit, writeable)
+    addWindow(window)
+end
+
+local function countNames(text)
+    local names = 0
+    for line in (text .. '\n'):gmatch('([^\n]*)\n') do
+        if line:find('%S') then
+            names = names + 1
+        end
+    end
+    return names
+end
+
+local function touchEditList(id, doorId, text)
+    local window, textEdit = openTouchWindow(tr('Edit List'), true, function(newText)
+        g_game.editList(id, doorId, newText)
+    end)
+    local panel = window.panel
+
+    textEdit:setMaxLength(8192)
+    textEdit:setText(text)
+    textEdit:setEditable(true)
+    panel:getChildById('writer'):setText(tr('One name per line.'))
+
+    local count = panel:getChildById('count')
+    local function update()
+        local names = countNames(textEdit:getText())
+        count:setText(names == 1 and tr('1 name') or tr('%d names', names))
+    end
+    update()
+    textEdit.onTextChange = update
+
+    focusTouchWindow(window, textEdit, true)
+    addWindow(window)
 end
 
 function init()
@@ -110,6 +313,9 @@ function destroyWindows()
 end
 
 function onGameEditText(id, itemId, maxLength, text, writer, time)
+    if g_platform.isMobile() then
+        return touchEditText(id, maxLength, text, writer, time)
+    end
     local textWindow = g_ui.createWidget('TextWindow', rootWidget)
 
     local writeable = #text < maxLength and maxLength > 0
@@ -197,6 +403,9 @@ function onGameEditText(id, itemId, maxLength, text, writer, time)
 end
 
 function onGameEditList(id, doorId, text)
+    if g_platform.isMobile() then
+        return touchEditList(id, doorId, text)
+    end
     local textWindow = g_ui.createWidget('TextWindow', rootWidget)
 
     local textEdit = textWindow:getChildById('text')
