@@ -1010,6 +1010,7 @@ local function onGameStart()
     setMenuVisible(false)
     -- the panels this character had open
     loadOpenedPanels()
+    settlePanels(1200)
     startGameInfo()
     if modules.game_actionbar then
         modules.game_actionbar.ActionBarAssignSheet = openHotbarSheet
@@ -1150,6 +1151,7 @@ function startLayoutPreview(panelIds, edit)
     end
     setChatVisible(false)
     setOpenedPanels(panelIds)
+    settlePanels(700)
     layout()
     -- (the action bar, the joystick and the screen settle a little later)
     scheduleEvent(layout, 200)

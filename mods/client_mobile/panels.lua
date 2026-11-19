@@ -52,6 +52,7 @@ local holders = {} -- panel id -> its piece (equipment, map and the lists)
 local opened = {} -- ids of the panels on the screen, oldest first
 local minimized = {} -- panel id -> true
 local evictPending = false -- (a panel was just opened)
+local settling = false -- (the screen is still being laid out: game start)
 
 local function gameInterface()
     return modules.game_interface
@@ -528,10 +529,11 @@ function placePanels(regions)
         return (indexOf(a.id) or 1000) < (indexOf(b.id) or 1000)
     end)
 
-    -- A panel just opened that does not fit replaces the oldest panel still
-    -- in its default place (the one opened stays, even when it is too big
-    -- for every area)
-    local evict = evictPending
+    -- A panel that does not fit replaces the oldest panel still in its
+    -- default place (the newest stays, even when it is too big for every
+    -- area). Not while the screen is still settling at game start: its
+    -- first layouts may be smaller than the screen.
+    local evict = evictPending or not settling
     evictPending = false
     local function sizeFor(def, widget)
         return function(region)
@@ -623,6 +625,16 @@ function placePanels(regions)
 end
 
 -- Showing and hiding ----------------------------------------------------------
+
+-- Game start: for a moment, panels that do not fit are not closed (the
+-- screen may not have its size yet); then laid out again
+function settlePanels(delay)
+    settling = true
+    scheduleEvent(function()
+        settling = false
+        relayout()
+    end, delay)
+end
 
 function showPanel(id)
     local def = findPanel(id)
