@@ -305,6 +305,8 @@ function terminate()
     Keybind.delete("UI", "Clear All Texts")
 end
 
+local screenKeptForReconnect = false
+
 function onGameStart()
     show()
     updateSidePanelButtons()
@@ -336,10 +338,16 @@ function show()
         mobileConfig.mobileHeightShortcuts = modules.game_shortcuts.getPanel():getHeight()
     end
 
-    setupViewMode(0)
-    if g_platform.isMobile() or g_gameConfig.isExtendedViewUI() then
-        setupViewMode(1)
-        setupViewMode(2)
+    -- Back from a reconnect: the screen was kept as it was (hide), so the
+    -- view mode and the touch layout on top of it are still in place
+    local kept = screenKeptForReconnect
+    screenKeptForReconnect = false
+    if not kept then
+        setupViewMode(0)
+        if g_platform.isMobile() or g_gameConfig.isExtendedViewUI() then
+            setupViewMode(1)
+            setupViewMode(2)
+        end
     end
 
     addEvent(function()
@@ -354,7 +362,13 @@ function show()
 end
 
 function hide(keepGameScreen)
-    setupViewMode(0)
+    -- A dropped connection that is reconnected keeps the screen exactly as
+    -- it is: going back to the default view mode here would bring back the
+    -- desktop panels (console, side panels, top bar) under the touch layout
+    screenKeptForReconnect = keepGameScreen and true or false
+    if not keepGameScreen then
+        setupViewMode(0)
+    end
 
     disconnect(g_app, {
         onClose = tryExit
