@@ -10,7 +10,9 @@
 
 local root
 local PAGES = {}
-local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar' }
+local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar',
+    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -261,21 +263,25 @@ local function receive(opcode, data)
     ProtocolGame.onExtendedOpcode(nil, opcode, json.encode(data))
 end
 
--- The first widget under root showing the text (a hub button, a tab)
-local function findByText(root, text)
+-- The first widget under root showing the text (a hub button, a tab);
+-- visibleOnly: only widgets shown now (a hidden desktop window may have a
+-- button with the same text)
+local function findByText(root, text, visibleOnly)
     for _, child in ipairs(root:getChildren()) do
-        if child.getText and child:getText() == text then
-            return child
-        end
-        local found = findByText(child, text)
-        if found then
-            return found
+        if not visibleOnly or child:isVisible() then
+            if child.getText and child:getText() == text then
+                return child
+            end
+            local found = findByText(child, text, visibleOnly)
+            if found then
+                return found
+            end
         end
     end
 end
 
 local function tap(text)
-    local widget = findByText(g_ui.getRootWidget(), text)
+    local widget = findByText(g_ui.getRootWidget(), text, true)
     if widget and widget.onClick then
         widget:onClick()
     end
@@ -365,6 +371,147 @@ PAGES.hotbar = function()
     end
 end
 
+-- The hub's Settings, one page per tab
+for _, tab in ipairs({ 'Gameplay', 'Display', 'Controls', 'Layout', 'Optimization' }) do
+    PAGES['settings-' .. tab:lower()] = function()
+        openHub()
+        tap(tr('Settings'))
+        tap(tr(tab))
+    end
+end
+
+-- Text windows (ot-client#124): a letter as the server opens it (Edit Text),
+-- the same letter only to read, and a house list (Edit List). The -keyboard
+-- pages are the same windows with the on-screen keyboard open: gallery.js
+-- sets keyboardVisibleTop/Bottom as the page would (shell.html).
+local SAMPLE_LETTER = 'Dear Aren,\n\nthe ferry leaves at dawn. Bring the map, two ropes and something to eat; ' ..
+    'the island has nothing but rats.\n\nIf the weather turns, wait for me at the lighthouse.\n\n- Mira'
+
+local function textWindows()
+    return modules.game_textwindow
+end
+
+PAGES.letter = function()
+    textWindows().onGameEditText(1, 0, 1000, SAMPLE_LETTER, 'Mira', '18 Nov 2026')
+end
+PAGES['letter-keyboard'] = PAGES.letter
+
+PAGES['letter-read'] = function()
+    textWindows().onGameEditText(2, 0, #SAMPLE_LETTER, SAMPLE_LETTER, 'Mira', '18 Nov 2026')
+end
+
+PAGES['house-list'] = function()
+    textWindows().onGameEditList(3, 1, 'Mira\nToren\nLune\nKasimir\nOld Bess')
+end
+PAGES['house-list-keyboard'] = PAGES['house-list']
+
+-- The part of a widget's rect that shows: inside every clipping ancestor (a
+-- scrolled list). nil when none of it shows.
+local function shownRect(widget)
+    local r = widget:getRect()
+    local x1, y1, x2, y2 = r.x, r.y, r.x + r.width, r.y + r.height
+    local parent = widget:getParent()
+    while parent do
+        if parent:isClipping() then
+            local p = parent:getRect()
+            x1, y1 = math.max(x1, p.x), math.max(y1, p.y)
+            x2, y2 = math.min(x2, p.x + p.width), math.min(y2, p.y + p.height)
+        end
+        parent = parent:getParent()
+    end
+    if x2 - x1 <= 0 or y2 - y1 <= 0 then
+        return nil
+    end
+    return { x = x1, y = y1, width = x2 - x1, height = y2 - y1 }
+end
+
+-- Text that doesn't fit its widget (cut off, or spilling over its
+-- neighbours): logged for every visible widget on the page, and gallery.js
+-- fails the page. Text that wraps or sizes its widget always fits.
+local function checkClipped(widget, found)
+    if not widget:isVisible() or widget:getWidth() <= 0 then
+        return
+    end
+    local text = widget.getText and widget:getText() or ''
+    if text ~= '' and not widget:isTextWrap() and shownRect(widget) then
+        local room = widget:getWidth() - widget:getPaddingLeft() - widget:getPaddingRight()
+        local width = widget:getTextSize().width
+        if width > room + 1 then
+            table.insert(found, string.format('%s#%s "%s" text %d > room %d', widget:getStyleName(), widget:getId(),
+                text, width, room))
+        end
+    end
+    for _, child in ipairs(widget:getChildren()) do
+        checkClipped(child, found)
+    end
+end
+
+-- Text covered by a button or switch it doesn't belong to (a setting's name
+-- under its row of choices): logged like clipped text
+local function collectTexts(widget, texts, controls)
+    if not widget:isVisible() or widget:getWidth() <= 0 then
+        return
+    end
+    -- (every widget has UIWidget's own onClick: only one set on it counts)
+    local clickable = widget.onClick and widget.onClick ~= UIWidget.onClick
+    local switch = widget.onCheckChange and widget.onCheckChange ~= UIWidget.onCheckChange
+    local shown = shownRect(widget)
+    if not shown then
+        -- (scrolled out of sight: nothing of it, or its children, shows)
+        return
+    end
+    if (clickable or switch) and not widget:isPhantom() then
+        table.insert(controls, { widget = widget, rect = shown })
+    else
+        local text = widget.getText and widget:getText() or ''
+        if text ~= '' and not widget:isTextWrap() then
+            -- the part of the widget the text is drawn in
+            local rect = shown
+            local width = math.min(rect.width, widget:getTextSize().width)
+            local align = widget:getTextAlign()
+            local x = rect.x
+            if bit.band(align, AlignHorizontalCenter) ~= 0 then
+                x = rect.x + math.floor((rect.width - width) / 2)
+            elseif bit.band(align, AlignRight) ~= 0 then
+                x = rect.x + rect.width - width
+            end
+            table.insert(texts, { widget = widget, x = x, y = rect.y, width = width, height = rect.height })
+        end
+    end
+    for _, child in ipairs(widget:getChildren()) do
+        collectTexts(child, texts, controls)
+    end
+end
+
+local function isInside(widget, ancestor)
+    while widget do
+        if widget == ancestor then
+            return true
+        end
+        widget = widget:getParent()
+    end
+    return false
+end
+
+local function checkCovered(top, found)
+    local texts, controls = {}, {}
+    collectTexts(top, texts, controls)
+    for _, text in ipairs(texts) do
+        for _, entry in ipairs(controls) do
+            local control, r = entry.widget, entry.rect
+            local overlapX = math.min(text.x + text.width, r.x + r.width) - math.max(text.x, r.x)
+            local overlapY = math.min(text.y + text.height, r.y + r.height) - math.max(text.y, r.y)
+            -- (a button's own label, or a label laid over a whole panel, is fine)
+            if overlapX > 2 and overlapY > 2 and not isInside(text.widget, control) and not isInside(control, text.widget) then
+                table.insert(found, string.format('%s#%s "%s" covered by %s#%s "%s"', text.widget:getStyleName(),
+                    text.widget:getId(), text.widget:getText(), control:getStyleName(), control:getId(),
+                    control.getText and control:getText() or ''))
+                break
+            end
+        end
+    end
+end
+
 -- Showing a page ----------------------------------------------------------------
 
 local function show(name)
@@ -424,6 +571,35 @@ local function show(name)
         if root then
             raiseAll()
             g_logger.info('[gallery] ready ' .. name)
+            -- the text checks, once everything is laid out (a scale or a
+            -- list may still settle after "ready"): twice, a second apart,
+            -- and only what both passes find counts
+            local function check()
+                local found = {}
+                checkClipped(root, found)
+                checkCovered(root, found)
+                for _, widget in ipairs(opened) do
+                    if not widget:isDestroyed() then
+                        checkClipped(widget, found)
+                        checkCovered(widget, found)
+                    end
+                end
+                return found
+            end
+            scheduleEvent(function()
+                local first = {}
+                for _, line in ipairs(check()) do
+                    first[line] = true
+                end
+                scheduleEvent(function()
+                    for _, line in ipairs(check()) do
+                        if first[line] then
+                            g_logger.info('[gallery] clipped ' .. line)
+                        end
+                    end
+                    g_logger.info('[gallery] checked ' .. name)
+                end, 1000)
+            end, 1000)
         end
     end, 1000)
 end

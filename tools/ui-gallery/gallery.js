@@ -22,7 +22,15 @@ const path = require('path');
 const http = require('http');
 const { chromium } = require(process.env.PW_MODULE || 'playwright');
 
-const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar'];
+const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar',
+    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard'];
+
+// Pages shown with the on-screen keyboard open (touch devices only): the
+// page tells the game the part of the canvas above the keyboard, as
+// shell.html does from visualViewport (keyboardVisibleTop/Bottom). Assumed
+// keyboard heights: 300 px in portrait, 210 px in landscape (iPhone).
+const KEYBOARD_PAGES = new Set(['letter-keyboard', 'house-list-keyboard']);
 
 // Mostly landscape, as the game is played, plus an iPhone in portrait and one
 // turned to landscape after the page loaded (the screen resized under a
@@ -86,16 +94,35 @@ function serve(dir) {
 }
 
 // One page on one device: the screenshot, or an error
-async function capture(context, base, device, page, file) {
+async function capture(context, base, device, page, file, clipped) {
     const tab = await context.newPage();
     const log = [];
     try {
         const config = Object.assign({ gallery: page }, device.config || {});
         await tab.addInitScript((c) => { window.otclientConfig = Object.assign(window.otclientConfig || {}, c); }, config);
+        if (KEYBOARD_PAGES.has(page)) {
+            // (again and again: the page clears them when its own text input
+            // loses focus, and the screen may turn)
+            await tab.addInitScript(() => {
+                const set = () => {
+                    const c = (window.otclientConfig = window.otclientConfig || {});
+                    const w = window.innerWidth, h = window.innerHeight;
+                    c.keyboardVisibleTop = '0';
+                    c.keyboardVisibleBottom = ((h - (h > w ? 300 : 210)) / h).toFixed(4);
+                };
+                set();
+                setInterval(set, 100);
+            });
+        }
+        let markChecked;
+        const checked = new Promise((resolve) => { markChecked = resolve; });
         const ready = new Promise((resolve, reject) => {
             tab.on('console', (msg) => {
                 const text = msg.text();
                 log.push(text);
+                const cut = text.indexOf('[gallery] clipped ');
+                if (cut >= 0) clipped.push(text.slice(cut + 18));
+                if (text.includes('[gallery] checked ' + page)) markChecked();
                 if (text.includes('[gallery] ready ' + page)) resolve();
                 if (text.includes('[gallery] no page')) reject(new Error(text));
             });
@@ -111,6 +138,8 @@ async function capture(context, base, device, page, file) {
         }
         await tab.waitForTimeout(300);
         await tab.screenshot({ path: file });
+        // the text checks (cut off or covered text) run after "ready"
+        await Promise.race([checked, tab.waitForTimeout(10000)]);
         return null;
     } catch (e) {
         return e.message + '\n' + log.filter((l) => /error|gallery/i.test(l)).slice(-15).join('\n');
@@ -181,16 +210,20 @@ async function compare(browser, a, b, diffFile) {
 function report(outDir, results, devices, pages) {
     const cell = (r) => {
         const rel = (f) => path.relative(outDir, f).split(path.sep).join('/');
+        if (!r || r.status === 'skipped') {
+            return '<td>-</td>';
+        }
         if (r.error) {
             return `<td class="bad"><b>failed</b><pre>${r.error.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre></td>`;
         }
-        const status = r.status === 'same' ? '' : `<b>${r.status}</b>${r.share !== undefined ? ` (${(r.share * 100).toFixed(2)}% of pixels)` : ''}${r.size ? ' ' + r.size : ''}`;
+        const cut = r.clipped ? `<b>clipped text</b><pre>${r.clipped.join('\n').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>` : '';
+        const status = cut + (r.status === 'same' ? '' : `<b>${r.status}</b>${r.share !== undefined ? ` (${(r.share * 100).toFixed(2)}% of pixels)` : ''}${r.size ? ' ' + r.size : ''}`);
         const images = [`<a href="${rel(r.file)}"><img src="${rel(r.file)}" title="new"></a>`];
         if (r.status === 'changed') {
             images.push(`<a href="${rel(r.baselineCopy)}"><img src="${rel(r.baselineCopy)}" title="baseline"></a>`);
             if (r.diffFile) images.push(`<a href="${rel(r.diffFile)}"><img src="${rel(r.diffFile)}" title="diff"></a>`);
         }
-        return `<td class="${r.status === 'changed' ? 'bad' : r.status === 'new' ? 'new' : ''}">${status}${images.join('')}</td>`;
+        return `<td class="${r.status === 'changed' || r.clipped ? 'bad' : r.status === 'new' ? 'new' : ''}">${status}${images.join('')}</td>`;
     };
     const rows = pages.map((p) => `<tr><th>${p}</th>${devices.map((d) => cell(results[d.name + '/' + p])).join('')}</tr>`).join('\n');
     const head = devices.map((d) => `<th>${d.name}<br><small>${d.width}×${d.height}${d.rotateTo ? ' → ' + d.rotateTo.width + '×' + d.rotateTo.height : ''} @${d.ratio}x${d.config ? ' ' + JSON.stringify(d.config) : ''}</small></th>`).join('');
@@ -230,9 +263,14 @@ async function main() {
             });
             for (const page of pages) {
                 const key = device.name + '/' + page;
+                if (KEYBOARD_PAGES.has(page) && !device.mobile) {
+                    results[key] = { status: 'skipped' };
+                    continue;
+                }
                 const name = `${device.name}--${page}.png`;
                 const file = path.join(outDir, 'new', name);
-                const error = await capture(context, base, device, page, file);
+                const clipped = [];
+                const error = await capture(context, base, device, page, file, clipped);
                 const baseline = path.join(baselineDir, name);
                 let r;
                 if (error) {
@@ -246,10 +284,13 @@ async function main() {
                     const c = await compare(browser, file, baseline, diffFile);
                     r = { status: c.share > PAGE_TOLERANCE ? 'changed' : 'same', share: c.share, size: c.size, file, baselineCopy, diffFile: c.diff ? diffFile : null };
                 }
-                if (r.error || r.status === 'changed') failed++;
+                // text cut off by its widget fails the page, baseline or not
+                if (!r.error && clipped.length) r.clipped = clipped;
+                if (r.error || r.status === 'changed' || r.clipped) failed++;
                 if (args.update && !r.error) fs.copyFileSync(file, baseline);
                 results[key] = r;
                 console.log(`${key}: ${r.error ? 'FAILED ' + r.error.split('\n')[0] : r.status + (r.share ? ` (${(r.share * 100).toFixed(2)}%)` : '')}`);
+                for (const line of r.clipped || []) console.log(`  clipped text: ${line}`);
             }
             await context.close();
         }

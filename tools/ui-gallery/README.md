@@ -25,6 +25,10 @@ with saved baseline images on every pull request (ot-client#70).
 | `achievements` | Journal › Achievements: unlocked, in progress, hidden |
 | `npc` | the NPC dialog with a sample NPC (text, keywords, shop) |
 | `hotbar` | the hotbar settings sheet |
+| `settings-gameplay` … `settings-optimization` | the hub's Settings, one page per tab |
+| `letter`, `letter-read` | a letter in Edit Text: to write (with its limit), and only to read |
+| `house-list` | a house list in Edit List |
+| `letter-keyboard`, `house-list-keyboard` | the same with the on-screen keyboard open (touch devices only; below) |
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock
@@ -43,8 +47,27 @@ Devices:
 | `desktop` | 1366×768 | 1 | |
 | `desktop-scale-1.5` | 1366×768 | 1 | interface scale 1.5 |
 
+The keyboard pages set `keyboardVisibleTop/Bottom` the way the page does
+while the keyboard is open (`browser/shell.html`), for a keyboard 300 px high
+in portrait and 210 px in landscape. Real keyboard heights vary by phone.
+
 Add a page in `mods/client_gallery/gallery.lua` (`PAGES` and `PAGE_ORDER`)
 and in `PAGES` in `gallery.js`.
+
+## Text that doesn't fit
+
+After a page is ready, the gallery checks every visible widget twice, a
+second apart, and logs `[gallery] clipped ...` for what both checks find:
+
+- **Cut off:** text wider than its widget (minus padding), when the widget
+  doesn't wrap its text.
+- **Covered:** text drawn under a button or switch it doesn't belong to, such
+  as a setting's name under its row of choices.
+
+Widgets scrolled out of sight are skipped. A page with such text fails, even
+when it matches its baseline, and the report lists the widgets. Fix the
+layout (shorter text, a wider widget, wrap, or move the control) rather than
+updating the baseline.
 
 ## In CI
 
