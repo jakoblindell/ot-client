@@ -14,6 +14,10 @@ local SILENCE_LIMIT = 15000
 local ATTEMPT_TIMEOUT = 10000
 -- A logout asked for this recently explains the end of the game
 local LOGOUT_WINDOW = 5000
+-- The first attempts only show a small "Reconnecting..." notice (a phone
+-- back from the background is usually in again within seconds); the box
+-- with its buttons comes after these
+local QUIET_ATTEMPTS = 3
 -- Server messages worth another try: the server is still busy with the old
 -- connection, or it is restarting
 local RETRYABLE_ERRORS = {
@@ -74,6 +78,13 @@ local function updateOverlay()
     local status = box:getChildById('status')
     local reconnectButton = box:getChildById('reconnectButton')
     local count = #RETRY_DELAYS
+
+    local quiet = (state == 'waiting' or state == 'connecting') and attempt <= QUIET_ATTEMPTS and
+                      g_platform.isNetworkOnline()
+    overlay:setBackgroundColor(quiet and '#00000000' or '#000000a0')
+    overlay:setPhantom(quiet)
+    box:setVisible(not quiet)
+    overlay:getChildById('notice'):setVisible(quiet)
 
     if state == 'waiting' and not g_platform.isNetworkOnline() then
         status:setText(tr('No network connection.\nReconnecting as soon as it is back...'))

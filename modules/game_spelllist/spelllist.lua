@@ -270,7 +270,10 @@ function updateSpelllist()
     for spellName, info in pairs(SpellInfo[SpelllistProfile]) do
         local tmpLabel = spellList:getChildById(spellName)
         local localPlayer = g_game.getLocalPlayer()
-        if (not (filters.level) or info.level <= localPlayer:getLevel()) and
+        if not tmpLabel or not localPlayer then
+            -- (spells this client version does not list; no player after a
+            -- logout)
+        elseif (not (filters.level) or info.level <= localPlayer:getLevel()) and
             (not (filters.vocation) or table.find(info.vocations, localPlayer:getVocation())) and
             (filters.vocationId == FILTER_VOCATION_ANY or vocationMatches(info.vocations, filters.vocationId)) and
             (filters.groupId == FILTER_GROUP_ANY or info.group[filters.groupId]) and
