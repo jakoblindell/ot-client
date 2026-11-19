@@ -211,9 +211,6 @@ render = function()
 
     -- the tabs, in the hub's tab row
     panel.tabs:setVisible(true)
-    panel.tabs:setHeight(36)
-    local width = math.min(160, math.floor((panel.tabs:getWidth() - 4 * (#TABS - 1)) / #TABS))
-    panel.tabs:getLayout():setCellSize({ width = width, height = 36 })
     for _, tab in ipairs(TABS) do
         local button = g_ui.createWidget('OtTab', panel.tabs)
         button:setText(tr(tab.text))
@@ -223,6 +220,7 @@ render = function()
             render()
         end
     end
+    fitHubTabs(panel.tabs)
 
     -- (the fonts are not UTF-8: a plain hyphen, no dash)
     title = g_ui.createWidget('CharacterTitle', list)

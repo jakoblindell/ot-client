@@ -252,6 +252,110 @@ end
 
 local showSettings
 
+-- The width rows get in a list (inside its padding)
+local function listWidth(list)
+    local rect = list:getPaddingRect()
+    return rect.width > 0 and rect.width or list:getWidth()
+end
+
+-- The width a button needs for its text (font as styled), with room for its edge
+local function neededWidth(button)
+    return button:getTextSize().width + 20
+end
+
+-- A grid of buttons (tabs, the settings actions): as many columns as fit the
+-- widest text, sharing the width; the rest wrap to more rows. Returns the
+-- number of rows.
+function fitButtonGrid(grid, width, spacing, cellHeight, maxCell)
+    local children = grid:getChildren()
+    local count = #children
+    if count == 0 or width <= 0 then
+        return 0
+    end
+    local need = 0
+    for _, child in ipairs(children) do
+        need = math.max(need, neededWidth(child))
+    end
+    local columns = count
+    while columns > 1 and math.floor((width - spacing * (columns - 1)) / columns) < need do
+        columns = columns - 1
+    end
+    local cell = math.floor((width - spacing * (columns - 1)) / columns)
+    if maxCell then
+        cell = math.min(cell, math.max(maxCell, need))
+    end
+    grid:getLayout():setCellSize({ width = cell, height = cellHeight })
+    return math.ceil(count / columns)
+end
+
+-- The hub's tab row: its tabs share the width, in as many rows as they need
+function fitHubTabs(tabs)
+    local width = tabs:getWidth()
+    if width <= 0 and tabs:getParent() then
+        width = tabs:getParent():getWidth() - 20
+    end
+    local rows = fitButtonGrid(tabs, width, 4, 36, 160)
+    tabs:setHeight(math.max(1, rows) * 36 + math.max(0, rows - 1) * 4)
+end
+
+-- A setting row whose title and controls don't fit side by side: a short
+-- control (a switch, - value +, a button) keeps its place and the title
+-- wraps beside it; a wide one (a row of choices) goes under the title, the
+-- choices sharing the row's width
+local function fitRow(widget, rowWidth, segments)
+    local controls = widget.controls
+    local title = widget.title
+    local titleWidth = title:getTextSize().width
+    -- margin, title, gap, ?, gap, controls, margin
+    local beside = 4 + titleWidth + 8 + 22 + 12 + controls:getWidth() + 4
+    if beside <= rowWidth then
+        return
+    end
+    if not segments and controls:getWidth() <= rowWidth / 2 then
+        local room = rowWidth - controls:getWidth() - 4 - 8 - 22 - 12 - 4
+        title:setTextAutoResize(false)
+        title:setTextWrap(true)
+        title:setWidth(room)
+        title:setTextVerticalAutoResize(true)
+        local lines = math.ceil(titleWidth / room) + 1
+        local lineHeight = math.max(14, title:getTextSize().height)
+        widget:setHeight(math.max(52, lines * lineHeight + 16))
+        return
+    end
+    -- title (and ?) on top, controls under it, the whole width
+    title:breakAnchors()
+    title:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+    title:addAnchor(AnchorTop, 'parent', AnchorTop)
+    title:setMarginTop(10)
+    widget.help:breakAnchors()
+    widget.help:addAnchor(AnchorLeft, 'title', AnchorRight)
+    widget.help:addAnchor(AnchorVerticalCenter, 'title', AnchorVerticalCenter)
+    controls:breakAnchors()
+    controls:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+    controls:addAnchor(AnchorRight, 'parent', AnchorRight)
+    controls:addAnchor(AnchorBottom, 'parent', AnchorBottom)
+    controls:setMarginBottom(8)
+    controls:setMarginLeft(4)
+    controls:setMarginRight(4)
+    controls:setWidth(rowWidth - 8)
+    widget:setHeight(36 + 40 + 16)
+    -- the choices share the controls' width as laid out (the segments sit
+    -- edge to edge)
+    if segments and #segments > 0 then
+        local function share()
+            if widget:isDestroyed() then
+                return
+            end
+            local cell = math.floor(controls:getWidth() / #segments)
+            for _, segment in ipairs(segments) do
+                segment:setWidth(cell)
+            end
+        end
+        share()
+        addEvent(share)
+    end
+end
+
 local function addRow(list, row)
     local widget = g_ui.createWidget('OtSettingRow', list)
     widget.title:setText(tr(row.text))
@@ -260,6 +364,7 @@ local function addRow(list, row)
     end
     local controls = widget.controls
     local value = rowValue(row)
+    local segments -- the choices of a choice row
 
     if row.kind == 'toggle' then
         local check = g_ui.createWidget('OtCheck', controls)
@@ -268,15 +373,23 @@ local function addRow(list, row)
             setRowValue(row, checked)
         end
     elseif row.kind == 'choice' then
+        -- a segmented control: every choice as wide as the widest, so the
+        -- selected one looks no different in size
+        segments = {}
+        local width = 44
         for _, choice in ipairs(rowChoices(row)) do
             local button = g_ui.createWidget('OtButton', controls)
             button:setText(tr(choice[2]))
-            button:setWidth(math.max(44, 16 + #choice[2] * 9))
+            width = math.max(width, neededWidth(button))
             button:setChecked(choice[1] == value)
             button.onClick = function()
                 setRowValue(row, choice[1])
                 showSettings(currentPage)
             end
+            table.insert(segments, button)
+        end
+        for _, button in ipairs(segments) do
+            button:setWidth(width)
         end
     elseif row.kind == 'step' then
         local function step(delta)
@@ -327,17 +440,19 @@ local function addRow(list, row)
     elseif row.kind == 'button' then
         local button = g_ui.createWidget('OtButton', controls)
         button:setText(tr(row.buttonText))
-        button:setWidth(110)
+        button:setWidth(math.max(110, neededWidth(button)))
         button.onClick = function()
             rowAction(row)
         end
     end
-    -- the controls take the room they need; the title wraps beside them
+    -- the controls take the room they need; the title wraps beside them, or
+    -- they go under it
     local width = 0
     for _, child in ipairs(controls:getChildren()) do
         width = width + child:getWidth() + 4
     end
     controls:setWidth(math.max(40, width - 4))
+    fitRow(widget, listWidth(list), segments)
 end
 
 -- In Settings, above the tabs' rows: the layout and the rest of the options
@@ -378,18 +493,21 @@ showSettings = function(pageId)
             showSettings(page.id)
         end
     end
+    fitHubTabs(panel.tabs)
     -- keep the place when a setting changed; from another page start at the top
     local scroll = settingsShown and panel.listScroll:getValue() or 0
     settingsShown = true
     panel.list:destroyChildren()
     clearFooter()
     local actions = g_ui.createWidget('HubSettingsActions', panel.list)
-    actions:getLayout():setCellSize({ width = math.floor((panel.list:getWidth() - 2 * 6) / 3), height = 40 })
     for _, entry in ipairs(SETTINGS_ACTIONS) do
         local button = g_ui.createWidget('OtButton', actions)
         button:setText(tr(entry.text))
         button.onClick = entry.action
     end
+    -- three a row where they fit, else fewer (the longest text decides)
+    local columnsWidth = listWidth(panel.list)
+    fitButtonGrid(actions, columnsWidth, 6, 40, math.floor((columnsWidth - 2 * 6) / 3))
     for _, page in ipairs(SETTINGS) do
         if page.id == pageId then
             for _, row in ipairs(page.rows) do
@@ -454,9 +572,6 @@ showTasks = function(tabId, pageId)
     panel.tabs:setVisible(tabbed)
     panel.tabs:setHeight(tabbed and 36 or 0)
     if tabbed then
-        -- room for longer names (Achievements): the tabs share the width, up to 160 each
-        local width = math.min(160, math.floor((panel.tabs:getWidth() - 4 * (#page.tabs - 1)) / #page.tabs))
-        panel.tabs:getLayout():setCellSize({ width = width, height = 36 })
         for _, tab in ipairs(page.tabs) do
             local button = g_ui.createWidget('OtTab', panel.tabs)
             button:setText(tr(tab.text))
@@ -465,6 +580,9 @@ showTasks = function(tabId, pageId)
                 showTasks(tab.id, pageId)
             end
         end
+        -- the tabs share the width (up to 160 each), in more rows if their
+        -- names need it
+        fitHubTabs(panel.tabs)
     end
     panel.list:destroyChildren()
     clearFooter()
@@ -593,10 +711,12 @@ end
 -- After a new screen size on a page with tabs: they share the new width
 local function fitTabs()
     local tabs = hub.panel.tabs
-    local count = #tabs:getChildren()
-    if count > 0 then
-        local width = math.min(160, math.floor((tabs:getWidth() - 4 * (count - 1)) / count))
-        tabs:getLayout():setCellSize({ width = width, height = 36 })
+    if #tabs:getChildren() > 0 then
+        fitHubTabs(tabs)
+        -- (settings rows are laid out for the width: lay them out again)
+        if settingsShown then
+            showSettings(currentPage)
+        end
     end
 end
 
@@ -657,7 +777,19 @@ function openHub()
     local status = g_ui.createWidget('HubStatus', panel.list)
     status:setColoredText(statusText())
     local width = panel.list:getWidth()
+    -- four a row; two when a name doesn't fit a quarter (a narrow portrait
+    -- screen), so the sections stay even
     local cell = math.floor((width - 3 * 8) / 4)
+    for _, section in ipairs(HUB_SECTIONS) do
+        for _, entry in ipairs(section.buttons) do
+            local probe = g_ui.createWidget('HubIconButton', panel.list)
+            probe:setText(tr(entry.text))
+            if neededWidth(probe) > cell then
+                cell = math.floor((width - 8) / 2)
+            end
+            probe:destroy()
+        end
+    end
     for _, section in ipairs(HUB_SECTIONS) do
         g_ui.createWidget('HubSection', panel.list).text:setText(tr(section.title))
         local grid = g_ui.createWidget('HubIconGrid', panel.list)
