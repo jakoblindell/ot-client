@@ -106,19 +106,23 @@ TouchTextWindow < UIWindow
       margin-left: 2
 
     OtPaper
-      id: text
+      id: paper
       anchors.top: writer.bottom
       anchors.left: parent.left
       anchors.right: textScroll.left
       anchors.bottom: saveButton.top
       margin-top: 6
       margin-bottom: 8
-      vertical-scrollbar: textScroll
+
+      // (its scroll bar, textScroll, is set in textwindow.lua: a style
+      // finds it only among the field's siblings)
+      OtPaperText
+        id: text
 
     VerticalScrollBar
       id: textScroll
-      anchors.top: text.top
-      anchors.bottom: text.bottom
+      anchors.top: paper.top
+      anchors.bottom: paper.bottom
       anchors.right: parent.right
       step: 18
       pixels-scroll: true

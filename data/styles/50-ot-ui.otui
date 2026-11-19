@@ -60,18 +60,24 @@ OtInset < UIWidget
   image-border: 4
   padding: 6
 
-// The text of a letter, book or label: dark on paper, in the large TTF font
-// (multi-line; set editable false for text that is only read)
-OtPaper < UITextEdit
-  multiline: true
-  text-wrap: true
+// The text of a letter, book or label: dark on paper, in the large TTF font.
+// OtPaper is the sheet; an OtPaperText (multi-line; set editable false for
+// text that is only read) fills it. (The margin is the sheet's padding: a
+// text field's own top and bottom padding can hide the line with the cursor)
+OtPaper < UIWidget
   background-color: $ot-paper
-  color: $ot-paper-text
-  ttf-font: $ot-font-paper
-  ttf-font-size: $ot-font-paper-size
   border-width: 1
   border-color: #00000099
   padding: 6 8
+  phantom: false
+
+OtPaperText < UITextEdit
+  anchors.fill: parent
+  multiline: true
+  text-wrap: true
+  color: $ot-paper-text
+  ttf-font: $ot-font-paper
+  ttf-font-size: $ot-font-paper-size
   selection-color: $ot-paper-text
   selection-background-color: $ot-paper-selection
   cursor: none
