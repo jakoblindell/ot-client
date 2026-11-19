@@ -1,5 +1,83 @@
 local windows = {}
 
+-- On a phone, the on-screen keyboard covers the lower part of the game. The
+-- page tells which part is still visible (shell.html: keyboardVisibleTop and
+-- keyboardVisibleBottom, fractions of the screen's height, set only while the
+-- keyboard is open). A text window moves into that part and shrinks to fit,
+-- so its text and its buttons stay in reach; it goes back to the middle when
+-- the keyboard closes. A window also never reaches past the screen.
+local SCREEN_MARGIN = 4
+local KEYBOARD_CHECK_MS = 250
+local keyboardCheck
+
+local function visibleArea()
+    local root = rootWidget
+    local top = tonumber(g_platform.getBrowserConfigString('keyboardVisibleTop'))
+    local bottom = tonumber(g_platform.getBrowserConfigString('keyboardVisibleBottom'))
+    local y, height = root:getY(), root:getHeight()
+    if not top or not bottom or bottom <= top then
+        return y, y + height, false
+    end
+    return y + math.floor(height * top), y + math.floor(height * bottom), true
+end
+
+local function fitWindow(window, areaTop, areaBottom, keyboard)
+    local root = rootWidget
+    if not root or window:isDestroyed() then
+        return
+    end
+    local available = areaBottom - areaTop - 2 * SCREEN_MARGIN
+    local height = math.max(0, math.min(window.designHeight, available))
+    if height ~= window:getHeight() then
+        window:setHeight(height)
+    end
+    if keyboard then
+        window:breakAnchors()
+        window:setX(root:getX() + math.floor((root:getWidth() - window:getWidth()) / 2))
+        window:setY(areaTop + SCREEN_MARGIN + math.floor((available - height) / 2))
+        window.keyboardPlaced = true
+    elseif window.keyboardPlaced then
+        window.keyboardPlaced = false
+        window:centerIn('parent')
+    else
+        window:bindRectToParent()
+    end
+end
+
+local function fitWindows()
+    if not rootWidget then
+        return
+    end
+    local areaTop, areaBottom, keyboard = visibleArea()
+    for _, window in pairs(windows) do
+        fitWindow(window, areaTop, areaBottom, keyboard)
+    end
+end
+
+local function stopKeyboardCheck()
+    if keyboardCheck then
+        removeEvent(keyboardCheck)
+        keyboardCheck = nil
+    end
+end
+
+local function addWindow(window)
+    window.designHeight = window:getHeight()
+    table.insert(windows, window)
+    fitWindows()
+    -- the page has no way to call the game, so the game looks (browser only)
+    if g_platform.isBrowser() and not keyboardCheck then
+        keyboardCheck = cycleEvent(fitWindows, KEYBOARD_CHECK_MS)
+    end
+end
+
+local function removeWindow(window)
+    table.removevalue(windows, window)
+    if #windows == 0 then
+        stopKeyboardCheck()
+    end
+end
+
 function init()
     g_ui.importStyle('textwindow')
 
@@ -8,6 +86,7 @@ function init()
         onEditList = onGameEditList,
         onGameEnd = destroyWindows
     })
+    connect(rootWidget, { onGeometryChange = fitWindows })
 end
 
 function terminate()
@@ -16,8 +95,10 @@ function terminate()
         onEditList = onGameEditList,
         onGameEnd = destroyWindows
     })
+    disconnect(rootWidget, { onGeometryChange = fitWindows })
 
     destroyWindows()
+    stopKeyboardCheck()
 end
 
 function destroyWindows()
@@ -25,6 +106,7 @@ function destroyWindows()
         window:destroy()
     end
     windows = {}
+    stopKeyboardCheck()
 end
 
 function onGameEditText(id, itemId, maxLength, text, writer, time)
@@ -92,7 +174,7 @@ function onGameEditText(id, itemId, maxLength, text, writer, time)
 
     local function destroy()
         textWindow:destroy()
-        table.removevalue(windows, textWindow)
+        removeWindow(textWindow)
     end
 
     local doneFunc = function()
@@ -111,7 +193,7 @@ function onGameEditText(id, itemId, maxLength, text, writer, time)
 
     textWindow.onEscape = destroy
 
-    table.insert(windows, textWindow)
+    addWindow(textWindow)
 end
 
 function onGameEditList(id, doorId, text)
@@ -141,7 +223,7 @@ function onGameEditList(id, doorId, text)
 
     local function destroy()
         textWindow:destroy()
-        table.removevalue(windows, textWindow)
+        removeWindow(textWindow)
     end
 
     local doneFunc = function()
@@ -153,5 +235,5 @@ function onGameEditList(id, doorId, text)
     cancelButton.onClick = destroy
     textWindow.onEscape = destroy
 
-    table.insert(windows, textWindow)
+    addWindow(textWindow)
 end
