@@ -28,7 +28,7 @@ Classic Tibia materials, nothing new to draw:
 | `OtBackdrop` | Full-screen dim layer under a sheet; a tap on it closes the sheet |
 | `OtPanel` | A window or sheet (stone, bevelled edge, 12 px padding) |
 | `OtInset` | A sunken area inside a panel: lists, previews |
-| `OtPaper` | The text of a letter, book or label: dark on paper in the 15 px Verdana TTF (a multi-line text field) |
+| `OtPaper` + `OtPaperText` | The text of a letter, book or label: dark on a paper sheet in the 15 px Verdana TTF (the text field fills the sheet) |
 | `OtTitle` | A screen's title (13 px bold, white) |
 | `OtHeading` | A section heading: gold capitals over a line (set `text`) |
 | `OtLabel` | A setting's or field's name (11 px bold) |

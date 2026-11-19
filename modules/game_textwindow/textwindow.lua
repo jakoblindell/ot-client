@@ -64,7 +64,7 @@ local function setTouchCompact(window, compact)
     local panel = window.panel
     local title = panel:getChildById('title')
     local writer = panel:getChildById('writer')
-    local text = panel:getChildById('text')
+    local paper = panel:getChildById('paper')
     local count = panel:getChildById('count')
     local save = panel:getChildById('saveButton')
 
@@ -97,17 +97,17 @@ local function setTouchCompact(window, compact)
     local footer = window.editable and not compact
     count:setVisible(footer and count:getText() ~= '')
 
-    text:breakAnchors()
-    text:addAnchor(AnchorLeft, 'parent', AnchorLeft)
-    text:addAnchor(AnchorRight, 'textScroll', AnchorLeft)
-    text:addAnchor(AnchorTop, writer:isVisible() and 'writer' or 'closeButton', AnchorBottom)
-    text:setMarginTop(compact and 4 or 6)
+    paper:breakAnchors()
+    paper:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+    paper:addAnchor(AnchorRight, 'textScroll', AnchorLeft)
+    paper:addAnchor(AnchorTop, writer:isVisible() and 'writer' or 'closeButton', AnchorBottom)
+    paper:setMarginTop(compact and 4 or 6)
     if footer then
-        text:addAnchor(AnchorBottom, 'saveButton', AnchorTop)
-        text:setMarginBottom(8)
+        paper:addAnchor(AnchorBottom, 'saveButton', AnchorTop)
+        paper:setMarginBottom(8)
     else
-        text:addAnchor(AnchorBottom, 'parent', AnchorBottom)
-        text:setMarginBottom(0)
+        paper:addAnchor(AnchorBottom, 'parent', AnchorBottom)
+        paper:setMarginBottom(0)
     end
 end
 
@@ -176,7 +176,8 @@ local function openTouchWindow(title, editable, onSave)
     window.editable = editable
     window.panel = window:getChildById('panel')
     window.panel:getChildById('title'):setText(title)
-    local textEdit = window.panel:getChildById('text')
+    local textEdit = window.panel:getChildById('paper'):getChildById('text')
+    textEdit:setVerticalScrollBar(window.panel:getChildById('textScroll'))
 
     local function destroy()
         if not window:isDestroyed() then
