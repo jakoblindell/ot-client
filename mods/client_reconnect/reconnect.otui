@@ -36,3 +36,14 @@ ReconnectOverlay < UIWidget
       anchors.left: parent.horizontalCenter
       anchors.bottom: parent.bottom
       margin-left: 6
+
+  Label
+    id: notice
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    margin-top: 8
+    padding: 4 10 4 10
+    text-auto-resize: true
+    background-color: #000000c0
+    color: #dfdfdf
+    !text: tr('Reconnecting...')

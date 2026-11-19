@@ -509,7 +509,16 @@ int LuaInterface::signalCall(const int numArgs, const int numRets)
                     for (int i = 0; i < numArgs; ++i)
                         pushValue(-numArgs - 2);
 
-                    rets = safeCall(numArgs);
+                    // a failing slot is logged and skipped: the slots after
+                    // it still run (one module's error on game end used to
+                    // keep the others, the reconnect among them, from
+                    // hearing about it)
+                    try {
+                        rets = safeCall(numArgs);
+                    } catch (stdext::exception& e) {
+                        g_logger.error("Protected lua call failed: {}", e.what());
+                        continue;
+                    }
                     if (rets == 1) {
                         done = popBoolean();
                         if (done) {
