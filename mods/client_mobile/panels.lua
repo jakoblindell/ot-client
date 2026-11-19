@@ -51,6 +51,7 @@ local SIDE_PANELS = { 'gameLeftPanel', 'gameLeftExtraPanel', 'gameRightExtraPane
 local holders = {} -- panel id -> its piece (equipment, map and the lists)
 local opened = {} -- ids of the panels on the screen, oldest first
 local minimized = {} -- panel id -> true
+local evictPending = false -- (a panel was just opened)
 
 local function gameInterface()
     return modules.game_interface
@@ -141,6 +142,17 @@ function loadOpenedPanels()
     end
     for id in tostring(entry.minimized or ''):gmatch('[^,]+') do
         minimized[id] = true
+    end
+end
+
+-- The panels on the screen, as a list of ids (the layout preview)
+function setOpenedPanels(ids)
+    opened, minimized = {}, {}
+    for _, id in ipairs(ids or {}) do
+        local def = findPanel(id)
+        if def and not def.others then
+            table.insert(opened, id)
+        end
     end
 end
 
@@ -387,7 +399,11 @@ local function applyContents(def, widget, shown)
             child:setVisible(true)
             child:getChildById('minimize'):setOn(minimized[def.id] == true)
         elseif child:getClassName() == 'UIMiniWindow' and not child.panelHeight then
-            child:setVisible(true)
+            -- (opened, not just shown: a window saved as closed would be
+            -- closed again, and its panel with it, on the next login)
+            if not child:isExplicitlyVisible() then
+                child:open()
+            end
             local minimize = child:getChildById('minimizeButton')
             local folded = minimize and minimize:isOn()
             if minimized[def.id] and not folded then
@@ -512,45 +528,53 @@ function placePanels(regions)
         return (indexOf(a.id) or 1000) < (indexOf(b.id) or 1000)
     end)
 
-    -- one that does not fit replaces the oldest default-placed panel; one
-    -- too big for every area even alone goes at the start of the first one
-    -- (over the game view's edge), the only panel there
-    local placed
+    -- A panel just opened that does not fit replaces the oldest panel still
+    -- in its default place (the one opened stays, even when it is too big
+    -- for every area)
+    local evict = evictPending
+    evictPending = false
+    local function sizeFor(def, widget)
+        return function(region)
+            local width, height = naturalSize(def, widget, region.height)
+            -- (a list is narrower in a narrow column)
+            if def.kind == 'list' and not def.containers then
+                width = math.max(LIST_MIN_WIDTH, math.min(width, region.width))
+            end
+            return width, height
+        end
+    end
+    -- (only when the new one has room once the others are gone: next to
+    -- panels the player placed there may be none)
+    local newest = defaults[#defaults]
+    if evict and newest and not findSpot(regions, sizeFor(newest, getPanelWidget(newest.id)), taken,
+        newest.kind == 'list' and not minimized[newest.id]) then
+        evict = false
+    end
+    local placed, occupied
     while true do
         placed = {}
-        local occupied = {}
+        occupied = {}
         for _, rect in ipairs(taken) do
             table.insert(occupied, rect)
         end
-        local failing
+        local failing = false
         for _, def in ipairs(defaults) do
-            local widget = getPanelWidget(def.id)
-            local function size(region)
-                local width, height = naturalSize(def, widget, region.height)
-                -- (a list is narrower in a narrow column)
-                if def.kind == 'list' and not def.containers then
-                    width = math.max(LIST_MIN_WIDTH, math.min(width, region.width))
-                end
-                return width, height
-            end
             local fills = def.kind == 'list' and not minimized[def.id]
-            local rect = findSpot(regions, size, occupied, fills)
+            local rect = findSpot(regions, sizeFor(def, getPanelWidget(def.id)), occupied, fills)
             if rect then
                 placed[def.id] = rect
                 table.insert(occupied, rect)
             else
-                failing = def
-                break
+                failing = true
             end
         end
-        -- (the oldest may be the one that does not fit; the last one stays)
         local evictable = {}
         for _, def in ipairs(defaults) do
             if not def.others then
                 table.insert(evictable, def)
             end
         end
-        if not failing or #evictable <= 1 then
+        if not failing or not evict or #evictable <= 1 then
             break
         end
         local oldest = evictable[1]
@@ -568,14 +592,22 @@ function placePanels(regions)
         saveOpened()
     end
 
+    -- What still does not fit (a screen still settling, a panel too big for
+    -- every area): anywhere free above the bottom bar, over the game view
+    -- rather than over another panel
+    local r = gi.getRootPanel():getRect()
+    local toolbar = gi.getRootPanel():getChildById('mobileToolbar')
+    local bottom = toolbar and toolbar:isVisible() and toolbar:getY() or r.y + r.height
+    local screen = { x = r.x, y = r.y, width = r.width, height = bottom - r.y }
     for _, def in ipairs(defaults) do
         local widget = getPanelWidget(def.id)
         local rect = placed[def.id]
         if not rect then
-            -- (too big for every free area: at the start of the first one)
-            local region = regions[1] or gi.getRootPanel():getRect()
+            local region = regions[1] or screen
             local width, height = naturalSize(def, widget, region.height)
-            rect = { x = region.x, y = region.y, width = width, height = height }
+            rect = findSpot({ screen }, function() return width, height end, occupied, false)
+                or { x = region.x, y = region.y, width = width, height = height }
+            table.insert(occupied, rect)
         end
         widget:setSize({ width = rect.width, height = rect.height })
         widget:setPosition({ x = rect.x, y = rect.y })
@@ -600,6 +632,7 @@ function showPanel(id)
     table.insert(opened, id)
     minimized[id] = nil
     saveOpened()
+    evictPending = true
     relayout()
 end
 
