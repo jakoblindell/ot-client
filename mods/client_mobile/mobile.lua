@@ -2,15 +2,17 @@
 --
 -- The game view fills the screen and keeps its 15x11 tiles. Everything else
 -- is a separate piece placed around it:
---   - a toolbar along the bottom that opens one panel at a time (equipment,
---     map, skills, battle, VIP, open containers) and the top menu
+--   - a toolbar along the bottom that shows and hides the panels
+--     (equipment, map, skills, battle, VIP, hunt analyzer, containers),
+--     each a piece of its own (panels.lua), and opens the hub
 --   - health and mana bars
 --   - the first action bar as a grid of twelve buttons
 --   - a chat button that opens the console over the game view
 -- The panels are the existing windows (inventory, minimap, skill window and
--- so on), shown and hidden in place, so their modules keep working as usual.
+-- so on), moved into their pieces, so their modules keep working as usual.
 
 local TOOLBAR_HEIGHT = 44
+local TOOLBAR_DIVIDER = 1 + 2 * 2 -- (a divider and its margins)
 local GRID_CELL = 44
 local GRID_SPACING = 4
 -- Round buttons (hotbar slots, chat, P1 and the pencil): the face is made
@@ -76,23 +78,19 @@ local function refreshRoundFaces()
     end
 end
 
--- Toolbar entries, left to right. A panel entry shows the widgets of one side
--- panel whose id is listed (or starts with a listed prefix).
+-- Toolbar entries, left to right: the menu (the hub), then one button per
+-- panel (panels.lua), which shows or hides it
 local TABS = {
     { id = 'menu', icon = 'menu', tooltip = 'Menu' },
-    { id = 'equipment', icon = 'equipment', tooltip = 'Equipment', panel = 'main', ids = { 'maininventorypanel' } },
-    { id = 'map', icon = 'map', tooltip = 'Map', panel = 'main', ids = { 'mainmappanel' } },
-    { id = 'skills', icon = 'skills', tooltip = 'Skills', panel = 'right', ids = { 'skillWindow' } },
-    { id = 'battle', icon = 'battle', tooltip = 'Battle', panel = 'right', prefixes = { 'battleWindow' } },
-    { id = 'vip', icon = 'vip', tooltip = 'VIP', panel = 'right', ids = { 'vipWindow' } },
+    { id = 'equipment', icon = 'equipment', tooltip = 'Equipment', panel = true },
+    { id = 'map', icon = 'map', tooltip = 'Map', panel = true },
+    { id = 'skills', icon = 'skills', tooltip = 'Skills', panel = true },
+    { id = 'battle', icon = 'battle', tooltip = 'Battle', panel = true },
+    { id = 'vip', icon = 'vip', tooltip = 'VIP', panel = true },
     -- the hunt analyzer (client_hunt)
-    { id = 'hunt', icon = 'hunt', tooltip = 'Hunt analyzer', panel = 'right', ids = { 'huntAnalyzer' } },
+    { id = 'hunt', icon = 'hunt', tooltip = 'Hunt analyzer', panel = true },
     -- the containers window (client_containers)
-    { id = 'bag', icon = 'containers', tooltip = 'Containers', action = function()
-        if modules.client_containers and modules.client_containers.toggle then
-            modules.client_containers.toggle()
-        end
-    end },
+    { id = 'bag', icon = 'containers', tooltip = 'Containers', panel = true },
 }
 
 -- Desktop pieces the touch layout replaces or has no room for
@@ -152,9 +150,14 @@ end
 
 local toolbar, stats, chatButton, editLayoutButton
 local presetRow -- the P (hotbar preset) and pencil buttons
-local currentTab
 local chatVisible = false
 local menuVisible = false
+-- The touch layout without a game, as the UI gallery shows it
+local previewing = false
+
+function isLayoutPreview()
+    return previewing
+end
 
 local function gameInterface()
     return modules.game_interface
@@ -168,103 +171,106 @@ local function findTab(id)
     end
 end
 
-local function tabOwns(tab, widget)
-    local id = widget:getId()
-    for _, wanted in ipairs(tab.ids or {}) do
-        if id == wanted then
-            return true
-        end
-    end
-    for _, prefix in ipairs(tab.prefixes or {}) do
-        if id:sub(1, #prefix) == prefix then
-            return true
-        end
-    end
-    return false
-end
-
-local function anyTabOwns(widget)
-    for _, tab in ipairs(TABS) do
-        if tab.panel and tabOwns(tab, widget) then
-            return true
-        end
-    end
-    return false
-end
-
--- Mini windows that open in a left side panel (containers remember the
--- panel they were last in) move to the right one, the only side panel this
--- layout shows
-local function moveLeftWindowsRight()
-    local gi = gameInterface()
-    local root = gi.getRootPanel()
-    for _, id in ipairs(DOCK_IDS) do
-        local panel = root:recursiveGetChildById(id)
-        -- (docks of pinned panels keep their windows, pins.lua)
-        if panel and not isDockInUse(id) then
-            for _, child in ipairs(panel:getChildren()) do
-                -- (pinned widgets from the top panel go back there, pins.lua)
-                if child:getClassName() == 'UIMiniWindow' and child.mobileHome ~= 'main' then
-                    child:setParent(gi.getRightPanel(), true)
-                end
-            end
-        end
-    end
-end
-
--- The equipment slots touch, like the containers window (compact, see
--- docs/design-language.md): the stock inventory spaces them 3 px apart
-local EQUIPMENT_GAPS = {
-    top = { 'sword', 'ring', 'soulPanel', 'armor', 'legs', 'boots', 'shield', 'tools', 'capacityPanel' },
-    left = { 'helmet', 'backpack' },
+-- Equipment as a piece (#124): the slots in two rows of five, touching
+-- (compact, see docs/design-language.md), Cap and Soul under them and the
+-- fight mode, chase and secure buttons in a row at the bottom. Sized to
+-- fit the strip above the game view.
+local EQUIPMENT_ROWS = {
+    { 'helmet', 'amulet', 'backpack', 'armor', 'sword' },
+    { 'shield', 'legs', 'ring', 'tools', 'boots' },
 }
--- (3 of the 9 px the gaps free go to the soul and capacity boxes)
+local EQUIPMENT_MODES = { 'attack', 'balanced', 'defense', 'standPosture', 'followPosture', 'pvp' }
+-- what the side panel shows besides: the size toggle, blessings, purse,
+-- the newer servers' PvP modes, stop and the condition icons
+local EQUIPMENT_HIDDEN = { 'changeSize', 'blessings', 'purseButton', 'expert', 'whiteHandBox', 'redFistBox',
+    'whiteDoveBox', 'yellowHandBox', 'stop', 'icons' }
 local EQUIPMENT_ICONS = {
     attack = 'fightOffensive', balanced = 'fightBalanced', defense = 'fightDefensive',
     standPosture = 'stand', followPosture = 'chase', pvp = 'secure',
 }
-local EQUIPMENT_SAVED = 2 * 3
-local EQUIPMENT_BOX_GROWTH = 3
+local EQUIPMENT_PADDING = 4
+local EQUIPMENT_LINE = 16 -- the Cap and Soul row
+local EQUIPMENT_BUTTON = 20
+
+local function place(widget, x, y)
+    widget:breakAnchors()
+    widget:setMargin(0)
+    widget:addAnchor(AnchorTop, 'parent', AnchorTop)
+    widget:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+    widget:setMarginTop(y)
+    widget:setMarginLeft(x)
+end
+
 local function compactEquipment()
-    local inventory = gameInterface().getMainRightPanel():recursiveGetChildById('maininventorypanel')
+    local inventory = gameInterface().getRootPanel():recursiveGetChildById('maininventorypanel')
     local slots = inventory and inventory:getChildById('onPanel')
     if not slots or inventory.compact then
         return
     end
     inventory.compact = true
-    for _, id in ipairs(EQUIPMENT_GAPS.top) do
+    -- (the large view: the small one shows nothing but conditions)
+    inventory:setOn(true)
+    local offPanel = inventory:getChildById('offPanel')
+    if offPanel then
+        offPanel:setVisible(false)
+    end
+    slots:setVisible(true)
+    for _, id in ipairs(EQUIPMENT_HIDDEN) do
         local widget = slots:getChildById(id)
         if widget then
-            widget:setMarginTop(0)
+            widget:setVisible(false)
+            -- (shown again by its module: kept out of sight)
+            widget:setWidth(0)
         end
     end
-    for _, id in ipairs(EQUIPMENT_GAPS.left) do
-        local widget = slots:getChildById(id)
-        if widget then
-            widget:setMarginLeft(0)
+    local first = slots:getChildById('helmet')
+    local cell = first and first:getWidth() or 34
+    local x0, y = EQUIPMENT_PADDING, EQUIPMENT_PADDING
+    for _, row in ipairs(EQUIPMENT_ROWS) do
+        for column, id in ipairs(row) do
+            local widget = slots:getChildById(id)
+            if widget then
+                place(widget, x0 + (column - 1) * cell, y)
+            end
         end
+        y = y + cell
     end
-    -- the soul and capacity boxes grow down so their title is not cut off
-    for _, id in ipairs({ 'soulPanel', 'capacityPanel' }) do
+    local width = 5 * cell
+    -- Cap and Soul side by side, each a label and its number on one line
+    y = y + 2
+    for index, id in ipairs({ 'capacityPanel', 'soulPanel' }) do
         local box = slots:getChildById(id)
         if box then
-            box:setMarginBottom(-EQUIPMENT_BOX_GROWTH)
-            local title = box:getChildren()[1]
-            if title then
-                title:setMarginTop(3)
+            place(box, x0 + (index - 1) * math.floor(width / 2), y)
+            box:setSize({ width = math.floor(width / 2) - (index == 1 and 2 or 0), height = EQUIPMENT_LINE })
+            local children = box:getChildren()
+            local title, value = children[1], children[2]
+            if title and value then
+                title:breakAnchors()
+                title:setMargin(0)
+                title:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+                title:addAnchor(AnchorVerticalCenter, 'parent', AnchorVerticalCenter)
+                title:setMarginLeft(4)
+                value:breakAnchors()
+                value:setMargin(0)
+                value:addAnchor(AnchorRight, 'parent', AnchorRight)
+                value:addAnchor(AnchorVerticalCenter, 'parent', AnchorVerticalCenter)
+                value:setMarginRight(4)
             end
         end
     end
-    if inventory.panelHeight then
-        inventory.panelHeight = inventory.panelHeight - EQUIPMENT_SAVED
-    end
+    y = y + EQUIPMENT_LINE + 3
     -- the fight mode, chase and secure buttons in the icon set (#28): white,
     -- gold for the one chosen (the inventory disables the chosen mode; the
     -- secure button is checked when on)
-    for id, icon in pairs(EQUIPMENT_ICONS) do
+    local x = x0
+    for _, id in ipairs(EQUIPMENT_MODES) do
         local button = slots:getChildById(id)
         if button then
-            local path = '/images/ui/ot/icons/' .. icon
+            place(button, x, y)
+            button:setSize({ width = EQUIPMENT_BUTTON + 4, height = EQUIPMENT_BUTTON })
+            x = x + EQUIPMENT_BUTTON + 4 + 2
+            local path = '/images/ui/ot/icons/' .. EQUIPMENT_ICONS[id]
             local chosen = { ['icon-source'] = path .. '_on', ['border-color'] = '#e0b84c' }
             button:mergeStyle({
                 ['image-source'] = '', ['background-color'] = '#1c1c1c', ['border-width'] = 1,
@@ -273,59 +279,27 @@ local function compactEquipment()
             })
         end
     end
+    y = y + EQUIPMENT_BUTTON + EQUIPMENT_PADDING
+    inventory.panelHeight = y
+    inventory.mobileWidth = width + 2 * EQUIPMENT_PADDING
+    inventory:mergeStyle({ ['$on'] = { height = y }, ['$!on'] = { height = y } })
+    inventory:setHeight(y)
 end
 
--- Shows the side panel widgets of the selected tab and hides the other tab
--- widgets. Windows that belong to no tab (trade, spell list...) are left as
--- they are, and keep the right panel visible while they are open.
-local function applyTab()
-    local gi = gameInterface()
-    local mainPanel = gi.getMainRightPanel()
-    local rightPanel = gi.getRightPanel()
-    -- a pinned panel is shown in its dock, not in the side panel
-    if currentTab and dockOfTab(currentTab) then
-        currentTab = nil
+-- The bottom bar: a panel's button is boxed while the panel is on the
+-- screen, the menu's while the desktop menu is open
+local function updateToolbar()
+    if not toolbar then
+        return
     end
-    local tab = currentTab and findTab(currentTab)
-    moveLeftWindowsRight()
-    applyPins(function(tabId, widget)
-        local pinned = findTab(tabId)
-        return pinned and tabOwns(pinned, widget) or false
-    end, rightPanel, mainPanel)
-
-    local mainHeight = 0
-    for _, child in ipairs(mainPanel:getChildren()) do
-        local show = tab and tab.panel == 'main' and tabOwns(tab, child) or false
-        child:setVisible(show)
-        -- The mobile view mode collapses this panel and its widgets
-        if show and child.panelHeight then
-            child:setHeight(child.panelHeight)
-        end
-        if show then
-            mainHeight = mainHeight + child:getHeight() + child:getMarginTop() + child:getMarginBottom()
-        end
-    end
-    mainPanel:setVisible(mainHeight > 0)
-    mainPanel:setHeight(mainHeight)
-
-    local otherWindowsOpen = false
-    for _, child in ipairs(rightPanel:getChildren()) do
-        if anyTabOwns(child) then
-            child:setVisible(tab and tab.panel == 'right' and tabOwns(tab, child) or false)
-        elseif child:isVisible() then
-            otherWindowsOpen = true
-        end
-    end
-    rightPanel:setVisible((tab and tab.panel == 'right') or otherWindowsOpen)
-    if rightPanel.fitAll then
-        rightPanel:fitAll()
-    end
-
     for _, button in ipairs(toolbar.buttons:getChildren()) do
         local id = button:getId()
-        local pinned = dockOfTab(id) ~= nil
-        button:setChecked(id == currentTab or (id == 'menu' and menuVisible) or (pinned and not isDockHidden(id)))
-        button:setOn(pinned)
+        local tab = findTab(id)
+        if tab and tab.panel then
+            button:setChecked(isPanelShown(id))
+        elseif id == 'menu' then
+            button:setChecked(menuVisible)
+        end
     end
 end
 
@@ -350,15 +324,10 @@ end
 -- The desktop top menu with every option (the hub's "All options")
 function showTopMenu()
     setMenuVisible(true)
-    applyTab()
+    updateToolbar()
 end
 
 function selectTab(id)
-    local entry = findTab(id)
-    if entry and entry.action then
-        entry.action()
-        return
-    end
     if id == 'menu' then
         -- the menu button opens the hub (hub.lua); a second tap closes the
         -- hub or the desktop menu
@@ -369,18 +338,11 @@ function selectTab(id)
         else
             openHub()
         end
-        applyTab()
+        updateToolbar()
         return
     end
-    -- A pinned panel's button hides or shows its dock
-    if dockOfTab(id) then
-        toggleDock(id)
-        applyTab()
-        return
-    end
-    -- Tapping the open panel's button closes it
-    currentTab = currentTab ~= id and id or nil
-    applyTab()
+    -- a panel's button shows or hides it
+    togglePanel(id)
     -- (a panel opens over the console; the chat button stays on top)
     if chatVisible and chatButton then
         chatButton:raise()
@@ -643,6 +605,14 @@ VIEW_SIZES = {
     { id = 'small', text = 'Small', column = 0.28, width = 0.85, panels = true },
 }
 local SIDE_PANEL_WIDTH = 176
+-- Landscape: the room kept for panels at the top of the right column, above
+-- the hotbar; the gap between the panels and the screen's edges
+LANDSCAPE_PANEL_ROOM = 140
+-- Portrait: the strip above the game view for panels, and the least the
+-- joystick and hotbar below it keep
+local PORTRAIT_STRIP = 140
+local PORTRAIT_CONTROLS = 150
+local PANEL_MARGIN = 2
 
 local function viewSize()
     local id = g_settings.getString(VIEW_SIZE_SETTING)
@@ -708,7 +678,7 @@ local function layout()
 
     for _, id in ipairs(HIDDEN_WIDGETS) do
         local widget = root:getChildById(id)
-        if widget and not isDockInUse(id) then
+        if widget then
             widget:setVisible(false)
         end
     end
@@ -737,11 +707,15 @@ local function layout()
         -- the area above (containers, equipment) a little smaller than the
         -- one below (bars, joystick, hotbar)
         mapTop = math.max(0, math.floor((available - mapHeight - statsRow) * 0.45))
+        -- room for the panels' strip (equipment is the tallest), unless the
+        -- controls below would get too little
+        local strip = math.min(PORTRAIT_STRIP, available - mapHeight - statsRow - PORTRAIT_CONTROLS)
+        mapTop = math.max(mapTop, strip)
     else
         local column = math.floor(width * size.column)
         if size.panels then
             -- room for a side panel (equipment, battle list), within reason
-            column = math.max(column, math.min(SIDE_PANEL_WIDTH + 6, math.floor(width * 0.3)))
+            column = math.max(column, math.min(SIDE_PANEL_WIDTH + 6, math.floor(width * 0.32)))
         end
         column = math.max(column, math.ceil((width - available * 15 / 11) / 2))
         mapWidth = width - 2 * column
@@ -769,9 +743,13 @@ local function layout()
     local buttons = toolbar:getChildById('buttons')
     -- narrower buttons when they do not all fit (portrait at a big
     -- interface size)
-    local buttonWidth = math.min(46, math.floor((width - 8) / #TABS) - 4)
+    local buttonWidth = math.min(46, math.floor((width - 8 - (#TABS - 1) * TOOLBAR_DIVIDER) / #TABS) - 4)
+    local buttonsWidth = 0
     for _, button in ipairs(buttons:getChildren()) do
-        button:setWidth(buttonWidth)
+        if button:getStyleName() ~= 'MobileToolbarDivider' then
+            button:setWidth(buttonWidth)
+        end
+        buttonsWidth = buttonsWidth + button:getWidth() + button:getMarginLeft() + button:getMarginRight()
     end
     buttons:breakAnchors()
     buttons:addAnchor(AnchorVerticalCenter, 'parent', AnchorVerticalCenter)
@@ -796,7 +774,7 @@ local function layout()
         stats:setMarginRight(8)
     else
         stats:addAnchor(AnchorVerticalCenter, 'mobileToolbar', AnchorVerticalCenter)
-        stats:setWidth(math.max(120, math.min(460, width - #toolbar.buttons:getChildren() * 50 - 32)))
+        stats:setWidth(math.max(120, math.min(460, width - buttonsWidth - 24)))
     end
     updateStats()
 
@@ -832,10 +810,9 @@ local function layout()
             gridWidth = width - joystickWidth - 16
             gridHeight = available - (mapTop + mapHeight + statsRow) - topRow - chatButton:getHeight() - 10
         else
-            local inventory = gi.getMainRightPanel():recursiveGetChildById('maininventorypanel')
-            local equipment = inventory and inventory.panelHeight or 150
+            -- (the top of the column is kept for panels)
             gridWidth = side - 6
-            gridHeight = available - equipment - 4 - topRow - 6
+            gridHeight = available - LANDSCAPE_PANEL_ROOM - topRow - 6
         end
         gridWidth = setActionGrid(gridWidth, gridHeight)
         actionPanel:breakAnchors()
@@ -897,48 +874,41 @@ local function layout()
     console:setHeight(math.floor((height - TOOLBAR_HEIGHT) * (portrait and 0.4 or 0.5)))
     console:setVisible(chatVisible)
 
-    -- Side panels open over the game view, on the right
-    local mainPanel = gi.getMainRightPanel()
-    local rightPanel = gi.getRightPanel()
-    mainPanel:breakAnchors()
-    mainPanel:addAnchor(AnchorTop, 'parent', AnchorTop)
-    mainPanel:addAnchor(AnchorRight, 'parent', AnchorRight)
-    mainPanel:setMargin(0)
-    rightPanel:breakAnchors()
-    rightPanel:addAnchor(AnchorTop, 'parent', AnchorTop)
-    rightPanel:addAnchor(AnchorRight, 'parent', AnchorRight)
-    rightPanel:addAnchor(AnchorBottom, 'mobileToolbar', AnchorTop)
-    rightPanel:setMargin(0)
-    -- solid: the view mode draws side panels see-through, and these open
-    -- over the game and the hotbar
-    mainPanel:setImageColor('white')
-    rightPanel:setImageColor('white')
+    -- The panels (panels.lua): in the free areas off the game view. Portrait:
+    -- the strip above it. Landscape: the tops of the side columns, above
+    -- the joystick (left) and the hotbar (right).
+    local rootRect = root:getRect()
+    local regions = {}
+    if portrait then
+        table.insert(regions, { x = rootRect.x + PANEL_MARGIN, y = rootRect.y + PANEL_MARGIN,
+            width = width - 2 * PANEL_MARGIN, height = mapTop - 2 * PANEL_MARGIN })
+    else
+        local mapLeft = math.floor((width - mapWidth) / 2)
+        local joystickHeight = 0
+        if keypad and keypad:isVisible() then
+            joystickHeight = math.floor(getPieceBaseSize(keypad).height * getPieceScale('joystick'))
+        end
+        table.insert(regions, { x = rootRect.x + PANEL_MARGIN, y = rootRect.y + PANEL_MARGIN,
+            width = mapLeft - 2 * PANEL_MARGIN, height = available - joystickHeight - 3 * PANEL_MARGIN })
+        table.insert(regions, { x = rootRect.x + mapLeft + mapWidth + PANEL_MARGIN, y = rootRect.y + PANEL_MARGIN,
+            width = width - mapLeft - mapWidth - 2 * PANEL_MARGIN, height = LANDSCAPE_PANEL_ROOM - PANEL_MARGIN })
+    end
     compactEquipment()
-
-    applyTab()
-    mainPanel:raise()
-    rightPanel:raise()
+    placePanels(regions)
+    updateToolbar()
     if chatVisible then
         console:raise()
     end
     chatButton:raise()
     toolbar:raise()
     stats:raise()
-    -- the containers window (client_containers): top left, above the game
-    -- view (portrait) or above the joystick (landscape)
-    local containers = modules.client_containers and modules.client_containers.getWindow()
-    if containers then
-        -- (its columns follow the area's width)
+    -- (the containers window fits its columns to the area's width)
+    if modules.client_containers and modules.client_containers.relayout then
         modules.client_containers.relayout()
-        containers:breakAnchors()
-        containers:setMargin(0)
-        containers:setPosition({ x = 4, y = root:getY() + 4 })
-        containers:raise()
     end
 
     -- Positions the player chose in edit mode (edit.lua)
     applySavedLayout()
-    fitDocks()
     -- the first-login setup (setup.lua): pieces still to place stay hidden,
     -- and a new orientation is offered the setup
     applySetupVisibility()
@@ -986,14 +956,14 @@ function getMovableWidgets()
     local widgets = { stats = stats, chat = chatButton }
     widgets.grid = root and root:getChildById('gameBottomActionPanel')
     widgets.joystick = modules.game_joystick and modules.game_joystick.getPanel and modules.game_joystick.getPanel()
-    widgets.containers = modules.client_containers and modules.client_containers.getWindow
-        and modules.client_containers.getWindow()
-    -- docks of pinned panels (pins.lua)
-    for index, _ in pairs(pinnedTabs()) do
-        local dock = dockWidget(index)
-        if dock and dock:isVisible() then
-            widgets['dock' .. index] = dock
-        end
+    -- the panels on the screen (panels.lua; the containers window among them)
+    for _, piece in ipairs(getPanelPieces()) do
+        widgets[piece.key] = getPanelWidget(piece.panel)
+    end
+    -- (the first-login setup places the containers window, shown or not)
+    if not widgets.containers and isUiSetupRunning() then
+        widgets.containers = modules.client_containers and modules.client_containers.getWindow
+            and modules.client_containers.getWindow()
     end
     return widgets
 end
@@ -1014,15 +984,15 @@ function refreshStats()
     updateStats()
 end
 
--- Edit mode needs the pieces in view: no menu, panel or chat over them
+-- Edit mode needs the pieces in view: no menu or chat over them (the
+-- panels on the screen are pieces too)
 function onEditLayoutChange(active)
     if editLayoutButton then
         editLayoutButton:setOn(active)
     end
     if active then
         setMenuVisible(false)
-        currentTab = nil
-        applyTab()
+        updateToolbar()
         setChatVisible(false)
     end
 end
@@ -1037,6 +1007,9 @@ end
 
 local function onGameStart()
     setMenuVisible(false)
+    -- the panels this character had open
+    loadOpenedPanels()
+    settlePanels(1200)
     startGameInfo()
     if modules.game_actionbar then
         modules.game_actionbar.ActionBarAssignSheet = openHotbarSheet
@@ -1090,26 +1063,19 @@ function init()
     toolbar:addAnchor(AnchorBottom, 'parent', AnchorBottom)
     toolbar:setHeight(TOOLBAR_HEIGHT)
     for _, tab in ipairs(TABS) do
-        local button = g_ui.createWidget('MobileToolbarButton', toolbar.buttons)
+        -- the menu: a stone button; the panels' buttons with a thin line
+        -- between them
+        if tab.id ~= 'menu' then
+            g_ui.createWidget('MobileToolbarDivider', toolbar.buttons)
+        end
+        local button = g_ui.createWidget(tab.id == 'menu' and 'MobileToolbarMenuButton' or 'MobileToolbarButton',
+            toolbar.buttons)
         button:setId(tab.id)
-        -- (white, gold while its panel is open or pinned)
-        local icon = '/images/ui/ot/icons/' .. tab.icon
-        button:setIcon(icon)
-        button:mergeStyle({ ['$checked'] = { ['icon-source'] = icon .. '_on' },
-            ['$on'] = { ['icon-source'] = icon .. '_on' } })
+        -- (white; boxed while its panel is on the screen)
+        button:setIcon('/images/ui/ot/icons/' .. tab.icon)
         button:setTooltip(tr(tab.tooltip))
         button.onClick = function()
             selectTab(tab.id)
-        end
-        -- A long press pins the panel on the screen (pins.lua)
-        if tab.panel then
-            button.onMouseRelease = function(widget, pos, mouseButton)
-                if mouseButton == MouseRightButton and widget:containsPoint(pos) then
-                    togglePin(tab.id)
-                    return true
-                end
-                return false
-            end
         end
     end
 
@@ -1158,8 +1124,38 @@ function terminate()
     presetRow = nil
     terminateTap()
     stopGameInfo()
+    terminatePanels()
     toolbar:destroy()
     stats:destroy()
     chatButton:destroy()
     toolbar, stats, chatButton = nil, nil, nil
+end
+
+-- The touch layout without a game (the UI gallery, tools/ui-gallery): the
+-- game screen with the pieces in their places, panels open (ids) and, with
+-- edit, in Edit layout. Nothing of it is saved.
+function startLayoutPreview(panelIds, edit)
+    if not toolbar then
+        return false
+    end
+    previewing = true
+    gameInterface().show()
+    -- what a game start sets up: the hotbar, P and the pencil, the joystick
+    -- (as far as they work without a character)
+    pcall(function() modules.game_actionbar.ActionBarController:onGameStart() end)
+    pcall(refreshHotbarPresetRow)
+    if modules.game_joystick and modules.game_joystick.onGameStart then
+        modules.game_joystick.onGameStart()
+    end
+    setChatVisible(false)
+    setOpenedPanels(panelIds)
+    settlePanels(700)
+    layout()
+    -- (the action bar, the joystick and the screen settle a little later)
+    scheduleEvent(layout, 200)
+    scheduleEvent(layout, 600)
+    if edit then
+        startEditLayout()
+    end
+    return true
 end

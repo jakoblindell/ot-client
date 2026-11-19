@@ -320,6 +320,23 @@
                 Module.print(err);
               }
               removeRunDependency("syncfs");
+              // Write the saved files to IndexedDB when the page goes to the
+              // background or away. iOS suspends or drops a hidden page
+              // without notice (beforeunload is unreliable there), and
+              // autoPersist alone may still be busy with the last write.
+              var flushing = false;
+              function flush() {
+                if (flushing) return;
+                flushing = true;
+                FS.syncfs(false, function (e) {
+                  flushing = false;
+                  if (e) Module.print("Saving settings failed: " + e);
+                });
+              }
+              document.addEventListener("visibilitychange", function () {
+                if (document.visibilityState === "hidden") flush();
+              });
+              window.addEventListener("pagehide", flush);
             });
           },
         ],

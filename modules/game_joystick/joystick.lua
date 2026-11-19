@@ -100,6 +100,10 @@ function onGameStart()
 end
 
 function onGameEnd()
+  -- a dropped connection being reconnected keeps the game screen as it is
+  if modules.client_reconnect and modules.client_reconnect.willReconnect() then
+    return
+  end
   keypad:hide()
 end
 
