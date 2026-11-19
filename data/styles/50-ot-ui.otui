@@ -23,6 +23,12 @@
 &ot-positive: #70d070
 &ot-negative: #e05050
 &ot-backdrop: #000000a0
+// Paper: letters, books and labels, dark text in a large readable TTF font
+&ot-paper: #e4d6ae
+&ot-paper-text: #2a2016
+&ot-paper-selection: #b8a070
+&ot-font-paper: Verdana
+&ot-font-paper-size: 15
 // Contrast mode (setOn on an OtPanel): the stone darkened, so light text stands out
 &ot-contrast-stone: #8c8c8c
 
@@ -53,6 +59,23 @@ OtInset < UIWidget
   image-source: /images/ui/3pixel_frame_borderimage
   image-border: 4
   padding: 6
+
+// The text of a letter, book or label: dark on paper, in the large TTF font
+// (multi-line; set editable false for text that is only read)
+OtPaper < UITextEdit
+  multiline: true
+  text-wrap: true
+  background-color: $ot-paper
+  color: $ot-paper-text
+  ttf-font: $ot-font-paper
+  ttf-font-size: $ot-font-paper-size
+  border-width: 1
+  border-color: #00000099
+  padding: 6 8
+  selection-color: $ot-paper-text
+  selection-background-color: $ot-paper-selection
+  cursor: none
+  blink-speed: 600
 
 // --- Text -------------------------------------------------------------------
 
