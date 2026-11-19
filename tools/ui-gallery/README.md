@@ -27,6 +27,13 @@ with saved baseline images on every pull request (ot-client#70).
 | `hotbar` | the hotbar settings sheet |
 | `outfit` | the outfit screen for touch screens, with sample outfits |
 | `settings-gameplay` … `settings-optimization` | the hub's Settings, one page per tab |
+| `layout-panels` | the touch layout (no game) with Containers and Equipment open in their default places |
+| `layout-lists` | the touch layout with the Map, Skills and the Hunt analyzer open (the oldest gives way when they do not all fit) |
+| `layout-edit` | Edit layout with Containers and Equipment open: outlines, - and +, the "Customize Layout" window |
+
+The `layout-*` pages are portrait on `iphone-portrait` and landscape on the
+other phones and the tablet; desktop devices show a note (the desktop layout
+has no touch pieces).
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock

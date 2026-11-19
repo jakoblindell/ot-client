@@ -23,7 +23,8 @@ const http = require('http');
 const { chromium } = require(process.env.PW_MODULE || 'playwright');
 
 const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
-    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization'];
+    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
+    'layout-panels', 'layout-lists', 'layout-edit'];
 
 // Mostly landscape, as the game is played, plus an iPhone in portrait and one
 // turned to landscape after the page loaded (the screen resized under a

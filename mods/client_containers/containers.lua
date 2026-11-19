@@ -137,21 +137,42 @@ local function columns()
     return 5
 end
 
+-- The height the touch layout gives the window as a piece (client_mobile:
+-- the free area above the game view): the slots scroll inside it. nil: as
+-- high as its contents.
+local pieceHeight
+local SCROLLBAR = 12 + 2
+
 local function fit()
     local cols = columns()
     local tab = shown and tabFor(shown)
     local capacity = tab and tab.container:getCapacity() or 0
     local rows = math.max(1, math.ceil(capacity / cols))
     local grid = window:getChildById('grid')
+    local scroll = window:getChildById('gridScroll')
     grid:getLayout():setNumColumns(cols)
     local gridWidth = cols * (SLOT + SPACING) - SPACING
-    grid:setSize({ width = gridWidth, height = rows * (SLOT + SPACING) - SPACING })
-    window:setWidth(gridWidth + window:getPaddingLeft() + window:getPaddingRight())
-    local height = 24 + 4 + 28 + 4 + (tab and grid:getHeight() or 56)
+    local gridHeight = rows * (SLOT + SPACING) - SPACING
+    local head = 24 + 4 + 28 + 4
+    local padding = window:getPaddingTop() + window:getPaddingBottom()
+    local scrolls = false
+    if pieceHeight and tab and not window.minimized then
+        local room = math.max(SLOT, pieceHeight - head - padding)
+        scrolls = gridHeight > room
+        gridHeight = math.min(gridHeight, room)
+    end
+    grid:setSize({ width = gridWidth, height = gridHeight })
+    scroll:setVisible(scrolls and grid:isVisible())
+    -- (room for the scroll bar on a piece, so the width stays the same)
+    local extra = pieceHeight and SCROLLBAR or 0
+    window:setWidth(gridWidth + extra + window:getPaddingLeft() + window:getPaddingRight())
+    local height = head + (tab and gridHeight or 56)
     if window.minimized then
         height = 24 + 4 + 28
+    elseif pieceHeight then
+        height = math.max(height, pieceHeight - padding)
     end
-    window:setHeight(height + window:getPaddingTop() + window:getPaddingBottom())
+    window:setHeight(height + padding)
 end
 
 local function useItem(item)
@@ -559,6 +580,32 @@ local function hideClassicWindow(container)
     end
 end
 
+-- The touch layout shows and hides the window as one of its panels
+-- (client_mobile/panels.lua): it finds the window a place
+local function mobilePanels()
+    local mobile = modules.client_mobile
+    return mobile and mobile.showPanel and mobile or nil
+end
+
+function showWindow()
+    local mobile = mobilePanels()
+    if mobile then
+        mobile.showPanel('bag')
+    else
+        window:show()
+    end
+    window:raise()
+end
+
+local function hideWindow()
+    local mobile = mobilePanels()
+    if mobile then
+        mobile.hidePanel('bag')
+    else
+        window:hide()
+    end
+end
+
 local function onOpen(container, previousContainer)
     hideClassicWindow(container)
     local pos = pendingPosition
@@ -614,8 +661,7 @@ local function onOpen(container, previousContainer)
         end
     end
     if window then
-        window:show()
-        window:raise()
+        showWindow()
     end
     render()
 end
@@ -678,11 +724,30 @@ function toggle()
         return
     end
     if window:isVisible() then
-        window:hide()
+        hideWindow()
     else
-        window:show()
-        window:raise()
+        showWindow()
         render()
+    end
+end
+
+-- As a piece of the touch layout: shown or not, folded (-) or not, and the
+-- height it has (nil: as high as its contents)
+function setPieceShown(visible, minimized)
+    if not window then
+        return
+    end
+    window.minimized = minimized
+    window:setVisible(visible)
+    if visible then
+        render()
+    end
+end
+
+function setPieceHeight(height)
+    pieceHeight = height
+    if window then
+        fit()
     end
 end
 
@@ -769,9 +834,15 @@ function init()
     window:hide()
     local head = window:getChildById('head')
     head:getChildById('minimize').onClick = function()
+        local mobile = mobilePanels()
+        if mobile and mobile.setPanelMinimized then
+            mobile.setPanelMinimized('bag', not window.minimized)
+            return
+        end
         window.minimized = not window.minimized
         render()
     end
+    head:getChildById('close').onClick = hideWindow
     head:getChildById('list').onClick = openList
     window:getChildById('strip'):getChildById('more').onClick = function()
         firstTab = firstTab < #tabs and firstTab + 1 or 1
