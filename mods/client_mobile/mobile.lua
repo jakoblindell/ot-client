@@ -1147,10 +1147,7 @@ function startLayoutPreview(panelIds, edit)
         modules.game_joystick.onGameStart()
     end
     setChatVisible(false)
-    loadOpenedPanels()
-    for _, id in ipairs(panelIds or {}) do
-        showPanel(id)
-    end
+    setOpenedPanels(panelIds)
     layout()
     -- (the action bar, the joystick and the screen settle a little later)
     scheduleEvent(layout, 200)
