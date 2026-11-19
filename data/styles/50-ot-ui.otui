@@ -27,7 +27,7 @@
 &ot-paper: #e4d6ae
 &ot-paper-text: #2a2016
 &ot-paper-selection: #b8a070
-&ot-font-paper: Verdana
+&ot-font-paper: /fonts/ttf/Verdana.ttf
 &ot-font-paper-size: 15
 // Contrast mode (setOn on an OtPanel): the stone darkened, so light text stands out
 &ot-contrast-stone: #8c8c8c
