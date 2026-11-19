@@ -520,7 +520,9 @@ function onGameSessionEnd(reason)
 end
 
 function onGameConnectionError(message, code)
-    if isReconnecting() then
+    -- A connection lost while playing is reconnected (client_reconnect):
+    -- this error comes just before the game ends, so ask whether it will be
+    if isReconnecting() or (g_game.isOnline() and modules.client_reconnect and modules.client_reconnect.willReconnect()) then
         return
     end
     CharacterList.destroyLoadBox()
