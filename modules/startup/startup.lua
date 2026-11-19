@@ -1,7 +1,7 @@
 -- In the browser the client never exits (the tab is just closed), so
 -- settings are saved when a game ends (the modules store their window
--- positions, channels and zoom then), when the page is hidden, and every
--- 30 seconds
+-- positions, channels and zoom then), when the page is hidden, and within
+-- two seconds of any change
 local saveEvent, visibilityEvent
 local pageWasVisible = true
 
@@ -20,14 +20,35 @@ local function checkPageVisibility()
     pageWasVisible = visible
 end
 
+-- A setting changed since the last save (g_settings.set and friends)
+local changed = false
+local originalSettings = {}
+
 local function startBrowserSaving()
     if not g_platform.isBrowser() then
         return
     end
     connect(g_game, { onGameEnd = saveSettingsSoon })
+    -- A change is saved within two seconds: an iPhone suspends or drops a
+    -- page in the background without notice, so waiting for the page to
+    -- be hidden or for the next 30-second save can lose it. The page
+    -- writes the saved file to IndexedDB (browser/shell.html).
+    for _, name in ipairs({ 'set', 'setNode', 'setList', 'remove', 'mergeNode' }) do
+        local original = g_settings[name]
+        if original then
+            originalSettings[name] = original
+            g_settings[name] = function(...)
+                changed = true
+                return original(...)
+            end
+        end
+    end
     saveEvent = cycleEvent(function()
-        g_settings.save()
-    end, 30000)
+        if changed then
+            changed = false
+            g_settings.save()
+        end
+    end, 2000)
     visibilityEvent = cycleEvent(checkPageVisibility, 1000)
 end
 
@@ -38,6 +59,10 @@ local function stopBrowserSaving()
         removeEvent(visibilityEvent)
         saveEvent, visibilityEvent = nil, nil
     end
+    for name, original in pairs(originalSettings) do
+        g_settings[name] = original
+    end
+    originalSettings = {}
 end
 
 function init()

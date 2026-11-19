@@ -89,6 +89,9 @@ local function onCharacterList(protocol, characters, account, otui)
 
         g_settings.set('autologin', enterGame:getChildById('autoLoginBox'):isChecked())
         ServerList.save()
+        -- written now: in the browser the client never exits to save them
+        -- (an iPhone can drop the page without warning)
+        g_settings.save()
     else
         -- reset server list account/password
         ServerList.setServerAccount(G.host, '')
