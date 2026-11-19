@@ -1,7 +1,7 @@
 // The containers window for touch screens (containers.lua), built from the
 // ot-ui styles (data/styles/50-ot-ui.otui)
 ContainersMiniButton < UIButton
-  size: 26 24
+  size: 22 24
   font: $ot-font-label
   color: $ot-text
   text-align: center
@@ -80,16 +80,24 @@ ContainersWindow < OtPanel
       anchors.left: minimize.right
       anchors.right: list.left
       anchors.verticalCenter: parent.verticalCenter
-      margin-left: 6
+      margin-left: 4
       font: $ot-font-label
       color: $ot-text-muted
       !text: tr('Containers')
 
     ContainersMiniButton
       id: list
+      anchors.right: close.left
+      anchors.verticalCenter: parent.verticalCenter
+      margin-right: 2
+      !text: 'v'
+
+    // hides the window (its button on the bottom bar shows it again)
+    ContainersMiniButton
+      id: close
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      !text: 'v'
+      !text: 'x'
 
   // the tabs: a clipped row that scrolls sideways
   UIWidget
@@ -121,17 +129,29 @@ ContainersWindow < OtPanel
       color: $ot-gold
       visible: false
 
-  UIWidget
+  // the slots touch: each has its own frame (compact, see design-language);
+  // they scroll when the window is not high enough for all of them
+  ScrollablePanel
     id: grid
     anchors.top: strip.bottom
     anchors.left: parent.left
     margin-top: 4
-    // the slots touch: each has its own frame (compact, see design-language)
+    vertical-scrollbar: gridScroll
     layout:
       type: grid
       cell-size: 34 34
       cell-spacing: 0
       flow: true
+
+  VerticalScrollBar
+    id: gridScroll
+    anchors.top: grid.top
+    anchors.bottom: grid.bottom
+    anchors.left: grid.right
+    margin-left: 2
+    step: 34
+    pixels-scroll: true
+    visible: false
 
   OtHint
     id: empty

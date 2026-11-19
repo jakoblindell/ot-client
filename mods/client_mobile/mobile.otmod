@@ -1,8 +1,8 @@
 Module
   name: client_mobile
-  description: Touch layout for phones and tablets: the game view fills the screen, a toolbar opens one panel at a time and a button opens the chat
+  description: Touch layout for phones and tablets: the game view fills the screen, a toolbar shows and hides panels, each a piece of the layout, and a button opens the chat
   author: ot-client
   sandboxed: true
-  scripts: [ data792, hotbar_sheet, hotbar_presets, tap, edit, setup, pins, hub, character, touchmode, gameinfo, mobile ]
+  scripts: [ data792, hotbar_sheet, hotbar_presets, tap, edit, setup, panels, hub, character, touchmode, gameinfo, mobile ]
   @onLoad: init()
   @onUnload: terminate()

@@ -18,6 +18,7 @@ local STEPS = {
 }
 
 local sheet, bar
+local shownForSetup = false -- (the backpack panel, shown to be placed)
 local steps -- the steps of the setup running (nil: not running)
 local current
 
@@ -131,10 +132,10 @@ local function finish()
     steps = nil
     markDone()
     -- the backpack window was shown to be placed: hidden again when empty
-    local containers = modules.client_containers
-    if containers and containers.getWindow() and #g_game.getContainers() == 0 then
-        containers.getWindow():hide()
+    if shownForSetup and #g_game.getContainers() == 0 then
+        hidePanel('bag')
     end
+    shownForSetup = false
     relayout()
     showSheet('Your UI is ready', 'Change it any time: Menu > Edit layout. Settings > Layout runs this setup again.',
         nil, nil, 'Play', function() end)
@@ -154,13 +155,10 @@ local function startSteps()
         stopEditLayout()
     end
     steps = {}
-    local widgets = getMovableWidgets()
     -- (the backpack window shows even with nothing open, to be placed)
-    local containers = modules.client_containers and modules.client_containers.getWindow()
-    if containers then
-        containers:setVisible(true)
-        widgets.containers = containers
-    end
+    shownForSetup = not isPanelShown('bag')
+    showPanel('bag')
+    local widgets = getMovableWidgets()
     for _, step in ipairs(STEPS) do
         if widgets[step.key] then
             table.insert(steps, step)
