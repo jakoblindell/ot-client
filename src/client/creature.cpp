@@ -207,9 +207,21 @@ void Creature::drawInformation(const MapPosInfo& mapRect, const Point& dest, con
     const int cropSizeText = g_gameConfig.isAdjustCreatureInformationBasedCropSize() ? getExactSize() : 12;
     const int cropSizeBackGround = g_gameConfig.isAdjustCreatureInformationBasedCropSize() ? cropSizeText - nameSize.height() : 0;
 
-    const bool isScaled = g_app.getCreatureInformationScale() != DEFAULT_DISPLAY_DENSITY;
+    // Sized with the map on the touch layout (ot-client#112), else fixed
+    const bool withMap = g_app.getCreatureInformationMapScale() > 0.f;
+    const float infoScale = g_app.getCreatureInformationScaleFor(mapRect.scaleFactor * std::min(mapRect.horizontalStretchFactor, mapRect.verticalStretchFactor));
+    const bool isScaled = infoScale != DEFAULT_DISPLAY_DENSITY;
     if (isScaled) {
-        p.scale(g_app.getCreatureInformationScale());
+        p.scale(infoScale);
+    }
+
+    // Sized with the map, the bars stack upwards from where the health bar
+    // ends, so the mana bar and a larger scale never cover the character
+    if (withMap && (drawFlags & Otc::DrawBars) && (drawFlags & Otc::DrawManaBar) && isLocalPlayer()) {
+        if (const auto& player = g_game.getLocalPlayer()) {
+            const int extraBars = 1 + (player->isMage() && player->getMaxManaShield() > 0 ? 1 : 0);
+            p.y -= 4 * extraBars;
+        }
     }
 
     auto backgroundRect = Rect(p.x - (15.5), p.y - cropSizeBackGround, 31, 4);
@@ -245,7 +257,7 @@ void Creature::drawInformation(const MapPosInfo& mapRect, const Point& dest, con
 
     g_drawPool.select(DrawPoolType::CREATURE_INFORMATION);
     if (isScaled)
-        g_drawPool.scale(g_app.getCreatureInformationScale());
+        g_drawPool.scale(infoScale);
 
     if ((drawFlags & Otc::DrawBars) && (g_game.getClientVersion() >= 1100 ? !isNpc() : true)) {
         g_drawPool.addFilledRect(backgroundRect, Color::black);

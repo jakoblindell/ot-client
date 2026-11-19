@@ -38,7 +38,10 @@ local SETTINGS = {
         id = 'display', text = 'Display', rows = {
             { key = 'hudScale', kind = 'choice', text = 'Interface size',
                 choices = { { 1, '1x' }, { 2, '1.5x' }, { 3, '2x' }, { 4, '2.5x' } },
-                help = 'How big names, bars and the whole interface are drawn.' },
+                help = 'How big buttons, windows and the whole interface are drawn.' },
+            { key = 'creatureInformationSize', kind = 'choice', text = 'Names and bars',
+                choices = { { 80, 'Small' }, { 100, 'Normal' }, { 125, 'Large' } },
+                help = 'How big names and health bars are drawn over creatures, in step with the map.' },
             { key = 'displayNames', kind = 'toggle', text = 'Names above creatures',
                 help = 'Show names over creatures and players.' },
             { key = 'displayHealth', kind = 'toggle', text = 'Health bars above creatures',
