@@ -541,6 +541,15 @@ return {
                 'Creature Information Scale: %sx', math.max(value + 0.5, 1)))
         end
     },
+    -- Touch layout (ot-client#112): names and bars sized with the map, in
+    -- percent of its zoom (100: classic proportions). 0: the fixed
+    -- creatureInformationScale, as on desktop
+    creatureInformationSize           = {
+        value = g_platform.isMobile() and 100 or 0,
+        action = function(value, options, controller, panels, extraWidgets)
+            g_app.setCreatureInformationMapScale((tonumber(value) or 0) / 100)
+        end
+    },
     staticTextScale                   = {
         value = g_platform.isMobile() and 2 or 0,
         action = function(value, options, controller, panels, extraWidgets)
