@@ -102,6 +102,17 @@
         var focusedAt = 0;
         var touchStart = null;
         var engineFocused = false;
+        // The focused field is multi-line (a letter, a book): its Enter key
+        // starts a new line and is labelled as such ("return"), instead of
+        // "Done" (which did nothing visible there). Elsewhere it's "Done" and
+        // submits. The keyboard closes with the system's hide-keyboard
+        // button, a tap outside the field, or the window's own buttons.
+        var multiline = false;
+        function setMultiline(on) {
+          multiline = on;
+          var hint = on ? "enter" : "done";
+          if (input.getAttribute("enterkeyhint") !== hint) input.setAttribute("enterkeyhint", hint);
+        }
 
         function reset() {
           input.value = SENTINEL;
@@ -204,31 +215,70 @@
           if (field) {
             if (!input.isConnected) document.body.appendChild(input);
             setHidden(field[4] === 1);
+            setMultiline(field[5] === 1);
             input.style.left = Math.max(0, Math.min(t.clientX, window.innerWidth - 4)) + "px";
             input.style.top = Math.max(0, Math.min(t.clientY, window.innerHeight - 4)) + "px";
             if (document.activeElement !== input) reset();
             input.focus({ preventScroll: true });
             focusedAt = Date.now();
-            engineFocused = false;
+            // a field the engine already focuses counts: the published state
+            // only changes (and reports) when something differs, so tapping
+            // a field that was focused already reports nothing new
+            engineFocused = !!(window.otTextInputs && window.otTextInputs.focus);
           } else if (document.activeElement === input) {
             input.blur();
           }
         }, { capture: true, passive: true });
 
         // The engine's text field lost the focus (for example after Enter
-        // logs in): close the keyboard. Only once the engine has reported a
-        // focused field since the tap, and not right after it (the engine
-        // may not have seen the tap yet).
+        // logs in, or Done in a single-line field): close the keyboard. Only
+        // once the engine has had a focused field since the tap, and not
+        // right after it (the engine may not have seen the tap yet).
         window.otTextInputsChanged = function () {
           var data = window.otTextInputs || {};
           if (document.activeElement !== input) return;
           if (data.focus) {
             engineFocused = true;
             setHidden(data.focus === 2);
+            setMultiline(data.multiline === 1);
           } else if (engineFocused && Date.now() - focusedAt > 800) {
             input.blur();
           }
         };
+
+        // While the on-screen keyboard is open, the page tells the game which
+        // part of the canvas is still visible above it, as fractions of the
+        // canvas height (window.otclientConfig.keyboardVisibleTop/Bottom; the
+        // game reads them with g_platform.getBrowserConfigString). Windows
+        // with a text field move and shrink into that part, so their buttons
+        // stay in reach. Nothing is set while the keyboard is closed.
+        function publishKeyboard() {
+          var vv = window.visualViewport;
+          var canvas = document.getElementById("canvas");
+          var config = (window.otclientConfig = window.otclientConfig || {});
+          if (!vv || !canvas) return;
+          var r = canvas.getBoundingClientRect();
+          var open = document.activeElement === input && vv.height < window.innerHeight - 80 && r.height > 0;
+          if (open) {
+            var top = Math.max(0, Math.min(1, (vv.offsetTop - r.top) / r.height));
+            var bottom = Math.max(top, Math.min(1, (vv.offsetTop + vv.height - r.top) / r.height));
+            config.keyboardVisibleTop = top.toFixed(4);
+            config.keyboardVisibleBottom = bottom.toFixed(4);
+          } else {
+            delete config.keyboardVisibleTop;
+            delete config.keyboardVisibleBottom;
+          }
+        }
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener("resize", publishKeyboard);
+          window.visualViewport.addEventListener("scroll", publishKeyboard);
+        }
+        input.addEventListener("focus", function () {
+          setTimeout(publishKeyboard, 50);
+        });
+        input.addEventListener("blur", function () {
+          setTimeout(publishKeyboard, 50);
+        });
 
         document.addEventListener("DOMContentLoaded", function () {
           document.body.appendChild(input);
