@@ -334,7 +334,7 @@ end
 -- The outlines ----------------------------------------------------------------
 
 -- The outline is exactly the piece. Its name and - + go in its middle: the
--- name above - +, or between them on a low piece (the bars), or - + over
+-- name above - +, or between them on a low piece (the bars), or - + beside
 -- the piece when it is too small for both (the chat button)
 local SIZE_BUTTON = 34
 local SIZES_WIDTH = 2 * SIZE_BUTTON + 8
@@ -346,7 +346,8 @@ local function placeFrame(frame, widget)
     name:breakAnchors()
     local cx = rect.x + math.floor(rect.width / 2)
     local cy = rect.y + math.floor(rect.height / 2)
-    local nameWidth, nameHeight = name:getTextSize().width, name:getHeight()
+    local nameWidth, nameHeight = name:getTextSize().width + 8, name:getHeight()
+    name:setWidth(nameWidth)
     local function nameAt(y)
         name:setPosition({ x = cx - math.floor(nameWidth / 2), y = y })
     end
@@ -364,13 +365,25 @@ local function placeFrame(frame, widget)
         nameAt(cy - math.floor(nameHeight / 2))
         local r = root():getRect()
         local x = math.max(r.x, math.min(cx - math.floor(SIZES_WIDTH / 2), r.x + r.width - SIZES_WIDTH))
-        -- (above it, where the bars or the hotbar are not; below at the top)
-        local y = rect.y - SIZE_BUTTON - 2
-        if y < r.y then
-            y = rect.y + rect.height + 2
-        end
+        -- above it in landscape (the chat button: P and the pencil are
+        -- beside it), beside it in portrait (the bars are above it), else
+        -- below
         sizes:setSize({ width = SIZES_WIDTH, height = SIZE_BUTTON })
-        sizes:setPosition({ x = x, y = y })
+        local y = cy - math.floor(SIZE_BUTTON / 2)
+        local above = rect.y - SIZE_BUTTON - 2
+        if orientation() == 'landscape' and above >= r.y then
+            sizes:setPosition({ x = x, y = above })
+        elseif rect.x - SIZES_WIDTH - 2 >= r.x then
+            sizes:setPosition({ x = rect.x - SIZES_WIDTH - 2, y = y })
+        elseif rect.x + rect.width + 2 + SIZES_WIDTH <= r.x + r.width then
+            sizes:setPosition({ x = rect.x + rect.width + 2, y = y })
+        else
+            y = rect.y - SIZE_BUTTON - 2
+            if y < r.y then
+                y = rect.y + rect.height + 2
+            end
+            sizes:setPosition({ x = x, y = y })
+        end
     end
 end
 

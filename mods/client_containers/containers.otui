@@ -56,10 +56,25 @@ ContainersSlotName < Label
   background-color: #000000a0
   phantom: true
 
-ContainersWindow < OtPanel
+// The title bar: as the other panels' (a mini window's 15 px bar, the name,
+// - and x)
+ContainersHeadButton < UIButton
+  size: 12 12
+  image-size: 14 14
+  image-source: /images/ui/miniwindow_buttons
+  focusable: false
+
+// (a panel's body, as the mini windows')
+ContainersWindow < UIWidget
   id: containersWindow
   width: 190
-  padding: 4
+  image-source: /images/ui/miniwindow_body
+  image-border: 4
+  padding-top: 0
+  padding-left: 3
+  padding-right: 3
+  padding-bottom: 3
+  phantom: false
   focusable: false
 
   UIWidget
@@ -67,37 +82,45 @@ ContainersWindow < OtPanel
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
-    height: 24
-
-    ContainersMiniButton
-      id: minimize
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      !text: '-'
+    margin-left: -3
+    margin-right: -3
+    height: 15
+    image-source: /images/ui/miniwindow_header
+    image-border: 4
+    phantom: true
 
     Label
       id: title
-      anchors.left: minimize.right
-      anchors.right: list.left
+      anchors.left: parent.left
+      anchors.right: minimize.left
       anchors.verticalCenter: parent.verticalCenter
-      margin-left: 4
-      font: $ot-font-label
-      color: $ot-text-muted
+      margin-left: 6
+      font: verdana-11px-antialised
+      color: #c0c0c0
+      phantom: true
       !text: tr('Containers')
 
-    ContainersMiniButton
-      id: list
-      anchors.right: close.left
-      anchors.verticalCenter: parent.verticalCenter
-      margin-right: 2
-      !text: 'v'
-
     // hides the window (its button on the bottom bar shows it again)
-    ContainersMiniButton
+    ContainersHeadButton
       id: close
+      anchors.top: parent.top
       anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      !text: 'x'
+      margin-top: 2
+      margin-right: 3
+      image-clip: 28 0 14 14
+      $pressed:
+        image-clip: 28 28 14 14
+
+    ContainersHeadButton
+      id: minimize
+      anchors.top: close.top
+      anchors.right: close.left
+      margin-right: 1
+      image-clip: 0 0 14 14
+      $pressed:
+        image-clip: 0 28 14 14
+      $on:
+        image-clip: 14 0 14 14
 
   // the tabs: a clipped row that scrolls sideways
   UIWidget
@@ -105,9 +128,17 @@ ContainersWindow < OtPanel
     anchors.top: head.bottom
     anchors.left: parent.left
     anchors.right: parent.right
-    margin-top: 4
+    margin-top: 3
     height: 28
     phantom: false
+
+    // the list of open containers
+    ContainersMiniButton
+      id: list
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      height: 28
+      !text: 'v'
 
     UIWidget
       id: tabs
@@ -122,8 +153,9 @@ ContainersWindow < OtPanel
 
     ContainersMiniButton
       id: more
-      anchors.right: parent.right
+      anchors.right: list.left
       anchors.verticalCenter: parent.verticalCenter
+      margin-right: 3
       width: 40
       height: 28
       color: $ot-gold

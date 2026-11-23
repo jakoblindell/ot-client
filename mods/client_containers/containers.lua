@@ -131,7 +131,8 @@ local function columns()
     end
     local mobile = modules.client_mobile
     local area = mobile and mobile.getModuleColumnWidth and mobile.getModuleColumnWidth()
-    if area and 5 * (SLOT + SPACING) + 12 > area then
+    -- (with the scroll bar and the edges of the window)
+    if area and 5 * (SLOT + SPACING) + 12 + 14 + 6 > area then
         return 4
     end
     return 5
@@ -142,6 +143,7 @@ end
 -- high as its contents.
 local pieceHeight
 local SCROLLBAR = 12 + 2
+local HEAD = 15 -- (the title bar)
 
 local function fit()
     local cols = columns()
@@ -153,7 +155,7 @@ local function fit()
     grid:getLayout():setNumColumns(cols)
     local gridWidth = cols * (SLOT + SPACING) - SPACING
     local gridHeight = rows * (SLOT + SPACING) - SPACING
-    local head = 24 + 4 + 28 + 4
+    local head = HEAD + 3 + 28 + 4
     local padding = window:getPaddingTop() + window:getPaddingBottom()
     local scrolls = false
     if pieceHeight and tab and not window.minimized then
@@ -167,8 +169,12 @@ local function fit()
     local extra = pieceHeight and SCROLLBAR or 0
     window:setWidth(gridWidth + extra + window:getPaddingLeft() + window:getPaddingRight())
     local height = head + (tab and gridHeight or 56)
+    -- (folded: the title bar only, as the other panels)
+    window:getChildById('head'):getChildById('minimize'):setOn(window.minimized == true)
+    window:getChildById('strip'):setVisible(not window.minimized)
     if window.minimized then
-        height = 24 + 4 + 28
+        window:getChildById('empty'):setVisible(false)
+        height = HEAD - padding + 3
     elseif pieceHeight then
         height = math.max(height, pieceHeight - padding)
     end
@@ -278,7 +284,8 @@ local function renderTabs()
             return
         end
         local hidden = 0
-        local limit = strip:getX() + strip:getWidth() - more:getWidth() - 3
+        local list = strip:getChildById('list')
+        local limit = strip:getX() + strip:getWidth() - list:getWidth() - more:getWidth() - 6
         local shownHidden
         for offset, child in ipairs(row:getChildren()) do
             -- (once one does not fit, neither do the ones after it)
@@ -833,7 +840,8 @@ function init()
     window:setPosition({ x = 4, y = 4 })
     window:hide()
     local head = window:getChildById('head')
-    head:getChildById('minimize').onClick = function()
+    local minimizeButton = head:getChildById('minimize')
+    minimizeButton.onClick = function()
         local mobile = mobilePanels()
         if mobile and mobile.setPanelMinimized then
             mobile.setPanelMinimized('bag', not window.minimized)
@@ -843,7 +851,7 @@ function init()
         render()
     end
     head:getChildById('close').onClick = hideWindow
-    head:getChildById('list').onClick = openList
+    window:getChildById('strip'):getChildById('list').onClick = openList
     window:getChildById('strip'):getChildById('more').onClick = function()
         firstTab = firstTab < #tabs and firstTab + 1 or 1
         renderTabs()

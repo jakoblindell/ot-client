@@ -89,8 +89,7 @@ local function updatePanel()
         t.profit >= 0 and '#70d070' or '#e05050')
 
     local buttons = window.contentsPanel.buttons
-    -- three to a row, as wide as the panel lets them
-    buttons:getLayout():setCellSize({ width = math.max(40, math.floor((buttons:getWidth() - 6) / 3)), height = 24 })
+    fitButtons(buttons)
     buttons.pause:setText(session.state == 'paused' and tr('Resume') or tr('Pause'))
     buttons.pause:setEnabled(session.state ~= 'idle')
 
@@ -388,11 +387,22 @@ local function onGameEnd()
     trackerGameEnd()
 end
 
+-- Pause, Reset and Report: three to a row, as wide as the panel lets them
+function fitButtons(buttons)
+    local width = math.max(40, math.floor((buttons:getWidth() - 6) / 3))
+    local layout = buttons:getLayout()
+    if layout:getCellSize().width ~= width then
+        layout:setCellSize({ width = width, height = 24 })
+    end
+end
+
 function init()
     g_ui.importStyle('hunt_styles')
     window = g_ui.loadUI('hunt', modules.game_interface.getRightPanel())
     window:setup()
     local buttons = window.contentsPanel.buttons
+    -- (narrower in a narrow column on a phone: kept fitting)
+    connect(buttons, { onGeometryChange = fitButtons })
     buttons.pause.onClick = function()
         pauseSession()
         updatePanel()

@@ -213,13 +213,13 @@ MobileEditRoundButton < UIButton
 
 // The outline over a piece while editing: dashed, exactly the piece's
 // size, its name, and - and + for its size in the middle. One finger drags
-// it.
+// it. The piece under it is dimmed, so its name stands out.
 MobileEditFrame < UIWidget
   draggable: true
   focusable: false
-  background-color: #00000030
+  background-color: #000000a0
   $on:
-    background-color: #e0b84c26
+    background-color: #2a200aa8
 
   MobileEditDashH
     id: top
@@ -245,14 +245,17 @@ MobileEditFrame < UIWidget
     anchors.bottom: parent.bottom
     anchors.right: parent.right
 
+  // (on a dark backing: readable over any piece)
   Label
     id: name
     anchors.horizontalCenter: parent.horizontalCenter
     anchors.bottom: parent.verticalCenter
     margin-bottom: 2
+    height: 16
     font: $ot-font-label
     color: $ot-gold
-    text-auto-resize: true
+    text-align: center
+    background-color: #000000d0
     phantom: true
 
   UIWidget
