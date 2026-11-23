@@ -669,6 +669,11 @@ local function onGameEnd()
     closeMenu()
     if window then
         render()
+        -- (a child of rootWidget: not hidden with the game screen) A dropped
+        -- connection being reconnected keeps the game screen as it is.
+        if not (modules.client_reconnect and modules.client_reconnect.willReconnect()) then
+            window:hide()
+        end
     end
 end
 
