@@ -10,7 +10,7 @@
 
 local root
 local PAGES = {}
-local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar',
+local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization' }
 
 -- Helpers -------------------------------------------------------------------
@@ -370,6 +370,16 @@ PAGES.hotbar = function()
     end
 end
 
+-- The outfit screen for touch screens (ot-client#101), with sample outfits
+PAGES.outfit = function()
+    local mobile = modules.client_mobile
+    if mobile and mobile.openOutfitSheet then
+        mobile.openOutfitSheet({ type = 128, head = 78, body = 69, legs = 58, feet = 76, addons = 1 }, {
+            { 128, 'Citizen', 3 }, { 129, 'Hunter', 3 }, { 130, 'Mage', 0 }, { 131, 'Knight', 1 },
+        }, function() end)
+    end
+end
+
 -- The hub's Settings, one page per tab
 for _, tab in ipairs({ 'Gameplay', 'Display', 'Controls', 'Layout', 'Optimization' }) do
     PAGES['settings-' .. tab:lower()] = function()
@@ -587,6 +597,7 @@ function init()
     g_ui.importStyle('/mods/client_mobile/mobile')
     g_ui.importStyle('/mods/client_mobile/hotbar_sheet')
     g_ui.importStyle('/mods/client_mobile/hub')
+    g_ui.importStyle('/mods/client_mobile/outfit')
     g_ui.importStyle('gallery')
     -- through the options (they apply their own scale shortly after start,
     -- over a direct g_app.setHUDScale); option value v is a scale of v / 2 + 0.5

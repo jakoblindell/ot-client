@@ -310,6 +310,16 @@ function create(player, outfitList, creatureMount, mountList, familiarList, wing
     if ignoreNextOutfitWindow and g_clock.millis() < ignoreNextOutfitWindow + 1000 then
         return
     end
+    -- Touch screens: a compact outfit screen that fits a phone
+    -- (client_mobile, ot-client#101); this window is desktop-sized
+    local mobile = modules.client_mobile
+    if g_platform.isMobile() and mobile and mobile.openOutfitSheet then
+        if window then
+            destroy()
+        end
+        mobile.openOutfitSheet(player:getOutfit(), outfitList)
+        return
+    end
     local currentOutfit = player:getOutfit()
     if window then
         destroy()
