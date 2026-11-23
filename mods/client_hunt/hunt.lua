@@ -131,8 +131,9 @@ local function itemRows(list, map, supply)
             local id = itemIdOf(entry.key)
             if id then
                 row.item:setItemId(id)
-                if entry.key:find(':') then
-                    row.item:setItemSubType(tonumber(entry.key:match(':(%d+)')))
+                local fluid = entry.key:match('^%d+_(%d+)$')
+                if fluid then
+                    row.item:setItemSubType(tonumber(fluid))
                 end
             end
             local each = itemPrice(entry.key, supply)
