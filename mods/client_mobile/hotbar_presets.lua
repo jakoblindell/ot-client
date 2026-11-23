@@ -272,8 +272,22 @@ function openHotbarSettings()
     settingsSheet.onClick = closeSettings
     settingsSheet.onEscape = closeSettings
     local panel = settingsSheet.panel
-    panel:setSize({ width = math.min(460, rootWidget:getWidth() - 16),
-        height = math.max(280, math.min(560, rootWidget:getHeight() - 16)) })
+    local function fit()
+        panel:setSize({ width = math.min(460, rootWidget:getWidth() - 16),
+            height = math.max(280, math.min(560, rootWidget:getHeight() - 16)) })
+    end
+    fit()
+    -- The screen turned or resized while open: fit it again
+    local sheet = settingsSheet
+    sheet.onGeometryChange = function(widget, oldRect, newRect)
+        if oldRect.width > 0 and (oldRect.width ~= newRect.width or oldRect.height ~= newRect.height) then
+            addEvent(function()
+                if settingsSheet == sheet then
+                    fit()
+                end
+            end)
+        end
+    end
     panel.close.onClick = closeSettings
     local list = panel.list
     dragScroll(list)

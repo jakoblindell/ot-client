@@ -324,12 +324,13 @@ void UIManager::publishTextInputs()
             return;
         if (!fields.empty())
             fields += ',';
-        fields += fmt::format("[{:.4f},{:.4f},{:.4f},{:.4f},{}]",
+        fields += fmt::format("[{:.4f},{:.4f},{:.4f},{:.4f},{},{}]",
                               static_cast<double>(visible.x() - rootRect.x()) / rootRect.width(),
                               static_cast<double>(visible.y() - rootRect.y()) / rootRect.height(),
                               static_cast<double>(visible.width()) / rootRect.width(),
                               static_cast<double>(visible.height()) / rootRect.height(),
-                              textEdit->isTextHidden() ? 1 : 0);
+                              textEdit->isTextHidden() ? 1 : 0,
+                              textEdit->isMultiline() ? 1 : 0);
     };
     const std::function<void(const UIWidgetPtr&, Rect)> visit = [&](const UIWidgetPtr& widget, Rect clip) {
         if (!widget->isVisible())
@@ -351,14 +352,17 @@ void UIManager::publishTextInputs()
     // the focused text field: the last one along the focus chain (a field
     // can have a focused child of its own, such as a hidden-text overlay)
     int focus = 0; // 0 none, 1 a text field, 2 a field that hides its text
+    bool focusMultiline = false;
     for (auto widget = m_rootWidget; widget; widget = widget->getFocusedChild()) {
         if (const auto textEdit = std::dynamic_pointer_cast<UITextEdit>(widget)) {
-            if (textEdit->isEditable())
+            if (textEdit->isEditable()) {
                 focus = textEdit->isTextHidden() ? 2 : 1;
+                focusMultiline = textEdit->isMultiline();
+            }
         }
     }
 
-    std::string published = fmt::format("{{\"fields\":[{}],\"focus\":{}}}", fields, focus);
+    std::string published = fmt::format("{{\"fields\":[{}],\"focus\":{},\"multiline\":{}}}", fields, focus, focusMultiline ? 1 : 0);
     if (published == lastPublished)
         return;
     lastPublished = published;

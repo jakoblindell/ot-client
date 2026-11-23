@@ -206,9 +206,16 @@ void DrawPoolManager::preDraw(const DrawPoolType type, const std::function<void(
         beforeRelease();
 
     if (pool->hasFrameBuffer()) {
+        // The place it is drawn on the screen is part of the hash: a pool
+        // whose content is unchanged is not redrawn, and would otherwise keep
+        // its old place when only that moves (a resized or rotated screen,
+        // a moved game view)
+        size_t placeHash = dest.hash();
+        stdext::hash_union(placeHash, src.hash());
+        stdext::hash_union(placeHash, colorClear.hash());
         addAction([pool, dest, src, colorClear] {
             pool->m_framebuffer->prepare(dest, src, colorClear);
-        });
+        }, placeHash);
     }
 
     pool->release();

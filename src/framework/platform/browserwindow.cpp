@@ -31,6 +31,7 @@
 #include <framework/util/crypt.h>
 #include "framework/core/graphicalapplication.h"
 #include <framework/ui/uimanager.h>
+#include <framework/stdext/string.h>
 
 BrowserWindow& g_browserWindow = (BrowserWindow&)g_window;
 
@@ -311,7 +312,9 @@ void BrowserWindow::poll() {
 extern "C" {
     //Called from javascript
     EMSCRIPTEN_KEEPALIVE inline int paste_return(char const* paste_data, void* callback_data) {
-        static_cast<BrowserWindow*>(callback_data)->setClipboardText(paste_data);
+        // The browser gives UTF-8; the client's text is Latin-1 (like the
+        // 7.x protocol and fonts)
+        static_cast<BrowserWindow*>(callback_data)->setClipboardText(stdext::utf8_to_latin1(paste_data));
         return 1;
     }
 }
@@ -504,9 +507,14 @@ bool  string_eq(const char* a, const char* b) {
 void BrowserWindow::handleKeyboardCallback(int eventType, const EmscriptenKeyboardEvent* keyboardEvent) {
     if (eventType == EMSCRIPTEN_EVENT_KEYPRESS) {
         if (m_onInputEvent && keyboardEvent->key[0] && number_of_characters_in_utf8_string(keyboardEvent->key) == 1) {
-            m_inputEvent.reset(Fw::KeyTextInputEvent);
-            m_inputEvent.keyText = keyboardEvent->key;
-            m_onInputEvent(m_inputEvent);
+            // The key is UTF-8 ("å" is two bytes); the client's text is
+            // Latin-1. Characters Latin-1 has no room for are dropped.
+            const std::string text = stdext::utf8_to_latin1(keyboardEvent->key);
+            if (!text.empty()) {
+                m_inputEvent.reset(Fw::KeyTextInputEvent);
+                m_inputEvent.keyText = text;
+                m_onInputEvent(m_inputEvent);
+            }
         }
     }
     if (!keyboardEvent->repeat || eventType == EMSCRIPTEN_EVENT_KEYDOWN) {
@@ -545,8 +553,9 @@ std::string BrowserWindow::getClipboardText() {
 }
 
 void BrowserWindow::setClipboardText(const std::string_view text) {
-    m_clipboardText = text.data();
-    std::string const& content = text.data();
+    m_clipboardText = std::string(text);
+    // Latin-1 inside the client, UTF-8 for the browser's clipboard
+    const std::string content = stdext::latin1_to_utf8(text);
     // clang-format off
     MAIN_THREAD_EM_ASM({
         navigator.clipboard.writeText(UTF8ToString($0));

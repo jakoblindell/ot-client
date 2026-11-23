@@ -561,7 +561,8 @@ local function gridBar(bar, columns, slots, cell)
         end
     end
     local rows = math.max(1, math.ceil(slots / columns))
-    local height = rows * (cell + GRID_SPACING) - GRID_SPACING + 6
+    -- (the bar's own padding too: without it the last row's bottom is cut)
+    local height = rows * (cell + GRID_SPACING) - GRID_SPACING + 6 + bar:getPaddingTop() + bar:getPaddingBottom()
     -- The bar style sets its height whenever it is switched on
     bar:mergeStyle({ ['$on'] = { height = height } })
     bar:setHeight(height)
@@ -620,7 +621,8 @@ local function setActionGrid(availableWidth, availableHeight)
     end
     panel:moveChildToIndex(bar, #panel:getChildren())
 
-    local rowsThatFit = math.max(1, math.floor((availableHeight - used - 6 + GRID_SPACING) / step))
+    local padding = bar:getPaddingTop() + bar:getPaddingBottom()
+    local rowsThatFit = math.max(1, math.floor((availableHeight - used - 6 - padding + GRID_SPACING) / step))
     local slots = math.min(settings.slots, #bar.tabBar:getChildren(), columns * rowsThatFit)
     gridBar(bar, columns, slots, cell)
     return gridWidth

@@ -444,7 +444,10 @@ return {
         action = function(value, options, controller, panels, extraWidgets)
             panels.graphicsEffectsPanel:recursiveGetChildById('shadowFloorIntensity'):setText(string.format(
                 'Shadow floor Intensity: %s%%', value))
-            panels.gameMapPanel:setShadowFloorIntensity(1 - (value / 100))
+            -- value: how dark the floor below is, in percent (0: not
+            -- shaded). The map takes the opacity of the black overlay it
+            -- draws over the lower floors, so 0 must stay 0 (ot-client#106)
+            panels.gameMapPanel:setShadowFloorIntensity(value / 100)
         end
     },
     lowPowerMode                      = {
