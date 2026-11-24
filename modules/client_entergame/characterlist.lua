@@ -402,6 +402,11 @@ local function tryLogin(charInfo, tries)
 
     CharacterList.hide()
 
+    -- a login the server refused may not have ended yet: it would block this one
+    if g_game.isLogging() and not g_game.isOnline() then
+        g_game.cancelLogin()
+    end
+
     g_game.loginWorld(G.account, G.password, charInfo.worldName, charInfo.worldHost, charInfo.worldPort,
                       charInfo.characterName, G.authenticatorToken, G.sessionKey)
 
