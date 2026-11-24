@@ -531,31 +531,67 @@ local function gridBar(bar, columns, slots, cell)
     return height
 end
 
--- The hotbar beside (landscape) or below (portrait) the game view: the extra
--- 3-slot rows on top and the main hotbar (action bar 1) below them, with as
--- many columns as fit the width and no more rows than fit the height.
--- Returns its width.
-local lastGridHeight = 1000 -- (the height the layout gave the hotbar last)
+-- The hotbar beside (landscape) or below (portrait) the game view: the main
+-- hotbar (action bar 1) is always 9 slots, 3x3, with the extra rows of 3
+-- (action bars 2 and 3, Hotbar settings) on top of it. The slots get
+-- smaller to fit the room, never fewer.
+local HOTBAR_COLUMNS = 3
+local HOTBAR_SLOTS = 9
+local MIN_CELL = 28
+
+-- The extra rows the player turned on
+local function wantedExtraRows()
+    local actionBars = modules.game_actionbar and modules.game_actionbar.actionBars
+    local settings = hotbarSettings()
+    local count = 0
+    for _, n in ipairs({ 2, 3 }) do
+        local extra = actionBars and actionBars[n]
+        if extra and extra.tabBar and ((n == 2 and settings.extra1) or (n == 3 and settings.extra2)) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+-- The size of the hotbar with slots of `cell` pixels: width and height
+-- (the grid, the extra rows and the gaps between them)
+local function hotbarSize(cell)
+    local actionBars = modules.game_actionbar and modules.game_actionbar.actionBars
+    local bar = actionBars and actionBars[1]
+    local padding = bar and bar:getPaddingTop() + bar:getPaddingBottom() or 0
+    local extras = wantedExtraRows()
+    local frame = 6 + padding
+    local rows = math.ceil(HOTBAR_SLOTS / HOTBAR_COLUMNS)
+    local width = HOTBAR_COLUMNS * (cell + GRID_SPACING) - GRID_SPACING + 6
+    local height = rows * (cell + GRID_SPACING) - GRID_SPACING + frame + extras * (cell + frame + 4)
+    return width, height
+end
+
+-- The largest slot (up to the normal size) with which the hotbar fits
+-- width x height
+local function fittingCell(width, height)
+    local cell = GRID_CELL
+    while cell > MIN_CELL do
+        local w, h = hotbarSize(cell)
+        if w <= width and h <= height then
+            break
+        end
+        cell = cell - 1
+    end
+    return cell
+end
+
+-- Lays out the hotbar to fit width x height (at the player's size, + and -
+-- in the layout editor). Returns its width.
 local function setActionGrid(availableWidth, availableHeight)
-    -- a new width only (the editor's corner, a saved width): the same height
-    availableHeight = availableHeight or lastGridHeight
-    lastGridHeight = availableHeight
     local actionBars = modules.game_actionbar and modules.game_actionbar.actionBars
     local bar = actionBars and actionBars[1]
     if not bar or not bar.tabBar then
         return 0
     end
     local settings = hotbarSettings()
-    -- Slot size: + and - in the layout editor
-    local cell = math.floor(GRID_CELL * getPieceScale('grid'))
-    local step = cell + GRID_SPACING
-    local columns = math.max(2, math.min(6, math.floor((availableWidth - 6 + GRID_SPACING) / step)))
-    local gridWidth = columns * step - GRID_SPACING + 6
-    -- The extra rows always show their 3 slots, smaller when the grid is
-    -- only two wide
-    local extraCell = math.min(cell, math.floor((gridWidth - 6 + GRID_SPACING) / 3) - GRID_SPACING)
+    local cell = math.max(MIN_CELL, math.floor(fittingCell(availableWidth, availableHeight) * getPieceScale('grid')))
     local panel = bar:getParent()
-    local used = 0
 
     -- Extra hotbars: bars 2 and 3, 3 slots each, above the main one
     for index, n in ipairs({ 2, 3 }) do
@@ -571,7 +607,7 @@ local function setActionGrid(availableWidth, availableHeight)
                 extra:setVisible(true)
                 extra:setOn(true)
                 modules.game_actionbar.addActiveActionBar(extra)
-                used = used + gridBar(extra, 3, 3, extraCell) + 4
+                gridBar(extra, HOTBAR_COLUMNS, HOTBAR_COLUMNS, cell)
                 panel:moveChildToIndex(extra, index)
             elseif extra.mobileShown then
                 extra.mobileShown = nil
@@ -583,11 +619,9 @@ local function setActionGrid(availableWidth, availableHeight)
     end
     panel:moveChildToIndex(bar, #panel:getChildren())
 
-    local padding = bar:getPaddingTop() + bar:getPaddingBottom()
-    local rowsThatFit = math.max(1, math.floor((availableHeight - used - 6 - padding + GRID_SPACING) / step))
-    local slots = math.min(settings.slots, #bar.tabBar:getChildren(), columns * rowsThatFit)
-    gridBar(bar, columns, slots, cell)
-    return gridWidth
+    -- (slots 10 and up keep what is assigned to them, not shown)
+    gridBar(bar, HOTBAR_COLUMNS, math.min(HOTBAR_SLOTS, #bar.tabBar:getChildren()), cell)
+    return (hotbarSize(cell))
 end
 
 -- Game view size (ot-client#26): the default layout keeps the game view
@@ -677,13 +711,20 @@ local function layout()
     if portrait then
         mapWidth = math.floor(width * size.width)
         mapHeight = math.floor(mapWidth * 11 / 15)
+        local room = available - mapHeight - statsRow
         -- the area above (containers, equipment) a little smaller than the
         -- one below (bars, joystick, hotbar)
-        mapTop = math.max(0, math.floor((available - mapHeight - statsRow) * 0.45))
+        mapTop = math.max(0, math.floor(room * 0.45))
         -- room for the panels' strip (equipment is the tallest), unless the
         -- controls below would get too little
-        local strip = math.min(PORTRAIT_STRIP, available - mapHeight - statsRow - PORTRAIT_CONTROLS)
-        mapTop = math.max(mapTop, strip)
+        mapTop = math.max(mapTop, math.min(PORTRAIT_STRIP, room - PORTRAIT_CONTROLS))
+        -- the joystick and the whole hotbar (3x3 and its extra rows, at the
+        -- normal slot size) under the bars come first: the strip gives way
+        local keypad = modules.game_joystick and modules.game_joystick.getPanel and modules.game_joystick.getPanel()
+        local joystickHeight = keypad and keypad:isVisible() and keypad:getHeight() or 0
+        local _, hotbarHeight = hotbarSize(GRID_CELL)
+        local controls = math.max(joystickHeight + 6, PRESET_ROW_HEIGHT + 4 + hotbarHeight + 6)
+        mapTop = math.max(0, math.min(mapTop, room - controls))
     else
         local column = math.floor(width * size.column)
         if size.panels then
@@ -775,19 +816,22 @@ local function layout()
     -- column, below the place the equipment opens in. Portrait: in the area
     -- below the game view, right of the joystick.
     local actionPanel = root:getChildById('gameBottomActionPanel')
+    local chatBeside = true
     if actionPanel then
         local topRow = math.max(PRESET_ROW_HEIGHT, chatButton:getHeight()) + 4
         local gridWidth, gridHeight
         if portrait then
             local joystickWidth = keypad and keypad:isVisible() and keypad:getWidth() or 0
             gridWidth = width - joystickWidth - 16
-            gridHeight = available - (mapTop + mapHeight + statsRow) - topRow - chatButton:getHeight() - 10
+            gridHeight = available - (mapTop + mapHeight + statsRow) - topRow - 6
         else
             -- (the top of the column is kept for panels)
             gridWidth = side - 6
             gridHeight = available - LANDSCAPE_PANEL_ROOM - topRow - 6
         end
         gridWidth = setActionGrid(gridWidth, gridHeight)
+        -- the chat button fits beside P and the pencil
+        chatBeside = gridWidth >= 84 + 3 + 6 + chatButton:getWidth()
         actionPanel:breakAnchors()
         actionPanel:addAnchor(AnchorRight, 'parent', AnchorRight)
         actionPanel:addAnchor(AnchorBottom, 'mobileToolbar', AnchorTop)
@@ -819,7 +863,7 @@ local function layout()
     -- opens over the game view
     chatButton:breakAnchors()
     chatButton:setMargin(0)
-    if actionPanel and presetRow and portrait then
+    if actionPanel and presetRow and not chatBeside then
         -- (above P and the pencil, at the right edge: a narrow hotbar has
         -- no room beside them)
         chatButton:addAnchor(AnchorRight, 'parent', AnchorRight)
@@ -827,7 +871,7 @@ local function layout()
         chatButton:setMarginRight(8)
         chatButton:setMarginBottom(4)
     elseif actionPanel and presetRow then
-        -- (beside the pencil, so a narrow hotbar cannot put it on top of it)
+        -- (beside the pencil)
         chatButton:addAnchor(AnchorLeft, presetRow:getId(), AnchorRight)
         chatButton:addAnchor(AnchorBottom, actionPanel:getId(), AnchorTop)
         chatButton:setMarginLeft(6)
@@ -948,18 +992,6 @@ function getMovableWidgets()
             and modules.client_containers.getWindow()
     end
     return widgets
-end
-
--- The hotbar grid at a new width (as many columns as fit)
-function resizeActionGrid(width)
-    local actionPanel = gameInterface().getRootPanel():getChildById('gameBottomActionPanel')
-    if not actionPanel then
-        return
-    end
-    actionPanel:setWidth(setActionGrid(width))
-    if modules.game_actionbar.updateVisibleWidgets then
-        modules.game_actionbar.updateVisibleWidgets()
-    end
 end
 
 function refreshStats()
@@ -1124,12 +1156,14 @@ end
 -- The touch layout without a game (the UI gallery, tools/ui-gallery): the
 -- game screen with the pieces in their places, panels open (ids) and, with
 -- edit, in Edit layout; with setup ('placing' or 'held'), at the UI setup's
--- first step. Nothing of it is saved.
-function startLayoutPreview(panelIds, edit, setup)
+-- first step; hotbar: hotbar settings to show (extra rows). Nothing of it
+-- is saved.
+function startLayoutPreview(panelIds, edit, setup, hotbar)
     if not toolbar then
         return false
     end
     previewing = true
+    setHotbarPreviewSettings(hotbar)
     gameInterface().show()
     -- what a game start sets up: the hotbar, P and the pencil, the joystick
     -- (as far as they work without a character)

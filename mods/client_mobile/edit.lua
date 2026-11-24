@@ -25,7 +25,7 @@ local SCALE_MIN, SCALE_MAX, SCALE_STEP = 0.7, 1.6, 0.1
 -- The pieces besides the panels; resize: what an older saved width means
 local STATIC_PIECES = {
     { key = 'chat', name = 'Chat', resize = 'square', maxSize = 96 },
-    { key = 'grid', name = 'Hotbar', resize = 'width', minWidth = 52 },
+    { key = 'grid', name = 'Hotbar' },
     { key = 'joystick', name = 'Joystick' },
 }
 
@@ -255,13 +255,7 @@ local SCALERS = {
 -- Moves a piece to a saved position (fractions of the screen)
 local function placePiece(piece, widget, entry)
     local r = root():getRect()
-    if entry.w and piece.resize == 'width' then
-        if piece.key == 'grid' then
-            resizeActionGrid(math.floor(entry.w * r.width))
-        else
-            widget:setWidth(math.max(piece.minWidth or 36, math.floor(entry.w * r.width)))
-        end
-    elseif entry.w and piece.resize == 'square' then
+    if entry.w and piece.resize == 'square' then
         local size = math.max(36, math.min(piece.maxSize, math.floor(entry.w * r.width)))
         widget:setSize({ width = size, height = size })
     end
