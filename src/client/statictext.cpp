@@ -59,6 +59,17 @@ void StaticText::drawText(const Point& dest, const Rect& parentRect, const float
     //}
 }
 
+void StaticText::drawText(const Point& dest, const Rect& parentRect)
+{
+    const auto& textSize = m_cachedText.getTextSize();
+
+    auto rect = Rect(dest - Point(textSize.width() / 2, textSize.height()) + (Point(20, 5) / g_app.getStaticTextScale()), textSize);
+    if (g_app.getStaticTextScale() == DEFAULT_DISPLAY_DENSITY)
+        rect.bind(parentRect);
+
+    m_cachedText.draw(rect, m_color);
+}
+
 void StaticText::setText(const std::string_view text) { m_cachedText.setText(text); }
 void StaticText::setFont(const std::string_view fontName) { m_cachedText.setFont(g_fonts.getFont(fontName)); }
 
