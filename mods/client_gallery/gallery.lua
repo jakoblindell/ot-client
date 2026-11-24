@@ -565,6 +565,9 @@ local function show(name)
     fixClock()
     local rootWidget = g_ui.getRootWidget()
     root = g_ui.createWidget('GalleryRoot', rootWidget)
+    -- the component pages are a 560 px column: a narrow phone shows the part
+    -- that fits (cut off on purpose, like a list, not checked as outside)
+    root:setClipping(true)
     -- the background over everything else; a screen page's own windows
     -- (opened by build, after it) over the background
     -- everything already there (the login screen, its locked Enter Game

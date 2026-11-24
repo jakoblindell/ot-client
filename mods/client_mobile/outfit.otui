@@ -62,7 +62,7 @@ MobileOutfitSheet < OtBackdrop
         id: addon2
         anchors.left: addon1Label.right
         anchors.verticalCenter: parent.verticalCenter
-        margin-left: 12
+        margin-left: 6
 
       OtLabel
         id: addon2Label
