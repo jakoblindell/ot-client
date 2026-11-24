@@ -50,6 +50,17 @@ local function namesNode()
     return all, all[name]
 end
 
+-- The name given to the container at key, or nil. (Reading the settings
+-- turns a name such as "1" or "true" into a number or a boolean.)
+local function nameAt(names, key)
+    local name = names and key and names[key]
+    if name == nil then
+        return nil
+    end
+    name = tostring(name)
+    return name ~= '' and name or nil
+end
+
 local function tabFor(id)
     for index, tab in ipairs(tabs) do
         if tab.container:getId() == id then
@@ -111,8 +122,8 @@ end
 
 local function displayName(tab)
     local _, names = namesNode()
-    local custom = names and tab.key and names[tab.key]
-    if custom and custom ~= '' then
+    local custom = nameAt(names, tab.key)
+    if custom then
         return custom
     end
     local name = tab.container:getName() or ''
@@ -184,8 +195,8 @@ local function renderGrid()
         local item = container:getItem(slot)
         widget:setItem(item)
         -- a bag you named: the start of its name along the bottom
-        local custom = item and item:isContainer() and tab.key and names and names[tab.key .. '/' .. slot]
-        if custom and custom ~= '' then
+        local custom = item and item:isContainer() and tab.key and nameAt(names, tab.key .. '/' .. slot)
+        if custom then
             g_ui.createWidget('ContainersSlotName', widget):setText(custom:sub(1, NAME_CHARS))
         end
         widget.onMouseRelease = function(self, mousePos, mouseButton)
@@ -669,6 +680,11 @@ local function onGameEnd()
     closeMenu()
     if window then
         render()
+        -- (a child of rootWidget: not hidden with the game screen) A dropped
+        -- connection being reconnected keeps the game screen as it is.
+        if not (modules.client_reconnect and modules.client_reconnect.willReconnect()) then
+            window:hide()
+        end
     end
 end
 
@@ -693,8 +709,8 @@ function getNamedContainers()
     local list = {}
     for _, group in ipairs({ tabs, quietTabs }) do
         for _, tab in ipairs(group) do
-            local custom = names and tab.key and names[tab.key]
-            if custom and custom ~= '' and not tab.container:isClosed() then
+            local custom = nameAt(names, tab.key)
+            if custom and not tab.container:isClosed() then
                 table.insert(list, { name = custom, container = tab.container, quiet = tab.quiet })
             end
         end

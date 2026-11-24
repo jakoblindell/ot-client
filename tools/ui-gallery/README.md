@@ -27,6 +27,9 @@ with saved baseline images on every pull request (ot-client#70).
 | `hotbar` | the hotbar settings sheet |
 | `outfit` | the outfit screen for touch screens, with sample outfits |
 | `settings-gameplay` … `settings-optimization` | the hub's Settings, one page per tab |
+| `letter`, `letter-read` | a letter in Edit Text: to write (with its limit), and only to read |
+| `house-list` | a house list in Edit List |
+| `letter-keyboard`, `house-list-keyboard` | the same with the on-screen keyboard open (touch devices only; below) |
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock
@@ -44,6 +47,10 @@ Devices:
 | `iphone-rotated` | 393×660 → 852×375 | 3 | opened in portrait, turned to landscape before the screenshot |
 | `desktop` | 1366×768 | 1 | |
 | `desktop-scale-1.5` | 1366×768 | 1 | interface scale 1.5 |
+
+The keyboard pages set `keyboardVisibleTop/Bottom` the way the page does
+while the keyboard is open (`browser/shell.html`), for a keyboard 300 px high
+in portrait and 210 px in landscape. Real keyboard heights vary by phone.
 
 Add a page in `mods/client_gallery/gallery.lua` (`PAGES` and `PAGE_ORDER`)
 and in `PAGES` in `gallery.js`.

@@ -167,6 +167,22 @@ NpcDialogWindow < UIWindow
         font: $ot-font-label
         color: $ot-text
 
+    // The words the NPC takes now; they scroll when there are many
+    // (npcdialog.lua sets the height)
+    ScrollablePanel
+      id: words
+      vertical-scrollbar: wordsScroll
+      layout:
+        type: verticalBox
+        spacing: 6
+
+    VerticalScrollBar
+      id: wordsScroll
+      visible: false
+      step: 46
+      pixels-scroll: true
+
+    // Yes, No, Trade, Travel and Bye, always in view
     Panel
       id: buttons
       layout:

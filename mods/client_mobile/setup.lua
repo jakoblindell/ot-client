@@ -20,6 +20,7 @@ local STEPS = {
 local sheet, bar
 local steps -- the steps of the setup running (nil: not running)
 local current
+local resumeAt -- a setup cut short by a reconnect: character, orientation, step
 
 local function root()
     return modules.game_interface.getRootPanel()
@@ -154,7 +155,8 @@ local function nextStep()
     end
 end
 
-local function startSteps()
+-- (from the step with key fromKey, when given: a setup taken up again)
+local function startSteps(fromKey)
     if isEditingLayout() then
         stopEditLayout()
     end
@@ -176,6 +178,11 @@ local function startSteps()
         return
     end
     current = 1
+    for index, step in ipairs(steps) do
+        if step.key == fromKey then
+            current = index
+        end
+    end
     bar = g_ui.createWidget('MobileSetupBar', rootWidget)
     -- along the bottom of the game view: the one place no piece goes
     local game = modules.game_interface.getMapPanel():getRect()
@@ -250,6 +257,13 @@ function offerUiSetup()
         waitingForOutfit = true
         return
     end
+    -- cut short by a reconnect: carries on at the same piece
+    local resume = resumeAt
+    resumeAt = nil
+    if resume and resume.name == g_game.getCharacterName() and resume.orientation == orientation() then
+        startSteps(resume.step)
+        return
+    end
     if hasSavedLayout() then
         markDone()
         return
@@ -263,17 +277,39 @@ function offerUiSetup()
         'Use the default', markDone, 'Start', startSteps)
 end
 
--- Logged out in the middle of it
-function stopUiSetup()
+-- Logged out in the middle of it: the pieces still to come are shown again.
+-- reconnecting: the same character is coming back (client_reconnect), and
+-- the setup carries on at the same piece then (offerUiSetup).
+function stopUiSetup(reconnecting)
     waitingForOutfit = false
     closeSheet()
+    resumeAt = nil
     if steps then
         stopPlacingPiece()
         if bar then
             bar:destroy()
             bar = nil
         end
+        if reconnecting then
+            resumeAt = { name = g_game.getCharacterName(), orientation = orientation(), step = steps[current].key }
+        end
+        local widgets = getMovableWidgets()
+        for index = current + 1, #steps do
+            local key = steps[index].key
+            if key == 'grid' and getHotbarPresetRow() then
+                getHotbarPresetRow():setVisible(true)
+            end
+            -- (the backpack window shows when a container is open)
+            if widgets[key] and key ~= 'containers' then
+                widgets[key]:setVisible(true)
+            end
+        end
         steps = nil
+        -- the backpack window was shown to be placed: hidden again when empty
+        local containers = modules.client_containers
+        if containers and containers.getWindow() and #g_game.getContainers() == 0 then
+            containers.getWindow():hide()
+        end
     end
 end
 
