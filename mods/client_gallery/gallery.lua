@@ -447,6 +447,16 @@ local function layoutPage(panels, edit)
             return
         end
         local game = modules.game_interface.getRootPanel()
+        -- The empty game view (no map without a game) draws an animation
+        -- whose phase depends on timing: covered with plain black, right
+        -- above it and under everything else, so the screenshots repeat
+        local map = modules.game_interface.getMapPanel()
+        local cover = g_ui.createWidget('UIWidget', game)
+        cover:setId('galleryMapCover')
+        cover:setBackgroundColor('#000000')
+        cover:setPhantom(true)
+        cover:fill(map:getId())
+        game:moveChildToIndex(cover, game:getChildIndex(map) + 1)
         local shown = { game }
         -- (windows of their own over the game screen)
         local containers = modules.client_containers and modules.client_containers.getWindow()
