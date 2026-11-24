@@ -590,8 +590,9 @@ local function setActionGrid(availableWidth, availableHeight)
     return gridWidth
 end
 
--- Game view size (ot-client#26): the game view is never covered; the
--- pieces go in the areas around it. Landscape: the view fills the height
+-- Game view size (ot-client#26): the default layout keeps the game view
+-- clear, with the pieces in the areas around it (the player may put them
+-- over it: edit.lua). Landscape: the view fills the height
 -- and each side column gets at least `column` of the width (the view
 -- shrinks if needed). Portrait: the view's share of the width.
 local setupOfferReady = false -- (the UI setup may be offered: logged in a while)
@@ -634,35 +635,6 @@ function setViewSize(id)
     relayout()
 end
 
--- Where a piece of w x h at x, y may go: as it is when clear of the game
--- view, else moved the shortest way out of it (left, right, above or below)
--- while staying on the screen and above the toolbar. A piece too big for
--- every area around the view stays where it is.
-function keepOffGameView(x, y, w, h)
-    local game = gameInterface().getMapPanel():getRect()
-    if x + w <= game.x or x >= game.x + game.width or y + h <= game.y or y >= game.y + game.height then
-        return x, y
-    end
-    local screen = gameInterface().getRootPanel():getRect()
-    local bottom = toolbar and toolbar:isVisible() and toolbar:getY() or screen.y + screen.height
-    local best, bestDistance
-    for _, spot in ipairs({
-        { x = game.x - w, y = y }, { x = game.x + game.width, y = y },
-        { x = x, y = game.y - h }, { x = x, y = game.y + game.height },
-    }) do
-        if spot.x >= screen.x and spot.x + w <= screen.x + screen.width and spot.y >= screen.y and spot.y + h <= bottom then
-            local distance = math.abs(spot.x - x) + math.abs(spot.y - y)
-            if not bestDistance or distance < bestDistance then
-                best, bestDistance = spot, distance
-            end
-        end
-    end
-    if best then
-        return best.x, best.y
-    end
-    return x, y
-end
-
 local function layout()
     local gi = gameInterface()
     local root = gi.getRootPanel()
@@ -683,7 +655,8 @@ local function layout()
         end
     end
 
-    -- Game view: the whole 15x11 view, never covered (ot-client#26).
+    -- Game view: the whole 15x11 view, clear of the pieces in their default
+    -- places (ot-client#26).
     -- Landscape: between the two side columns. Portrait: centred
     -- between the top and the toolbar, with the areas above and below it.
     -- The widget is exactly the view, so its rect is the area to keep clear.
@@ -902,6 +875,14 @@ local function layout()
     chatButton:raise()
     toolbar:raise()
     stats:raise()
+    -- the hotbar and P and the pencil on top of it are never under the bars
+    -- (a player may put them next to each other)
+    if actionPanel then
+        actionPanel:raise()
+    end
+    if presetRow then
+        presetRow:raise()
+    end
     -- (the containers window fits its columns to the area's width)
     if modules.client_containers and modules.client_containers.relayout then
         modules.client_containers.relayout()
@@ -950,10 +931,11 @@ function getModuleColumnWidth()
     return moduleColumnWidth
 end
 
--- The pieces edit mode can move, by name
+-- The pieces edit mode can move, by name (the health and mana bars are
+-- not one: they stay where the layout puts them)
 function getMovableWidgets()
     local root = gameInterface().getRootPanel()
-    local widgets = { stats = stats, chat = chatButton }
+    local widgets = { chat = chatButton }
     widgets.grid = root and root:getChildById('gameBottomActionPanel')
     widgets.joystick = modules.game_joystick and modules.game_joystick.getPanel and modules.game_joystick.getPanel()
     -- the panels on the screen (panels.lua; the containers window among them)
@@ -1058,6 +1040,10 @@ function init()
         modules.game_actionbar.ActionBarAssignSheet = openHotbarSheet
     end
     local root = gameInterface().getRootPanel()
+    -- The areas around the game view: the dark stone of the panels, tiled
+    -- (the game view draws over it)
+    root:setImageSource('/images/ui/background_dark')
+    root:setImageRepeated(true)
 
     toolbar = g_ui.createWidget('MobileToolbar', root)
     toolbar:setId('mobileToolbar')
@@ -1110,6 +1096,7 @@ function terminate()
         return
     end
     local root = gameInterface().getRootPanel()
+    root:setImageSource('')
     disconnect(root, { onGeometryChange = layout })
     disconnect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd, onTalk = onTalk })
     stopEditLayout()
@@ -1136,8 +1123,9 @@ end
 
 -- The touch layout without a game (the UI gallery, tools/ui-gallery): the
 -- game screen with the pieces in their places, panels open (ids) and, with
--- edit, in Edit layout. Nothing of it is saved.
-function startLayoutPreview(panelIds, edit)
+-- edit, in Edit layout; with setup ('placing' or 'held'), at the UI setup's
+-- first step. Nothing of it is saved.
+function startLayoutPreview(panelIds, edit, setup)
     if not toolbar then
         return false
     end
@@ -1159,6 +1147,8 @@ function startLayoutPreview(panelIds, edit)
     scheduleEvent(layout, 600)
     if edit then
         startEditLayout()
+    elseif setup then
+        startUiSetupPreview(setup == 'held')
     end
     return true
 end

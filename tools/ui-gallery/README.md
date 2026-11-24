@@ -30,10 +30,13 @@ with saved baseline images on every pull request (ot-client#70).
 | `layout-panels` | the touch layout (no game) with Containers and Equipment open in their default places |
 | `layout-lists` | the touch layout with the Map, Skills and the Hunt analyzer open (the oldest gives way when they do not all fit) |
 | `layout-edit` | Edit layout with Containers and Equipment open: outlines, - and +, the "Customize Layout" window |
+| `layout-setup` | "Let's build your UI", first step: the piece being placed partly over the game view, with the prompt |
+| `layout-setup-held` | the same with a finger held on the piece: the prompt is hidden |
 
 The `layout-*` pages are portrait on `iphone-portrait` and landscape on the
 other phones and the tablet; desktop devices show a note (the desktop layout
-has no touch pieces).
+has no touch pieces). They have no gallery backdrop behind the game screen,
+so they show what the device shows (the stone around the game view).
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock

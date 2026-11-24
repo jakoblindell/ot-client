@@ -12,7 +12,6 @@ local SETUP_SETTING = 'client_mobile_setup'
 local STEPS = {
     { key = 'joystick', name = 'Movement', text = 'Walks your character. Put it where your thumb rests.' },
     { key = 'grid', name = 'Hotbar', text = 'Spells, potions and runes: tap a slot to use it.' },
-    { key = 'stats', name = 'Health and mana', text = 'Your health and mana bars.' },
     { key = 'containers', name = 'Backpack', text = 'Your bags and loot. The bag button below shows or hides it.' },
     { key = 'chat', name = 'Chat', text = 'Opens the chat over the game.' },
 }
@@ -120,21 +119,54 @@ local function showStep()
     widget:setPosition({ x = game.x + math.floor((game.width - widget:getWidth()) / 2),
         y = game.y + math.max(0, math.floor((game.height - bar:getHeight() - widget:getHeight()) / 2)) })
     step.shownAt = widget:getPosition()
-    widget:raise()
+    -- (over the game view and the other pieces)
     startPlacingPiece(step.key)
 
     bar.title:setText(tr('Place: %s', tr(step.name)) .. '   ' .. current .. '/' .. #steps)
     bar.text:setText(tr(step.text))
     bar.back:setEnabled(current > 1)
+    onPlacingPieceHeld(false)
     bar:raise()
+end
+
+-- A finger on the piece being placed (edit.lua): the prompt fades out of
+-- its way, and takes no touches while hidden; back when the finger lifts
+local PROMPT_FADE = 120
+
+function onPlacingPieceHeld(down)
+    if not bar then
+        return
+    end
+    g_effects.cancelFade(bar)
+    removeEvent(bar.hideEvent)
+    bar.hideEvent = nil
+    if down then
+        g_effects.fadeOut(bar, PROMPT_FADE)
+        bar.hideEvent = scheduleEvent(function()
+            if bar then
+                bar.hideEvent = nil
+                bar:setVisible(false)
+            end
+        end, PROMPT_FADE)
+    elseif not bar:isVisible() or bar:getOpacity() < 1 then
+        bar:setVisible(true)
+        bar:raise()
+        g_effects.fadeIn(bar, PROMPT_FADE)
+    end
+end
+
+local function destroyBar()
+    if bar then
+        g_effects.cancelFade(bar)
+        removeEvent(bar.hideEvent)
+        bar:destroy()
+        bar = nil
+    end
 end
 
 local function finish()
     stopPlacingPiece()
-    if bar then
-        bar:destroy()
-        bar = nil
-    end
+    destroyBar()
     steps = nil
     markDone()
     -- the backpack window was shown to be placed: hidden again when empty
@@ -226,6 +258,31 @@ function startUiSetup()
     startSteps()
 end
 
+-- The UI gallery (client_mobile startLayoutPreview): the setup's first
+-- step over the touch layout without a game, its piece placed partly over
+-- the game view; held: with a finger on the piece (the prompt hidden)
+function startUiSetupPreview(held)
+    if steps or not isLayoutPreview() then
+        return
+    end
+    startSteps()
+    if not steps then
+        return
+    end
+    local widget = getMovableWidgets()[steps[current].key]
+    local game = modules.game_interface.getMapPanel():getRect()
+    if orientation() == 'portrait' then
+        -- (over the game view's top edge: the bars are under it)
+        movePlacingPiece(game.x + 8, game.y - math.floor(widget:getHeight() / 3))
+    else
+        movePlacingPiece(game.x - math.floor(widget:getWidth() / 2),
+            game.y + math.floor((game.height - widget:getHeight()) / 3))
+    end
+    if held then
+        onPlacingPieceHeld(true)
+    end
+end
+
 function isUiSetupRunning()
     return steps ~= nil
 end
@@ -271,7 +328,7 @@ function offerUiSetup()
     local all = g_settings.getNode(SETUP_SETTING) or {}
     local again = all[name] and all[name][other]
     local title = again and tr('Set up %s too?', tr(orientation())) or tr("Let's build your UI")
-    showSheet(title, 'Place the movement control, hotbar, bars, backpack and chat where they suit your hands and screen, one at a time. You can change everything later.',
+    showSheet(title, 'Place the movement control, hotbar, backpack and chat where they suit your hands and screen, one at a time. You can change everything later.',
         'Use the default', markDone, 'Start', startSteps)
 end
 
@@ -284,10 +341,7 @@ function stopUiSetup(reconnecting)
     resumeAt = nil
     if steps then
         stopPlacingPiece()
-        if bar then
-            bar:destroy()
-            bar = nil
-        end
+        destroyBar()
         if reconnecting then
             resumeAt = { name = g_game.getCharacterName(), orientation = orientation(), step = steps[current].key }
         end
