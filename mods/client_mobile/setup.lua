@@ -88,11 +88,22 @@ local function showSheet(title, text, skipText, skipAction, startText, startActi
     sheet:raise()
 end
 
+-- The prompt: along the bottom of the game view, where it is now
+local function placeBar()
+    local game = modules.game_interface.getMapPanel():getRect()
+    bar:setWidth(math.min(420, game.width - 8))
+    bar:setPosition({ x = game.x + math.floor((game.width - bar:getWidth()) / 2),
+        y = game.y + game.height - bar:getHeight() - 4 })
+end
+
 -- Pieces still to come are hidden; the ones placed (and the current one)
 -- are shown. Also called after each layout (it shows them all again).
 function applySetupVisibility()
     if not steps then
         return
+    end
+    if bar then
+        placeBar()
     end
     local widgets = getMovableWidgets()
     for index, step in ipairs(steps) do
@@ -214,11 +225,7 @@ local function startSteps(fromKey)
         end
     end
     bar = g_ui.createWidget('MobileSetupBar', rootWidget)
-    -- along the bottom of the game view: the one place no piece goes
-    local game = modules.game_interface.getMapPanel():getRect()
-    bar:setWidth(math.min(420, game.width - 8))
-    bar:setPosition({ x = game.x + math.floor((game.width - bar:getWidth()) / 2),
-        y = game.y + game.height - bar:getHeight() - 4 })
+    placeBar()
     -- its default place (the layout puts it there; the pieces already
     -- placed keep theirs, they are saved)
     local function keepDefault()
@@ -269,18 +276,24 @@ function startUiSetupPreview(held)
     if not steps then
         return
     end
-    local widget = getMovableWidgets()[steps[current].key]
-    local game = modules.game_interface.getMapPanel():getRect()
-    if orientation() == 'portrait' then
-        -- (over the game view's top edge: the bars are under it)
-        movePlacingPiece(game.x + 8, game.y - math.floor(widget:getHeight() / 3))
-    else
-        movePlacingPiece(game.x - math.floor(widget:getWidth() / 2),
-            game.y + math.floor((game.height - widget:getHeight()) / 3))
-    end
-    if held then
-        onPlacingPieceHeld(true)
-    end
+    -- once the preview's screen has settled (the game view in its place)
+    scheduleEvent(function()
+        local widget = steps and getMovableWidgets()[steps[current].key]
+        if not widget then
+            return
+        end
+        local game = modules.game_interface.getMapPanel():getRect()
+        if orientation() == 'portrait' then
+            -- (over the game view's top edge: the bars are under it)
+            movePlacingPiece(game.x + 8, game.y - math.floor(widget:getHeight() / 3))
+        else
+            movePlacingPiece(game.x - math.floor(widget:getWidth() / 2),
+                game.y + math.floor((game.height - widget:getHeight()) / 3))
+        end
+        if held then
+            onPlacingPieceHeld(true)
+        end
+    end, 750)
 end
 
 function isUiSetupRunning()
