@@ -35,7 +35,6 @@ local SECTORS = { Directions.East, Directions.SouthEast, Directions.South, Direc
   Directions.West, Directions.NorthWest, Directions.North, Directions.NorthEast }
 
 local style = DEFAULT_STYLE
-local arrows = {}
 
 local overlay
 local keypad
@@ -261,7 +260,7 @@ function retryTurn()
 end
 
 local function highlight(dir)
-  for _, arrow in ipairs(arrows) do
+  for _, arrow in ipairs(keypad.arrows or {}) do
     arrow:setOn(arrow.dir == dir)
   end
 end
@@ -310,13 +309,15 @@ end
 
 -- Puts the D-pad arrows around the centre (again when the pad is resized in
 -- the layout editor)
-function placeArrows()
-  if not keypad then
+function placeArrows(pad)
+  pad = pad or keypad
+  if not pad then
     return
   end
-  local radius = math.min(keypad:getWidth(), keypad:getHeight()) * 0.34
-  local arrowSize = math.floor(math.min(keypad:getWidth(), keypad:getHeight()) * 0.27)
-  for _, arrow in ipairs(arrows) do
+  local side = math.min(pad:getWidth(), pad:getHeight())
+  local radius = side * 0.34
+  local arrowSize = math.floor(side * 0.27)
+  for _, arrow in ipairs(pad.arrows or {}) do
     arrow:setSize({ width = arrowSize, height = arrowSize })
     arrow:setMarginLeft(math.floor(arrow.offsetX * radius))
     arrow:setMarginTop(math.floor(arrow.offsetY * radius))
@@ -346,26 +347,34 @@ function setStyle(newStyle, initial)
     g_settings.set(STYLE_SETTING, style)
   end
 
-  for _, arrow in ipairs(arrows) do
+  dressPad(keypad, style)
+end
+
+-- Gives a pad the picture (and arrows) of a style: the keypad, or a picture
+-- of one (the UI gallery)
+function dressPad(pad, padStyle)
+  for _, arrow in ipairs(pad.arrows or {}) do
     arrow:destroy()
   end
-  arrows = {}
-  local stick = style == 'stick'
-  keypad.pointer:setVisible(stick)
+  pad.arrows = {}
+  local stick = padStyle == 'stick'
+  if pad.pointer then
+    pad.pointer:setVisible(stick)
+  end
   if stick then
-    keypad:setImageSource('/images/game/mobile/keypad')
+    pad:setImageSource('/images/game/mobile/keypad')
   else
-    keypad:setImageSource('/images/game/mobile/dpad')
+    pad:setImageSource('/images/game/mobile/dpad')
     for _, entry in ipairs(ARROWS) do
-      if style == 'dpad8' or not entry.diagonal then
-        local arrow = g_ui.createWidget('JoystickArrow', keypad)
+      if padStyle == 'dpad8' or not entry.diagonal then
+        local arrow = g_ui.createWidget('JoystickArrow', pad)
         arrow:setImageSource('/images/game/mobile/dpad_' .. entry.id)
         arrow.dir = entry.dir
         arrow.offsetX, arrow.offsetY = entry.x, entry.y
-        table.insert(arrows, arrow)
+        table.insert(pad.arrows, arrow)
       end
     end
-    placeArrows()
+    placeArrows(pad)
   end
 end
 
