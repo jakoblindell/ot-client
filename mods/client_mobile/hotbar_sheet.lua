@@ -3,7 +3,10 @@
 -- Tabs: items you carry (with how to use them), 7.92 spells from the server
 -- data (Data792), chat text, and the action bar's special actions.
 
-local DRAG_THRESHOLD = 8
+-- Spell list filters: the gap between them, and between a filter's text and
+-- its edges
+local FILTER_SPACING = 6
+local FILTER_PADDING = 10
 
 local TABS = {
     { id = 'items', text = 'Items' },
@@ -68,36 +71,9 @@ local function slotChanged()
     bar.ApiJson.saveData()
 end
 
--- Lists scroll by dragging a finger over the rows; a drag does not click
-local function makeDragScrollable(row)
-    local list = sheet.panel.list
-    local scrollbar = sheet.panel.listScroll
-    row.onMousePress = function(self, mousePos, mouseButton)
-        self.dragStart = mousePos
-        self.dragOrigin = scrollbar:getValue()
-        self.dragged = false
-        return false
-    end
-    row.onMouseMove = function(self, mousePos, mouseMoved)
-        if not self.dragStart or not self:isPressed() then
-            return false
-        end
-        local dy = mousePos.y - self.dragStart.y
-        if math.abs(dy) > DRAG_THRESHOLD then
-            self.dragged = true
-        end
-        if self.dragged then
-            scrollbar:setValue(self.dragOrigin - dy)
-        end
-        return true
-    end
-    row.onClick = function(self)
-        if not self.dragged and self.onTap then
-            self.onTap()
-        end
-    end
-end
-
+-- A finger dragged over the rows scrolls the list (UIScrollArea, touch
+-- mode): once it is a drag, the press on the row is cancelled, so only a tap
+-- clicks it
 local function addRow(title, subtitle, badge, onTap)
     local row = g_ui.createWidget('HotbarSheetRow', sheet.panel.list)
     row.title:setText(title)
@@ -106,8 +82,11 @@ local function addRow(title, subtitle, badge, onTap)
     if not subtitle or subtitle == '' then
         row.title:setMarginTop(16)
     end
-    row.onTap = onTap
-    makeDragScrollable(row)
+    if onTap then
+        row.onClick = function()
+            onTap()
+        end
+    end
     return row
 end
 
@@ -116,18 +95,37 @@ local function addHeading(text)
     heading:setText(text:upper())
 end
 
+-- Puts the filters in lines across the sheet, onto the next line when one
+-- is full (a narrow phone in portrait)
+local function layoutFilters()
+    local panel = sheet.panel
+    local room = panel:getWidth() - panel:getPaddingLeft() - panel:getPaddingRight()
+    local x, y, height = 0, 0, 0
+    for _, button in ipairs(panel.filters:getChildren()) do
+        if x > 0 and x + button:getWidth() > room then
+            x, y = 0, height + FILTER_SPACING
+        end
+        button:setMarginLeft(x)
+        button:setMarginTop(y)
+        x = x + button:getWidth() + FILTER_SPACING
+        height = y + button:getHeight()
+    end
+    panel.filters:setHeight(height)
+end
+
 local function setFilters(buttons)
     local filters = sheet.panel.filters
     filters:destroyChildren()
-    filters:setHeight(#buttons > 0 and 34 or 0)
     filters:setMarginTop(#buttons > 0 and 8 or 0)
     for _, spec in ipairs(buttons) do
-        local button = g_ui.createWidget('HotbarSheetButton', filters)
+        local button = g_ui.createWidget('HotbarSheetFilter', filters)
         button:setText(spec.text)
-        button:setWidth(spec.width or 64)
+        -- as wide as its text
+        button:setWidth(button:getTextSize().width + 2 * FILTER_PADDING)
         button:setChecked(spec.checked or false)
         button.onClick = spec.onClick
     end
+    layoutFilters()
 end
 
 local function itemName(itemId)
@@ -212,8 +210,13 @@ end
 
 -- Spells tab -------------------------------------------------------------
 
+-- (a spell without vocations, like the house spells, is for every vocation)
+local function spellForVocation(spell, vocation)
+    return vocation == 0 or #spell.vocations == 0 or table.contains(spell.vocations, vocation)
+end
+
 local function spellUsable(spell, player, vocation)
-    if vocation ~= 0 and not table.contains(spell.vocations, vocation) then
+    if not spellForVocation(spell, vocation) then
         return false
     end
     if not player then
@@ -222,13 +225,31 @@ local function spellUsable(spell, player, vocation)
     return spell.magicLevel <= player:getMagicLevel() and spell.level <= player:getLevel()
 end
 
-local function setSpellIcon(row, words)
-    local data = Spells.getSpellDataByWords(words)
+-- The 7.92 spells by their names in the client's spell data (SpellInfo,
+-- from a newer server), where its words and name both differ
+local SPELL_ICON_NAMES = {
+    ['Poison Strike'] = 'Terra Strike',
+    ['Poison Wave'] = 'Terra Wave',
+    ['Poison Storm'] = 'Wrath of Nature',
+    ['Undead Legion'] = 'Animate Dead Rune',
+}
+-- For a spell the round icon sheet has nothing for (the house spells)
+local SPELL_ICON_NONE = '/images/ui/ot/icons/edit'
+
+-- The spell's round icon, found by its words, else by its name (the newer
+-- data renamed some words, and calls the rune spells "... Rune")
+local function setSpellIcon(row, spell)
+    local spells = SpellInfo and SpellInfo.Default or {}
+    local data = Spells.getSpellDataByWords(spell.words) or spells[SPELL_ICON_NAMES[spell.name] or spell.name]
+        or spells[spell.name .. ' Rune']
     if data and data.clientId then
         row.icon:setImageSource(Spells.ROUND_ICONS)
         row.icon:setImageClip(Spells.getRoundImageClip(data.clientId))
-        row.icon:setVisible(true)
+    else
+        row.icon:setImageSource(SPELL_ICON_NONE)
+        row.icon:setImageSmooth(true)
     end
+    row.icon:setVisible(true)
 end
 
 local function showSpells()
@@ -238,7 +259,7 @@ local function showSpells()
     local vocation = known or g_settings.getNumber(settingKey('vocation'), 0)
     local filters = {
         {
-            text = tr('Hide unusable'), width = 110, checked = hideUnusable,
+            text = tr('Hide unusable'), checked = hideUnusable,
             onClick = function()
                 g_settings.set(settingKey('hide_unusable'), not hideUnusable)
                 showTab('spells')
@@ -247,7 +268,7 @@ local function showSpells()
     }
     for _, filter in ipairs(known and {} or VOCATION_FILTERS) do
         table.insert(filters, {
-            text = tr(filter.text), width = 50, checked = vocation == filter.id,
+            text = tr(filter.text), checked = vocation == filter.id,
             onClick = function()
                 g_settings.set(settingKey('vocation'), filter.id)
                 showTab('spells')
@@ -259,12 +280,21 @@ local function showSpells()
     local shown = 0
     for _, spell in ipairs(Data792.spells) do
         local usable = spellUsable(spell, player, vocation)
-        if usable or (not hideUnusable and (vocation == 0 or table.contains(spell.vocations, vocation))) then
-            local badge = spell.mana .. ' mana'
-            if spell.soul > 0 then
-                badge = badge .. ', ' .. spell.soul .. ' soul'
+        if usable or (not hideUnusable and spellForVocation(spell, vocation)) then
+            -- the costs and the magic level, when there are any (the 7.92
+            -- spells need no character level)
+            local costs = {}
+            if spell.mana > 0 then
+                table.insert(costs, spell.mana .. ' mana')
             end
-            local subtitle = spell.words .. (spell.param and ' "..."' or '') .. '  -  ML ' .. spell.magicLevel
+            if spell.soul > 0 then
+                table.insert(costs, spell.soul .. ' soul')
+            end
+            local badge = table.concat(costs, ', ')
+            local subtitle = spell.words .. (spell.param and ' "..."' or '')
+            if spell.magicLevel > 0 then
+                subtitle = subtitle .. '  -  ML ' .. spell.magicLevel
+            end
             local row = addRow(spell.name, subtitle, badge, function()
                 if spell.param then
                     -- Needs a name or direction: finish it in the text tab
@@ -275,7 +305,7 @@ local function showSpells()
                 actionbar().ApiJson.createOrUpdateText(barId, buttonId, spell.words, true)
                 slotChanged()
             end)
-            setSpellIcon(row, spell.words)
+            setSpellIcon(row, spell)
             if not usable then
                 row:setOpacity(0.5)
             end
@@ -395,6 +425,7 @@ function openHotbarSheet(button)
         local height = math.max(300, math.min(640, rootWidget:getHeight() - 16))
         panel:setSize({ width = width, height = height })
         panel.tabs:getLayout():setCellSize({ width = math.floor((width - 24 - 18) / 4), height = 40 })
+        layoutFilters()
     end
     fit()
     -- The screen turned or resized while open: fit it again

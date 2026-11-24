@@ -42,11 +42,13 @@ Classic Tibia materials, nothing new to draw:
 | `OtHelpButton` | The "?" beside a setting; opens a short explanation |
 | `OtProgress` | A bar for how far along something is (gold fill, the count on it: `setPercent`, `setText`) |
 | `OtSettingRow` | Title + "?" on the left, controls on the right (`controls` takes `OtButton`s, an `OtCheck`, or `-` `OtValue` `+`) |
+| `OtListRow` | A tappable row in a list: 52 px, a line under it, darker while pressed |
 
 Tokens (`&ot-…` in the same file): fonts `$ot-font-title`, `$ot-font-label`,
 `$ot-font-text`, `$ot-font-small`; colours `$ot-text`, `$ot-text-strong`,
 `$ot-text-muted`, `$ot-gold`, `$ot-positive` (green: you can afford it),
-`$ot-negative` (red: you cannot), `$ot-backdrop`.
+`$ot-negative` (red: you cannot), `$ot-backdrop`, `$ot-line` (between list
+rows), `$ot-row-pressed`.
 
 ## Rules
 

@@ -1,10 +1,5 @@
 // Built from the ot-ui styles (data/styles/50-ot-ui.otui)
-HotbarSheetRow < UIButton
-  height: 52
-  border-width-bottom: 1
-  border-color-bottom: #ffffff14
-  $pressed:
-    background-color: #00000040
+HotbarSheetRow < OtListRow
 
   Item
     id: item
@@ -65,6 +60,12 @@ HotbarSheetHeading < Label
 
 HotbarSheetButton < OtButton
 
+// A spell list filter, as wide as its text (hotbar_sheet.lua places them,
+// on more lines when the sheet is narrow)
+HotbarSheetFilter < OtButton
+  anchors.top: parent.top
+  anchors.left: parent.left
+
 HotbarSheet < OtBackdrop
   OtPanel
     id: panel
@@ -109,9 +110,6 @@ HotbarSheet < OtBackdrop
       anchors.right: parent.right
       margin-top: 8
       height: 40
-      layout:
-        type: horizontalBox
-        spacing: 6
 
     ScrollablePanel
       id: list
