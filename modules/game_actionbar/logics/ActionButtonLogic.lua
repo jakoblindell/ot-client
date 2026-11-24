@@ -841,10 +841,14 @@ function configureButtonMouseRelease(button)
             menu:addOption(buttonText:len() > 0 and tr('Edit Text') or tr('Assign Text'), function()
                 assignText(button)
             end)
-            menu:addOption(button.cache.isPassive and tr('Edit Passive Ability') or tr('Assign Passive Ability'),
-                function()
-                    assignPassive(button)
-                end)
+            -- Passive abilities (Gift of Life) exist only on servers that send
+            -- their data; a slot that already holds one can still be edited
+            if button.cache.isPassive or (passiveData and passiveData.max > 0) then
+                menu:addOption(button.cache.isPassive and tr('Edit Passive Ability') or tr('Assign Passive Ability'),
+                    function()
+                        assignPassive(button)
+                    end)
+            end
             menu:addOption(button.cache.specialAction and tr('Edit Action') or tr('Assign Action'), function()
                 assignSpecialAction(button, mousePos)
             end)
