@@ -521,10 +521,16 @@ end
 
 -- Text covered by a button or switch it doesn't belong to (a setting's name
 -- under its row of choices): logged like clipped text
-local function collectTexts(widget, texts, controls)
+-- (order: the order widgets are drawn in, a widget before its children and
+-- before the widgets after it: a control drawn under a text does not cover it,
+-- such as the game view under a panel laid over it)
+local function collectTexts(widget, texts, controls, order)
+    order = order or { n = 0 }
     if not widget:isVisible() or widget:getWidth() <= 0 then
         return
     end
+    order.n = order.n + 1
+    local drawn = order.n
     -- (every widget has UIWidget's own onClick: only one set on it counts)
     local clickable = widget.onClick and widget.onClick ~= UIWidget.onClick
     local switch = widget.onCheckChange and widget.onCheckChange ~= UIWidget.onCheckChange
@@ -534,7 +540,7 @@ local function collectTexts(widget, texts, controls)
         return
     end
     if (clickable or switch) and not widget:isPhantom() then
-        table.insert(controls, { widget = widget, rect = shown })
+        table.insert(controls, { widget = widget, rect = shown, drawn = drawn })
     else
         local text = widget.getText and widget:getText() or ''
         if text ~= '' and not widget:isTextWrap() then
@@ -548,11 +554,12 @@ local function collectTexts(widget, texts, controls)
             elseif bit.band(align, AlignRight) ~= 0 then
                 x = rect.x + rect.width - width
             end
-            table.insert(texts, { widget = widget, x = x, y = rect.y, width = width, height = rect.height })
+            table.insert(texts, { widget = widget, x = x, y = rect.y, width = width, height = rect.height,
+                drawn = drawn })
         end
     end
     for _, child in ipairs(widget:getChildren()) do
-        collectTexts(child, texts, controls)
+        collectTexts(child, texts, controls, order)
     end
 end
 
@@ -575,7 +582,8 @@ local function checkCovered(top, found)
             local overlapX = math.min(text.x + text.width, r.x + r.width) - math.max(text.x, r.x)
             local overlapY = math.min(text.y + text.height, r.y + r.height) - math.max(text.y, r.y)
             -- (a button's own label, or a label laid over a whole panel, is fine)
-            if overlapX > 2 and overlapY > 2 and not isInside(text.widget, control) and not isInside(control, text.widget) then
+            if overlapX > 2 and overlapY > 2 and entry.drawn > text.drawn and not isInside(text.widget, control)
+                and not isInside(control, text.widget) then
                 table.insert(found, string.format('%s#%s "%s" covered by %s#%s "%s"', text.widget:getStyleName(),
                     text.widget:getId(), text.widget:getText(), control:getStyleName(), control:getId(),
                     control.getText and control:getText() or ''))
