@@ -349,6 +349,9 @@ public:
     bool canPerformGameAction() const;
 
     bool isOnline() { return m_online; }
+    // The UI gallery's map page (mods/client_gallery): counts as online, with
+    // a local player and no server, so the map draws what is put on it
+    LocalPlayerPtr startPreview();
     bool isLogging() { return !m_online && m_protocolGame; }
     bool isDead() { return m_dead; }
     bool isAttacking();

@@ -27,6 +27,7 @@ with saved baseline images on every pull request (ot-client#70).
 | `hotbar` | the hotbar settings sheet |
 | `outfit` | the outfit screen for touch screens, with sample outfits |
 | `settings-gameplay` … `settings-optimization` | the hub's Settings, one page per tab |
+| `map` | the game screen without a server: a player and a monster with names, health and mana bars and a yell, drawn by the map at its real size (no game sprites: the map is black) |
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock

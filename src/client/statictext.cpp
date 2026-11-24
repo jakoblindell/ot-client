@@ -35,13 +35,23 @@ StaticText::StaticText()
     m_cachedText.setAlign(Fw::AlignCenter);
 }
 
-void StaticText::drawText(const Point& dest, const Rect& parentRect)
+void StaticText::drawText(const Point& dest, const Rect& parentRect, const float scale, const float mapZoom)
 {
     const auto& textSize = m_cachedText.getTextSize();
 
-    auto rect = Rect(dest - Point(textSize.width() / 2, textSize.height()) + (Point(20, 5) / g_app.getStaticTextScale()), textSize);
-    if (g_app.getStaticTextScale() == DEFAULT_DISPLAY_DENSITY)
-        rect.bind(parentRect);
+    // (in the drawing's scaled coordinates)
+    Point p = dest;
+    p.scale(scale);
+
+    Rect rect;
+    if (mapZoom > 0.f) {
+        rect = Rect(p - Point(textSize.width() / 2, textSize.height()) + Point(20, 5) * (mapZoom / scale), textSize);
+        rect.bind(Rect(parentRect.topLeft() / scale, parentRect.size() / scale));
+    } else {
+        rect = Rect(p - Point(textSize.width() / 2, textSize.height()) + (Point(20, 5) / scale), textSize);
+        if (scale == DEFAULT_DISPLAY_DENSITY)
+            rect.bind(parentRect);
+    }
 
     // draw only if the real center is not too far from the parent center, or its a yell
     //if(g_map.isAwareOfPosition(m_position) || isYell()) {
