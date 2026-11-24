@@ -863,7 +863,14 @@ local function layout()
     -- opens over the game view
     chatButton:breakAnchors()
     chatButton:setMargin(0)
-    if actionPanel and presetRow and not chatBeside then
+    if actionPanel and presetRow and not chatBeside and portrait then
+        -- (a narrow hotbar has no room beside P and the pencil: left of
+        -- them, in the room beside the joystick; above them it would reach
+        -- the health and mana bars)
+        chatButton:addAnchor(AnchorRight, presetRow:getId(), AnchorLeft)
+        chatButton:addAnchor(AnchorVerticalCenter, presetRow:getId(), AnchorVerticalCenter)
+        chatButton:setMarginRight(6)
+    elseif actionPanel and presetRow and not chatBeside then
         -- (above P and the pencil, at the right edge: a narrow hotbar has
         -- no room beside them)
         chatButton:addAnchor(AnchorRight, 'parent', AnchorRight)
