@@ -72,7 +72,7 @@ local SETTINGS = {
             { id = 'editLayout', kind = 'button', text = 'Move and size pieces', buttonText = 'Edit layout',
                 help = 'Drag pieces, panels too, to move them; - and + size them. Save keeps the changes, Cancel undoes them.' },
             { id = 'setupUi', kind = 'button', text = 'Place pieces one by one', buttonText = 'UI setup',
-                help = 'Places the movement control, hotbar, bars, backpack and chat one at a time, like on your first login.' },
+                help = 'Places the movement control, hotbar, backpack and chat one at a time, like on your first login.' },
             { id = 'hotbar', kind = 'button', text = 'Hotbar presets, rows and slots', buttonText = 'Hotbar...',
                 help = 'Number of presets (P button), extra rows and how many slots the hotbar shows.' },
             { id = 'typing', kind = 'toggle', text = 'Typing suggestions',
