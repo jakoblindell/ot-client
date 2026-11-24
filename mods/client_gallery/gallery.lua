@@ -11,7 +11,7 @@
 local root
 local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
-    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization', 'map', 'map-before' }
+    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization', 'map' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -427,12 +427,6 @@ PAGES.map = function()
         mobile.relayout()
     end
     return { screen }, true
-end
-
--- TEMPORARY (for the before/after comparison): the fixed scales, as before
-PAGES['map-before'] = function(page)
-    g_app.setCreatureInformationMapScale(0)
-    return PAGES.map(page)
 end
 
 -- The hub's Settings, one page per tab
