@@ -67,3 +67,78 @@ TextWindow < MainWindow
     margin-right: 10
     width: 80
     height: 25
+
+// Touch layouts (ot-client#124, option 1): a small modal over the dimmed
+// game. Title and close at the top, the writer, the text on paper, then the
+// count and Save. textwindow.lua sizes and places the panel (above the
+// on-screen keyboard while it is open) and switches it to one header row
+// (title, Save, close) when there is little height.
+TouchTextWindow < UIWindow
+  anchors.fill: parent
+  background-color: $ot-backdrop
+  draggable: false
+  focusable: true
+  phantom: false
+
+  OtPanel
+    id: panel
+    size: 361 400
+    padding: 8
+    focusable: true
+
+    OtIconButton
+      id: closeButton
+      !text: 'X'
+      anchors.top: parent.top
+      anchors.right: parent.right
+
+    OtTitle
+      id: title
+      anchors.verticalCenter: closeButton.verticalCenter
+      anchors.horizontalCenter: parent.horizontalCenter
+
+    OtHint
+      id: writer
+      anchors.top: closeButton.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      margin-top: 2
+      margin-left: 2
+
+    OtPaper
+      id: paper
+      anchors.top: writer.bottom
+      anchors.left: parent.left
+      anchors.right: textScroll.left
+      anchors.bottom: saveButton.top
+      margin-top: 6
+      margin-bottom: 8
+
+      // (its scroll bar, textScroll, is set in textwindow.lua: a style
+      // finds it only among the field's siblings)
+      OtPaperText
+        id: text
+
+    VerticalScrollBar
+      id: textScroll
+      anchors.top: paper.top
+      anchors.bottom: paper.bottom
+      anchors.right: parent.right
+      step: 18
+      pixels-scroll: true
+
+    Label
+      id: count
+      anchors.left: parent.left
+      anchors.verticalCenter: saveButton.verticalCenter
+      margin-left: 2
+      font: $ot-font-text
+      color: $ot-text-muted
+      text-auto-resize: true
+
+    OtButtonPrimary
+      id: saveButton
+      !text: tr('Save')
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      width: 120

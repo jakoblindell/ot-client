@@ -28,6 +28,7 @@ Classic Tibia materials, nothing new to draw:
 | `OtBackdrop` | Full-screen dim layer under a sheet; a tap on it closes the sheet |
 | `OtPanel` | A window or sheet (stone, bevelled edge, 12 px padding) |
 | `OtInset` | A sunken area inside a panel: lists, previews |
+| `OtPaper` + `OtPaperText` | The text of a letter, book or label: dark on a paper sheet in the 15 px Verdana TTF (the text field fills the sheet) |
 | `OtTitle` | A screen's title (13 px bold, white) |
 | `OtHeading` | A section heading: gold capitals over a line (set `text`) |
 | `OtLabel` | A setting's or field's name (11 px bold) |
@@ -48,7 +49,9 @@ Tokens (`&ot-…` in the same file): fonts `$ot-font-title`, `$ot-font-label`,
 `$ot-font-text`, `$ot-font-small`; colours `$ot-text`, `$ot-text-strong`,
 `$ot-text-muted`, `$ot-gold`, `$ot-positive` (green: you can afford it),
 `$ot-negative` (red: you cannot), `$ot-backdrop`, `$ot-line` (between list
-rows), `$ot-row-pressed`.
+rows), `$ot-row-pressed`; paper `$ot-paper`,
+`$ot-paper-text`, `$ot-paper-selection` and its font `$ot-font-paper` (a TTF
+file name) at `$ot-font-paper-size`.
 
 ## Rules
 

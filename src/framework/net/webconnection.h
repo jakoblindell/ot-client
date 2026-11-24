@@ -72,27 +72,34 @@ protected:
                  outputStream);
     void onRecv(const uint16_t recvSize);
     void onTimeout();
+    // Client thread: tells the protocol the connection ended and closes it
+    void reportClose();
+    // Browser thread: the socket failed or the server closed it
+    void onSocketClosed();
 
-    // Take ownership of a heap copy: the member callbacks may be cleared by
-    // close() before the dispatched call runs on the client thread.
+    // Take ownership of what was queued for the client thread: the member
+    // callbacks may be cleared by close(), and the connection released,
+    // before the dispatched call runs there.
     static void runOnConnectCallback(std::function<void()>* callback);
-    static void runOnErrorCallback(ErrorCallback* callback);
+    static void runOnSocketClosed(std::weak_ptr<LuaObject>* connection);
 
     std::function<void()> m_connectCallback;
     ErrorCallback m_errorCallback;
     RecvCallback m_recvCallback;
 
     EMSCRIPTEN_WEBSOCKET_T m_websocket = 0;
-    bool m_gameWorld;
     pthread_t m_pthread;
 
     static std::list<std::shared_ptr<asio::streambuf>> m_outputStreams;
     std::shared_ptr<asio::streambuf> m_outputStream;
     bool m_connected{ false };
     bool m_connecting{ false };
-    // The server closed the socket; set on the browser's thread, the
-    // connection closes once the data received before it has been read
+    // The server closed the socket, or it failed; set on the browser's
+    // thread, the close is reported once the data received before it has
+    // been read
     std::atomic<bool> m_remoteClosed{ false };
+    // Data came from the server (client thread)
+    bool m_received{ false };
     stdext::timer m_activityTimer;
 
     asio::streambuf m_inputStream;
