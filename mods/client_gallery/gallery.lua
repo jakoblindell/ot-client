@@ -353,7 +353,9 @@ PAGES.npc = function()
     receive(103, {
         id = 1, npc = 'Benjamin', money = 1500,
         text = 'Hello, traveller. I sell runes and fluids. Ask me for a trade, or about the news.',
-        keywords = { 'trade', 'news' },
+        -- every word the NPC takes (ot-server#88): more than four rows scroll
+        keywords = { 'trade', 'news', 'job', 'name', 'time', 'king', 'thais', 'carlin', 'venore', 'magic',
+            'fluids', 'runes', 'blessings', 'rumours', 'tibia', 'excalibug', 'ferumbras', 'library' },
         buy = {
             { item = 3160, name = 'ultimate healing rune', price = 175, words = 'buy ultimate healing rune' },
             { item = 3155, name = 'sudden death rune', price = 325, words = 'buy sudden death rune' },
