@@ -11,7 +11,8 @@
 local root
 local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
-    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization' }
+    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -388,6 +389,31 @@ for _, tab in ipairs({ 'Gameplay', 'Display', 'Controls', 'Layout', 'Optimizatio
         tap(tr(tab))
     end
 end
+
+-- Text windows (ot-client#124): a letter as the server opens it (Edit Text),
+-- the same letter only to read, and a house list (Edit List). The -keyboard
+-- pages are the same windows with the on-screen keyboard open: gallery.js
+-- sets keyboardVisibleTop/Bottom as the page would (shell.html).
+local SAMPLE_LETTER = 'Dear Aren,\n\nthe ferry leaves at dawn. Bring the map, two ropes and something to eat; ' ..
+    'the island has nothing but rats.\n\nIf the weather turns, wait for me at the lighthouse.\n\n- Mira'
+
+local function textWindows()
+    return modules.game_textwindow
+end
+
+PAGES.letter = function()
+    textWindows().onGameEditText(1, 0, 1000, SAMPLE_LETTER, 'Mira', '18 Nov 2026')
+end
+PAGES['letter-keyboard'] = PAGES.letter
+
+PAGES['letter-read'] = function()
+    textWindows().onGameEditText(2, 0, #SAMPLE_LETTER, SAMPLE_LETTER, 'Mira', '18 Nov 2026')
+end
+
+PAGES['house-list'] = function()
+    textWindows().onGameEditList(3, 1, 'Mira\nToren\nLune\nKasimir\nOld Bess')
+end
+PAGES['house-list-keyboard'] = PAGES['house-list']
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
 -- scrolled list). nil when none of it shows.
