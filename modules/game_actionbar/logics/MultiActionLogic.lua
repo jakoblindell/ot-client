@@ -49,6 +49,13 @@ local function clearSingleActionCache(button, barID, buttonID)
     end
 end
 
+-- The checkerboard over a spell, rune or item that cannot be used now.
+-- Not on touch screens: scaled up on a phone it looks broken, and a tap on
+-- the slot gets the server's own "cannot" message anyway.
+local function showUnusable(panel, unusable)
+    panel:setVisible(unusable and not g_platform.isMobile() or false)
+end
+
 local function playerCanUseSpellLocal(spellData)
     if not g_game.isOnline() or not spellData then
         return false
@@ -249,7 +256,7 @@ local function renderSlotOnWidget(widget, slotData, isMainButton)
         local itemCount = player and player:getInventoryCount(widget.cache.itemId, widget.cache.upgradeTier) or 0
         widget.item:setItemCount(itemCount)
         if widget.item.text and widget.item.text.gray then
-            widget.item.text.gray:setVisible(itemCount == 0)
+            showUnusable(widget.item.text.gray, itemCount == 0)
         end
         if widget.cache.actionType == UseTypes["Equip"] then
             local equipped = player and player:hasEquippedItemId(widget.cache.itemId, widget.cache.upgradeTier)
@@ -291,7 +298,7 @@ local function renderSlotOnWidget(widget, slotData, isMainButton)
             end
 
             if widget.item.text and widget.item.text.gray then
-                widget.item.text.gray:setVisible(not playerCanUseSpellLocal(spellData))
+                showUnusable(widget.item.text.gray, not playerCanUseSpellLocal(spellData))
             end
 
             widget.cache.isRuneSpell = false
@@ -605,7 +612,7 @@ local function resetMultiPanelButton(slotButton)
             slotButton.item.text:setImageSource("")
             slotButton.item.text:setText("")
             if slotButton.item.text.gray then
-                slotButton.item.text.gray:setVisible(false)
+                showUnusable(slotButton.item.text.gray, false)
             end
         end
         slotButton.item:setDraggable(true)
