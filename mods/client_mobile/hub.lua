@@ -59,6 +59,8 @@ local SETTINGS = {
         id = 'controls', text = 'Controls', rows = {
             { id = 'movement', kind = 'choice', text = 'Movement',
                 help = 'D-Pad: four arrows. D-Pad (8-way): with diagonals. Analog stick: follows your thumb.' },
+            { id = 'turnFromCentre', kind = 'toggle', text = 'Turn from the centre',
+                help = 'Touch the middle of the movement control and drag to turn without walking, like Ctrl+arrow. Touch outside the middle to walk.' },
             { id = 'controller', kind = 'button', text = 'Game controller', buttonText = 'Bind...',
                 help = 'Choose which hotbar slot each controller button uses. Walk with the stick or D-pad.' },
             { id = 'layoutMode', kind = 'choice', text = 'Layout',
@@ -164,6 +166,8 @@ local function rowValue(row)
         return options().getOption(row.key)
     elseif row.id == 'movement' then
         return modules.game_joystick and modules.game_joystick.getStyle and modules.game_joystick.getStyle()
+    elseif row.id == 'turnFromCentre' then
+        return modules.game_joystick.getTurnFromCentre()
     elseif row.id == 'layoutMode' then
         return g_platform.getTouchMode()
     elseif row.id == 'viewSize' then
@@ -199,6 +203,8 @@ local function setRowValue(row, value)
         options().setOption(row.key, value)
     elseif row.id == 'movement' then
         modules.game_joystick.setStyle(value)
+    elseif row.id == 'turnFromCentre' then
+        modules.game_joystick.setTurnFromCentre(value)
     elseif row.id == 'layoutMode' then
         setTouchMode(value)
     elseif row.id == 'viewSize' then
@@ -237,6 +243,8 @@ local function rowAvailable(row)
         return options() and options().getOption(row.key) ~= nil
     elseif row.id == 'movement' then
         return modules.game_joystick and modules.game_joystick.STYLES ~= nil
+    elseif row.id == 'turnFromCentre' then
+        return modules.game_joystick and modules.game_joystick.getTurnFromCentre ~= nil
     elseif row.id == 'controller' then
         return modules.client_gamepad and modules.client_gamepad.openBindWindow ~= nil and g_platform.isBrowser()
     elseif row.id == 'layoutMode' then
