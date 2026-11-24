@@ -308,15 +308,19 @@ end
 -- Styles ---------------------------------------------------------------------
 
 -- Puts the D-pad arrows around the centre (again when the pad is resized in
--- the layout editor)
+-- the layout editor). Both as shares of the pad's picture (its shorter
+-- side): the arrows sit in the middle of the ring between the inner circle
+-- (0.27) and the edge (0.48), small enough to leave a gap between the 8-way
+-- pad's neighbours. Only a picture: the direction comes from the thumb's
+-- angle (directionFor).
 function placeArrows(pad)
   pad = pad or keypad
   if not pad then
     return
   end
   local side = math.min(pad:getWidth(), pad:getHeight())
-  local radius = side * 0.34
-  local arrowSize = math.floor(side * 0.27)
+  local radius = side * 0.375
+  local arrowSize = math.floor(side * 0.20)
   for _, arrow in ipairs(pad.arrows or {}) do
     arrow:setSize({ width = arrowSize, height = arrowSize })
     arrow:setMarginLeft(math.floor(arrow.offsetX * radius))
