@@ -76,6 +76,11 @@ local function loadOptions()
     local key = settingKey()
     local ok, saved = pcall(json.decode, key and g_settings.getString(key) or '')
     options = ok and type(saved) == 'table' and saved or {}
+    -- a container named "1" or "true" was once saved as a number or a
+    -- boolean (client_containers now gives names as text)
+    if options.lootTo ~= nil and type(options.lootTo) ~= 'string' then
+        options.lootTo = tostring(options.lootTo)
+    end
 end
 
 local function saveOptions()
@@ -99,6 +104,17 @@ local filters = {}
 local function loadFilters()
     local ok, saved = pcall(json.decode, g_settings.getString(FILTERS_SETTING))
     filters = ok and type(saved) == 'table' and saved or {}
+    -- (container names saved as numbers, as for "Put loot in" above; false
+    -- is "as in Put loot in")
+    for _, items in pairs(filters) do
+        if type(items) == 'table' then
+            for id, target in pairs(items) do
+                if type(target) == 'number' or target == true then
+                    items[id] = tostring(target)
+                end
+            end
+        end
+    end
     -- a character's list from before filters becomes a filter of its own
     if type(options.lootList) == 'table' and next(options.lootList) then
         local player = g_game.getLocalPlayer()
