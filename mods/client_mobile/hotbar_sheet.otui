@@ -60,11 +60,10 @@ HotbarSheetHeading < Label
 
 HotbarSheetButton < OtButton
 
-// A spell list filter, as wide as its text (hotbar_sheet.lua places them,
-// on more lines when the sheet is narrow)
-HotbarSheetFilter < OtButton
-  anchors.top: parent.top
-  anchors.left: parent.left
+// A note in place of a list (no vocation yet)
+HotbarSheetMessage < OtHint
+  margin: 12 8 0 8
+  text-align: center
 
 HotbarSheet < OtBackdrop
   OtPanel
@@ -98,22 +97,14 @@ HotbarSheet < OtBackdrop
       height: 40
       layout:
         type: grid
-        cell-size: 94 40
+        cell-size: 74 40
         cell-spacing: 6
-        num-columns: 4
+        num-columns: 5
         flow: true
-
-    UIWidget
-      id: filters
-      anchors.top: tabs.bottom
-      anchors.left: parent.left
-      anchors.right: parent.right
-      margin-top: 8
-      height: 40
 
     ScrollablePanel
       id: list
-      anchors.top: filters.bottom
+      anchors.top: tabs.bottom
       anchors.left: parent.left
       anchors.right: listScroll.left
       anchors.bottom: footer.top
@@ -125,7 +116,7 @@ HotbarSheet < OtBackdrop
 
     VerticalScrollBar
       id: listScroll
-      anchors.top: filters.bottom
+      anchors.top: tabs.bottom
       anchors.bottom: footer.top
       anchors.right: parent.right
       margin-top: 8

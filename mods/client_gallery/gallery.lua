@@ -11,7 +11,8 @@
 local root
 local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'hotbar-sheet',
-    'outfit', 'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization' }
+    'hotbar-sheet-house', 'hotbar-sheet-novocation', 'outfit', 'settings-gameplay', 'settings-display', 'settings-controls',
+    'settings-layout', 'settings-optimization' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -370,27 +371,32 @@ PAGES.hotbar = function()
     end
 end
 
--- The sheet a long press on a hotbar slot opens (ot-client#159): the Spells
--- tab with its filters (no character: every spell and the vocation
--- filters), scrolled to the end of the list (runes, the house spells)
-PAGES['hotbar-sheet'] = function(page)
+-- The sheet a long press on a hotbar slot opens (ot-client#159), for slot 3
+-- of bar 1 (a stand-in: the sheet reads the ids "bar.slot"). No character
+-- here: the page names the tab and the vocation (spell data ids).
+local function hotbarSheet(page, tab, vocation)
     local mobile = modules.client_mobile
     if not (mobile and mobile.openHotbarSheet) then
         return
     end
-    -- a stand-in for slot 3 of bar 1 (the sheet reads the ids "bar.slot")
     local bar = widget('UIWidget', page, function(w) w:hide() end)
     local slot = widget('UIWidget', widget('UIWidget', bar), function(w) w:setId('1.3') end)
-    mobile.openHotbarSheet(slot)
-    tap(tr('Spells'))
-    scheduleEvent(function()
-        for _, child in ipairs(g_ui.getRootWidget():getChildren()) do
-            if child:getStyleName() == 'HotbarSheet' then
-                local scroll = child:recursiveGetChildById('listScroll')
-                scroll:setValue(scroll:getMaximum())
-            end
-        end
-    end, 300)
+    mobile.openHotbarSheet(slot, { tab = tab, vocation = vocation })
+end
+
+-- A druid's spells, by magic level
+PAGES['hotbar-sheet'] = function(page)
+    hotbarSheet(page, 'spells', 2)
+end
+
+-- The house spells, for every vocation
+PAGES['hotbar-sheet-house'] = function(page)
+    hotbarSheet(page, 'house', 2)
+end
+
+-- A character without a vocation (Rookgaard): no spells yet
+PAGES['hotbar-sheet-novocation'] = function(page)
+    hotbarSheet(page, 'spells', 0)
 end
 
 -- The outfit screen for touch screens (ot-client#101), with sample outfits

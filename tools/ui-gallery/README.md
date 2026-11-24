@@ -25,7 +25,9 @@ with saved baseline images on every pull request (ot-client#70).
 | `achievements` | Journal › Achievements: unlocked, in progress, hidden |
 | `npc` | the NPC dialog with a sample NPC (text, keywords, shop) |
 | `hotbar` | the hotbar settings sheet |
-| `hotbar-sheet` | the sheet a long press on a hotbar slot opens: Spells tab, filters, the end of the spell list |
+| `hotbar-sheet` | the sheet a long press on a hotbar slot opens: a druid's Spells tab |
+| `hotbar-sheet-house` | that sheet's House tab (the house spells) |
+| `hotbar-sheet-novocation` | its Spells tab for a character without a vocation |
 | `outfit` | the outfit screen for touch screens, with sample outfits |
 | `settings-gameplay` … `settings-optimization` | the hub's Settings, one page per tab |
 
