@@ -5,6 +5,8 @@
 -- gets them. Buttons say the words for the player (the NPC's own rules do
 -- the trading); after a shop or travel choice the NPC's "Do you want...?" is
 -- answered "yes" automatically. Typing still works.
+-- A dialog over 8 KB comes in parts that gamelib's
+-- registerExtendedJSONOpcode joins before decoding (ot-server#66).
 
 local NPC_DIALOG_OPCODE = 103
 local TEXT_COLOR = '#e8e8e8'
@@ -371,9 +373,8 @@ render = function()
     fitWindow()
 end
 
-local function onDialog(protocol, opcode, buffer)
-    local ok, data = pcall(json.decode, buffer)
-    if not ok or type(data) ~= 'table' then
+local function onDialog(protocol, opcode, data)
+    if type(data) ~= 'table' then
         return
     end
     if data.close then
@@ -480,12 +481,12 @@ function init()
         end
     end
 
-    ProtocolGame.registerExtendedOpcode(NPC_DIALOG_OPCODE, onDialog)
+    ProtocolGame.registerExtendedJSONOpcode(NPC_DIALOG_OPCODE, onDialog)
     connect(g_game, { onGameEnd = close })
 end
 
 function terminate()
-    ProtocolGame.unregisterExtendedOpcode(NPC_DIALOG_OPCODE)
+    ProtocolGame.unregisterExtendedJSONOpcode(NPC_DIALOG_OPCODE)
     disconnect(g_game, { onGameEnd = close })
     if window then
         window:destroy()

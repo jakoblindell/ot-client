@@ -247,7 +247,7 @@ void MapView::drawLights() {
 }
 
 void MapView::drawCreatureInformation() {
-    g_drawPool.scale(g_app.getCreatureInformationScale());
+    g_drawPool.scale(g_app.getCreatureInformationScaleFor(getMapZoom()));
 
     uint32_t flags = Otc::DrawThings;
     if (m_drawNames) { flags |= Otc::DrawNames; }
@@ -276,7 +276,13 @@ void MapView::drawCreatureInformation() {
 
 void MapView::drawForeground(const Rect& rect)
 {
-    g_drawPool.scale(g_app.getStaticTextScale());
+    // On the touch layout, speech and damage numbers are sized with the map
+    // like names and bars (ot-client#112); 0: at their fixed scales
+    const float mapZoom = g_app.getCreatureInformationMapScale() > 0.f ? getMapZoom() : 0.f;
+    const float staticTextScale = g_app.getStaticTextScaleFor(mapZoom);
+    const float animatedTextScale = g_app.getAnimatedTextScaleFor(mapZoom);
+
+    g_drawPool.scale(staticTextScale);
     for (const auto& staticText : g_map.getStaticTexts()) {
         if (staticText->getMessageMode() == Otc::MessageNone)
             continue;
@@ -289,10 +295,10 @@ void MapView::drawForeground(const Rect& rect)
         p.x *= m_posInfo.horizontalStretchFactor;
         p.y *= m_posInfo.verticalStretchFactor;
         p += rect.topLeft();
-        staticText->drawText(p.scale(g_app.getStaticTextScale()), rect);
+        staticText->drawText(p, rect, staticTextScale, mapZoom);
     }
 
-    g_drawPool.scale(g_app.getAnimatedTextScale());
+    g_drawPool.scale(animatedTextScale);
     for (const auto& animatedText : g_map.getAnimatedTexts()) {
         const auto& pos = animatedText->getPosition();
 
@@ -303,7 +309,7 @@ void MapView::drawForeground(const Rect& rect)
         p.x *= m_posInfo.horizontalStretchFactor;
         p.y *= m_posInfo.verticalStretchFactor;
         p += rect.topLeft();
-        animatedText->drawText(p, rect);
+        animatedText->drawText(p, rect, animatedTextScale, mapZoom);
     }
 
     g_drawPool.scale(1.f);
