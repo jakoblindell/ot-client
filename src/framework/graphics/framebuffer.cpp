@@ -50,6 +50,19 @@ FrameBuffer::~FrameBuffer()
     }
 }
 
+void FrameBuffer::restore()
+{
+    // (the old name means nothing in the new context)
+    glGenFramebuffers(1, &m_fbo);
+    if (!m_fbo)
+        g_logger.warning("Unable to create framebuffer object");
+
+    if (m_texture) {
+        m_texture = nullptr;
+        resize(m_logicalSize);
+    }
+}
+
 bool FrameBuffer::resize(const Size& size)
 {
     assert(size.isValid());

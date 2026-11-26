@@ -24,6 +24,8 @@
 
 #include "declarations.h"
 
+#include <atomic>
+
  // @bindsingleton g_graphics
 class Graphics
 {
@@ -45,8 +47,28 @@ public:
 
     bool ok() const { return m_ok; }
 
+    // The GL context can be lost (a browser drops it for a page in the
+    // background) and come back empty (ot-client#142). Nothing is drawn
+    // while it is away; when it is back, every GL object is made again in
+    // place, and the game goes on where it was.
+    // @dontbind
+    void contextLost();
+    // (on the thread that owns the context)
+    // @dontbind
+    void contextRestored();
+    // false while the context is lost or its objects are being made again
+    bool canDraw() const { return m_contextState == ContextState::Ready; }
+    bool isContextLost() const { return m_contextState == ContextState::Lost; }
+    // The GL context the objects made now belong to: a new one after each
+    // restore (objects of an older one are made again)
+    uint32_t getContextGeneration() const { return m_contextGeneration; }
+
 private:
+    enum class ContextState : uint8_t { Ready, Lost, Restoring };
+
     bool m_ok{ false };
+    std::atomic<ContextState> m_contextState{ ContextState::Ready };
+    std::atomic_uint32_t m_contextGeneration{ 1 };
 
     std::string m_vendor;
     std::string m_renderer;

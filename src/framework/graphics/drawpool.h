@@ -55,6 +55,13 @@ struct DrawHashController
         return m_currentHash != m_lastHash;
     }
 
+    // What was drawn is gone (a new GL context, ot-client#142): the next
+    // frame counts as changed, even when it draws the same
+    void forgetLast() {
+        m_lastHash = 0;
+        m_currentHash = 1;
+    }
+
     void reset() {
         if (m_currentHash != 1)
             m_lastHash = m_currentHash;

@@ -117,6 +117,13 @@ public:
     void removeTextureFromAtlas(uint32_t id, bool smooth);
     std::string getAtlasStats() const;
 
+    // A new GL context (ot-client#142). On the event thread, between two
+    // frames: the recorded drawings (with GL names of the old context) are
+    // dropped and every pool is recorded again.
+    void forgetDrawings();
+    // On the GL thread: new framebuffers and empty atlases
+    void restoreGL();
+
 private:
     DrawPool* getCurrentPool() const;
 

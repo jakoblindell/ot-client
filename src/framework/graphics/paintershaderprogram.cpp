@@ -165,6 +165,7 @@ void PainterShaderProgram::bindMultiTextures() const
 
     uint_fast8_t i = 1;
     for (const auto& tex : m_multiTextures) {
+        tex->create(); // (made again in a new GL context, ot-client#142)
         glActiveTexture(GL_TEXTURE0 + i++);
         glBindTexture(GL_TEXTURE_2D, tex->getId());
     }

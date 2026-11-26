@@ -140,6 +140,20 @@ void TextureAtlas::addTexture(const TexturePtr& texture) {
     m_texturesCached.emplace(textureId, std::move(regionInfo));
 }
 
+void TextureAtlas::reset() {
+    m_texturesCached.clear();
+    for (int smooth = 0; smooth < ATLAS_FILTER_COUNT; ++smooth) {
+        auto& group = m_filterGroups[smooth];
+        const bool hadLayers = !group.layers.empty();
+        group.layers.clear();
+        group.freeRegions.clear();
+        group.freeRegionsBySize.clear();
+        group.inactiveTextures.clear();
+        if (hadLayers)
+            createNewLayer(smooth);
+    }
+}
+
 void TextureAtlas::createNewLayer(bool smooth) {
     auto fbo = std::make_unique<FrameBuffer>();
     fbo->setAutoClear(false);

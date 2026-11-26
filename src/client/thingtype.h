@@ -178,6 +178,7 @@ public:
     bool isCreature() const { return m_category == ThingCategoryCreature; }
 
     bool hasTexture() const { return !m_textureData.empty() && m_textureData[0].source != nullptr; }
+    bool hasLostTexture() const;
     const Timer getLastTimeUsage() const { return m_lastTimeUsage; }
 
     void unload() {

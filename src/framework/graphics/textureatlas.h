@@ -94,6 +94,9 @@ public:
     std::string getStats() const;
 
     void flush();
+    // Empty again, with new layers (a new GL context, ot-client#142). The
+    // textures have forgotten their regions already.
+    void reset();
 
     auto getType() const { return m_type; }
 

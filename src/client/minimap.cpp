@@ -62,9 +62,11 @@ void MinimapBlock::update()
         }
     }
 
-    if (shouldDraw)
+    if (shouldDraw) {
         m_texture = std::make_shared<Texture>(m_image, true, false);
-    else
+        // (made again from the tiles when lost, keeps no image)
+        m_texture->setOwnerRestores();
+    } else
         m_texture.reset();
 
     m_mustUpdate = false;
@@ -121,6 +123,9 @@ void Minimap::draw(const Rect& screenRect, const Position& mapCenter, const floa
                     continue;
 
                 auto& block = getBlock(pos);
+                // a new GL context (ot-client#142): made again from the tiles
+                if (block.getTexture() && block.getTexture()->isLost())
+                    block.mustUpdate();
                 block.update();
 
                 const auto& tex = block.getTexture();

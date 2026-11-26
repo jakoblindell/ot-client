@@ -43,6 +43,12 @@ public:
     bool isSmooth() const { return m_smooth; }
 
     bool resize(const Size& size);
+
+    // In a new GL context (ot-client#142): a new framebuffer object, and a
+    // new texture of the same size (what is drawn into it is drawn again)
+    void restore();
+    // nothing is bound in a new context
+    static void restoreBinding() { boundFbo = 0; }
     // Real pixels per coordinate: the texture is that much bigger than the
     // size given to resize, and what is drawn into it keeps its coordinates
     // (the UI at the screen's pixel size, ot-client#69). Drops the texture.

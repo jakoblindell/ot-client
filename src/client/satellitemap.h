@@ -113,6 +113,7 @@ private:
     // Loads and decompresses a single chunk file, returning its texture.
     // Returns nullptr on failure (file missing, corrupt, etc.).
     static TexturePtr loadChunkTexture(const std::string& path);
+    static ImagePtr loadChunkImage(const std::string& path);
 
     // Decompresses a CIP LZMA file: skip 32-byte header, patch size field,
     // then run standard LZMA-alone decoder.

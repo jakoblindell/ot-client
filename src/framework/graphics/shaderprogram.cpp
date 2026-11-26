@@ -30,7 +30,7 @@
 
 uint32_t ShaderProgram::m_currentProgram = 0;
 
-ShaderProgram::ShaderProgram() :m_programId(glCreateProgram())
+ShaderProgram::ShaderProgram() :m_programId(glCreateProgram()), m_glGeneration(g_graphics.getContextGeneration())
 {
     m_uniformLocations.fill(-1);
     if (!m_programId)
@@ -157,4 +157,30 @@ void ShaderProgram::bindUniformLocation(const int location, const char* name)
     assert(m_linked);
     assert(location >= 0 && location < MAX_UNIFORM_LOCATIONS);
     m_uniformLocations[location] = glGetUniformLocation(m_programId, name);
+    m_uniformNames[location] = name;
+}
+
+void ShaderProgram::restore(const uint32_t generation)
+{
+    if (m_glGeneration >= generation)
+        return;
+
+    // (the old names mean nothing in the new context)
+    m_glGeneration = generation;
+    const bool wasLinked = m_linked;
+    m_linked = false;
+    m_programId = glCreateProgram();
+    m_hash = stdext::hash_int(m_programId);
+    for (const auto& shader : m_shaders) {
+        shader->restore(generation);
+        glAttachShader(m_programId, shader->getShaderId());
+    }
+
+    if (!wasLinked || !link())
+        return;
+
+    for (int location = 0; location < MAX_UNIFORM_LOCATIONS; ++location) {
+        if (!m_uniformNames[location].empty())
+            m_uniformLocations[location] = glGetUniformLocation(m_programId, m_uniformNames[location].c_str());
+    }
 }

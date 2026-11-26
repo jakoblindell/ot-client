@@ -4,8 +4,12 @@ monkHealthCircle = nil
 monkSereneCircle = nil
 monkHarmonySlots = {}
 isMonkMode = false
+-- The monk circle's size on screen (scaled with the other circles) and in
+-- its image (image clips are in image pixels)
 monkImageSizeBroad = 0
 monkImageSizeThin = 0
+monkImageSourceBroad = 0
+monkImageSourceThin = 0
 monkOpacity = 0.7
 monkHarmony = 0
 monkSerene = false
@@ -78,8 +82,14 @@ function initMonkWidgets()
     monkSereneCircle:setVisible(false)
     monkHarmony = 0
     monkSerene = false
-    monkImageSizeBroad = monkHealthCircle:getHeight()
-    monkImageSizeThin = monkHealthCircle:getWidth()
+    monkImageSourceBroad = monkHealthCircle:getHeight()
+    monkImageSourceThin = monkHealthCircle:getWidth()
+    monkImageSizeBroad = monkImageSourceBroad
+    monkImageSizeThin = monkImageSourceThin
+    -- (each piece's own image size, to scale from)
+    for _, widget in ipairs(monkPieces()) do
+        widget.circleImageSize = widget:getSize()
+    end
     refreshMonkDynamicOpacity()
 end
 
@@ -156,15 +166,17 @@ function whenMonkHealthChange()
         return
     end
     local healthPercent = math.floor(player:getHealth() / player:getMaxHealth() * 100)
-    local yhppc = math.floor(monkImageSizeBroad * (1 - (healthPercent / 100)))
+    local empty = 1 - healthPercent / 100
+    local yhppc = math.floor(monkImageSizeBroad * empty)
+    local sourceY = math.floor(monkImageSourceBroad * empty)
     local restYhppc = monkImageSizeBroad - yhppc
     monkHealthCircle:setY(monkCircleBackground:getY() + yhppc)
     monkHealthCircle:setHeight(restYhppc)
     monkHealthCircle:setImageClip({
         x = 0,
-        y = yhppc,
-        width = monkImageSizeThin,
-        height = restYhppc
+        y = sourceY,
+        width = monkImageSourceThin,
+        height = monkImageSourceBroad - sourceY
     })
     if healthPercent > 92 then
         monkHealthCircle:setImageColor('#00BC00')
@@ -187,6 +199,32 @@ end
 function whenMonkHarmonyChange(localplayer, harmony)
     monkHarmony = clampMonkHarmony(harmony)
     refreshMonkDynamicOpacity()
+end
+
+-- The monk circle's pieces, all scaled alike
+function monkPieces()
+    local pieces = { monkCircleBackground, monkHealthCircle, monkSereneCircle }
+    for i = 1, 5 do
+        table.insert(pieces, monkHarmonySlots[i])
+    end
+    return pieces
+end
+
+-- Scales the monk circle with the other circles (game_healthcircle.lua sizes
+-- them from the game view)
+function scaleMonkWidgets(scale)
+    if not monkHealthCircle then
+        return
+    end
+    for _, widget in ipairs(monkPieces()) do
+        local size = widget.circleImageSize
+        if size and size.width > 0 and size.height > 0 then
+            widget:setSize({ width = math.floor(size.width * scale),
+                height = math.floor(size.height * scale) })
+        end
+    end
+    monkImageSizeBroad = monkHealthCircle:getHeight()
+    monkImageSizeThin = monkHealthCircle:getWidth()
 end
 
 function positionMonkWidgets()

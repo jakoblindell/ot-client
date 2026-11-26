@@ -25,6 +25,8 @@
 #include "declarations.h"
 #include <framework/core/timer.h>
 
+#include <functional>
+
 class Texture
 {
 public:
@@ -69,6 +71,24 @@ public:
 
     virtual void allowAtlasCache();
 
+    // The GL context can be lost and come back empty (a browser drops it for
+    // a page in the background, ot-client#142). A texture is then made again
+    // from where its pixels can be had again: its reload function (a file),
+    // else the image it was made from (kept for that, in the browser), and a
+    // texture made with only a size gets its empty storage back (what is
+    // drawn into it is drawn again).
+    void setReload(std::function<ImagePtr()> reload) { m_reload = std::move(reload); }
+    // Its owner makes it again itself (the sprites, the minimap): no image
+    // is kept, and isLost() says when it has to be replaced
+    void setOwnerRestores() { setProp(ownerRestores, true); }
+    bool isLost() const { return m_lost; }
+
+    // (the event thread, between two frames) every texture made in an older
+    // GL context forgets its GL name and is made again on its next use
+    static void forgetOldContext(uint32_t generation);
+    // (the GL thread) textures made with only a size get their storage back
+    static void restoreEmptyTextures();
+
 protected:
     void bind();
     void setupWrap() const;
@@ -77,6 +97,8 @@ protected:
     void setupTranformMatrix();
     void setupPixels(int level, const Size& size, const uint8_t* pixels, int channels = 4, bool compress = false) const;
     void generateHash() { m_hash = stdext::hash_int(m_id > 0 ? m_id : m_uniqueId); }
+    void forgetGL(uint32_t generation);
+    void registerTexture();
 
     const uint32_t m_uniqueId;
 
@@ -93,6 +115,15 @@ protected:
 
     ImagePtr m_image;
 
+    // made again from these in a new GL context (see setReload)
+    std::function<ImagePtr()> m_reload;
+    ImagePtr m_restoreImage;
+    // the GL context the texture was made in (0: not made)
+    uint32_t m_glGeneration{ 0 };
+    bool m_reloadPending{ false };
+    bool m_restoreEmpty{ false };
+    bool m_lost{ false };
+
     enum Prop : uint16_t
     {
         hasMipMaps = 1 << 0,
@@ -101,7 +132,9 @@ protected:
         repeat = 1 << 3,
         compress = 1 << 4,
         buildMipmaps = 1 << 5,
-        _allowAtlasCache = 1 << 6
+        _allowAtlasCache = 1 << 6,
+        sizeOnly = 1 << 7,
+        ownerRestores = 1 << 8
     };
 
     uint16_t m_props{ 0 };

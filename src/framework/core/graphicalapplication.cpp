@@ -147,6 +147,11 @@ void GraphicalApplication::mainLoop() {
         return;
     }
 
+    // the browser lost the GL context: nothing to draw with until it is back
+    // and the graphics are made again (ot-client#142)
+    if (!g_graphics.canDraw())
+        return;
+
     const auto FPS = [this] {
         m_mapProcessFrameCounter.setTargetFps(g_window.vsyncEnabled() || getMaxFps() || getTargetFps() ? 500u : 0u);
         return m_graphicFrameCounter.getFps();
@@ -324,7 +329,8 @@ void GraphicalApplication::mainPoll()
         AutoStat s2(STATS_MAIN, "ClockUpdate");
         g_clock.update();
     }
-    {
+    // (its events are GL work mostly: they wait while the GL context is lost)
+    if (!g_graphics.isContextLost()) {
         AutoStat s2(STATS_MAIN, "DispatcherPoll");
         g_mainDispatcher.poll();
     }

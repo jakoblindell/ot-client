@@ -49,6 +49,13 @@ void ShaderManager::clear() {
     m_shadersVector.clear();
 }
 
+void ShaderManager::restore(const uint32_t generation) const
+{
+    for (const auto& shader : m_shadersVector)
+        shader->restore(generation);
+    PainterShaderProgram::release();
+}
+
 void ShaderManager::putShader(std::string name, const PainterShaderProgramPtr& shader) {
     if (m_shaders.try_emplace(std::move(name), shader).second) {
         m_shadersVector.emplace_back(shader);

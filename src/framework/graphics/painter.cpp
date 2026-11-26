@@ -149,6 +149,19 @@ void Painter::resetState()
     resetTransformMatrix();
 }
 
+void Painter::restore(const uint32_t generation)
+{
+    for (const auto& program : { m_drawTexturedProgram, m_drawSolidColorProgram, m_drawReplaceColorProgram, m_drawLineProgram })
+        program->restore(generation);
+    PainterShaderProgram::release();
+
+    // nothing is bound in the new context
+    m_glTextureId = 0;
+    refreshState();
+    PainterShaderProgram::enableAttributeArray(PainterShaderProgram::VERTEX_ATTR);
+    PainterShaderProgram::enableAttributeArray(PainterShaderProgram::TEXCOORD_ATTR);
+}
+
 void Painter::refreshState() const {
     updateGlViewport();
     updateGlCompositionMode();
