@@ -284,13 +284,23 @@ local defaultManaWithManaShieldCircleFull = '/data/images/game/healthcircle/righ
 local manaShieldManaCircleEmpty = '/data/images/game/healthcircle/right_extra_empty'
 local manaShieldManaCircleFull = '/data/images/game/healthcircle/right_extra_full'
 
+-- A circle's image changes (mana with or without the shield) at the size
+-- the circle has: a widget with no height (an empty part at 0) would take
+-- the image's own size otherwise, and show at full size beside the scaled
+-- circles
+local function setCircleImage(widget, source)
+    local size = widget:getSize()
+    widget:setImageSource(source)
+    widget:setSize(size)
+end
+
 local function resetManaCircleImages()
     if manaCircle then
-        manaCircle:setImageSource(defaultManaCircleEmpty)
+        setCircleImage(manaCircle, defaultManaCircleEmpty)
     end
 
     if manaCircleFront then
-        manaCircleFront:setImageSource(defaultManaCircleFull)
+        setCircleImage(manaCircleFront, defaultManaCircleFull)
     end
 end
 
@@ -325,10 +335,10 @@ local function updateManaShieldDisplay()
         maxShield = remainingShield
     end
 
-    manaCircle:setImageSource(defaultManaWithManaShieldCircleEmpty)
-    manaCircleFront:setImageSource(defaultManaWithManaShieldCircleFull)
-    manaShieldCircle:setImageSource(manaShieldManaCircleEmpty)
-    manaShieldCircleFront:setImageSource(manaShieldManaCircleFull)
+    setCircleImage(manaCircle, defaultManaWithManaShieldCircleEmpty)
+    setCircleImage(manaCircleFront, defaultManaWithManaShieldCircleFull)
+    setCircleImage(manaShieldCircle, manaShieldManaCircleEmpty)
+    setCircleImage(manaShieldCircleFront, manaShieldManaCircleFull)
     manaShieldCircle:setVisible(true)
     manaShieldCircleFront:setVisible(true)
 
