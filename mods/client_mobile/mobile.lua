@@ -621,7 +621,40 @@ local function setActionGrid(availableWidth, availableHeight)
 
     -- (slots 10 and up keep what is assigned to them, not shown)
     gridBar(bar, HOTBAR_COLUMNS, math.min(HOTBAR_SLOTS, #bar.tabBar:getChildren()), cell)
-    return (hotbarSize(cell))
+    return (hotbarSize(cell)), cell
+end
+
+-- Portrait (ot-client#172): P, the pencil and the chat button in a column
+-- between the joystick and the hotbar, so the area below the game view
+-- needs no row above the hotbar. Used when the joystick and the hotbar (its
+-- slots at least MIN_CELL) fit beside it; otherwise they stay in a row
+-- above the hotbar. A hotbar the player placed keeps the arrangement it was
+-- placed with (`col` in its saved entry: edit.lua).
+local COLUMN_BUTTON = 40 -- (P, the pencil and chat)
+local COLUMN_GAP = 8 -- the least room on each side of it
+local middleColumn = false
+
+function isHotbarColumn()
+    return presetRow ~= nil and presetRow.besideHotbar == true
+end
+
+local function wantMiddleColumn(portrait, width, keypad)
+    if not portrait then
+        return false
+    end
+    local saved = getSavedPiece('grid')
+    if saved and saved.x and not saved.col then
+        return false
+    end
+    local joystickWidth = keypad and keypad:isVisible() and keypad:getWidth() or 0
+    local hotbarWidth = hotbarSize(MIN_CELL)
+    return joystickWidth + 2 * COLUMN_GAP + COLUMN_BUTTON + hotbarWidth + 6 <= width
+end
+
+-- The gap between the column's buttons: lined up with the
+-- 3x3's rows when they are far enough apart
+local function columnSpacing(cell)
+    return math.max(4, cell + GRID_SPACING - COLUMN_BUTTON)
 end
 
 -- Game view size (ot-client#26): the default layout keeps the game view
@@ -723,9 +756,18 @@ local function layout()
         local keypad = modules.game_joystick and modules.game_joystick.getPanel and modules.game_joystick.getPanel()
         local joystickHeight = keypad and keypad:isVisible() and keypad:getHeight() or 0
         local _, hotbarHeight = hotbarSize(GRID_CELL)
-        local controls = math.max(joystickHeight + 6, PRESET_ROW_HEIGHT + 4 + hotbarHeight + 6)
+        local controls
+        middleColumn = wantMiddleColumn(portrait, width, keypad)
+        if middleColumn then
+            -- (P, the pencil and chat beside the hotbar: no row above it)
+            local columnHeight = 3 * COLUMN_BUTTON + 2 * columnSpacing(GRID_CELL)
+            controls = math.max(joystickHeight, hotbarHeight, columnHeight) + 6
+        else
+            controls = math.max(joystickHeight + 6, PRESET_ROW_HEIGHT + 4 + hotbarHeight + 6)
+        end
         mapTop = math.max(0, math.min(mapTop, room - controls))
     else
+        middleColumn = false
         local column = math.floor(width * size.column)
         if size.panels then
             -- room for a side panel (equipment, battle list), within reason
@@ -814,14 +856,18 @@ local function layout()
     -- Hotbar: bottom right, above the bottom bar, with P (presets), the
     -- pencil and the chat button in a row above it. Landscape: in the right
     -- column, below the place the equipment opens in. Portrait: in the area
-    -- below the game view, right of the joystick.
+    -- below the game view, right of the joystick, with P, the pencil and
+    -- chat in a column between them (or in the row when it does not fit).
     local actionPanel = root:getChildById('gameBottomActionPanel')
     local chatBeside = true
     if actionPanel then
         local topRow = math.max(PRESET_ROW_HEIGHT, chatButton:getHeight()) + 4
-        local gridWidth, gridHeight
-        if portrait then
-            local joystickWidth = keypad and keypad:isVisible() and keypad:getWidth() or 0
+        local joystickWidth = keypad and keypad:isVisible() and keypad:getWidth() or 0
+        local gridWidth, gridHeight, cell
+        if middleColumn then
+            gridWidth = width - joystickWidth - 2 * COLUMN_GAP - COLUMN_BUTTON - 6
+            gridHeight = available - (mapTop + mapHeight + statsRow) - 6
+        elseif portrait then
             gridWidth = width - joystickWidth - 16
             gridHeight = available - (mapTop + mapHeight + statsRow) - topRow - 6
         else
@@ -829,7 +875,7 @@ local function layout()
             gridWidth = side - 6
             gridHeight = available - LANDSCAPE_PANEL_ROOM - topRow - 6
         end
-        gridWidth = setActionGrid(gridWidth, gridHeight)
+        gridWidth, cell = setActionGrid(gridWidth, gridHeight)
         -- the chat button fits beside P and the pencil
         chatBeside = gridWidth >= 84 + 3 + 6 + chatButton:getWidth()
         actionPanel:breakAnchors()
@@ -843,14 +889,37 @@ local function layout()
             presetRow = createHotbarPresetRow(root, actionPanel)
         end
         presetRow:breakAnchors()
-        presetRow:setLayout(UIHorizontalLayout.create(presetRow))
-        presetRow:getLayout():setSpacing(4)
-        presetRow:setSize({ width = 84, height = 40 })
-        presetRow:addAnchor(AnchorBottom, actionPanel:getId(), AnchorTop)
-        presetRow:addAnchor(AnchorLeft, actionPanel:getId(), AnchorLeft)
-        presetRow:setMarginBottom(4)
-        presetRow:setMarginRight(0)
-        presetRow:setMarginLeft(3)
+        presetRow:setMargin(0)
+        presetRow.besideHotbar = middleColumn and cell ~= nil
+        if presetRow.besideHotbar then
+            -- P over the pencil, left of the hotbar: centred between the
+            -- joystick and the slots (inside the bar's 3 px frame), with
+            -- chat under them, the three lined up with the 3x3's rows
+            local spacing = columnSpacing(cell)
+            presetRow.columnSpacing = spacing
+            presetRow:setLayout(UIVerticalLayout.create(presetRow))
+            presetRow:getLayout():setSpacing(spacing)
+            presetRow:setSize({ width = COLUMN_BUTTON, height = 2 * COLUMN_BUTTON + spacing })
+            local gap = (width - 6 - gridWidth + 3) - joystickWidth
+            presetRow:addAnchor(AnchorRight, actionPanel:getId(), AnchorLeft)
+            presetRow:setMarginRight(math.ceil((gap - COLUMN_BUTTON) / 2) - 3)
+            -- the column's middle on the 3x3's middle (the extra rows are
+            -- above it)
+            local actionBars = modules.game_actionbar.actionBars
+            local bar = actionBars and actionBars[1]
+            local barHeight = bar and bar:getHeight() or 0
+            local columnHeight = 3 * COLUMN_BUTTON + 2 * spacing
+            presetRow:addAnchor(AnchorBottom, actionPanel:getId(), AnchorBottom)
+            presetRow:setMarginBottom(math.floor((barHeight - columnHeight) / 2) + COLUMN_BUTTON + spacing)
+        else
+            presetRow:setLayout(UIHorizontalLayout.create(presetRow))
+            presetRow:getLayout():setSpacing(4)
+            presetRow:setSize({ width = 84, height = 40 })
+            presetRow:addAnchor(AnchorBottom, actionPanel:getId(), AnchorTop)
+            presetRow:addAnchor(AnchorLeft, actionPanel:getId(), AnchorLeft)
+            presetRow:setMarginBottom(4)
+            presetRow:setMarginLeft(3)
+        end
         presetRow:raise()
         actionPanel:setVisible(true)
         actionPanel:raise()
@@ -863,7 +932,12 @@ local function layout()
     -- opens over the game view
     chatButton:breakAnchors()
     chatButton:setMargin(0)
-    if actionPanel and presetRow and not chatBeside and portrait then
+    if actionPanel and presetRow and presetRow.besideHotbar then
+        -- (under P and the pencil, in the column beside the hotbar)
+        chatButton:addAnchor(AnchorTop, presetRow:getId(), AnchorBottom)
+        chatButton:addAnchor(AnchorHorizontalCenter, presetRow:getId(), AnchorHorizontalCenter)
+        chatButton:setMarginTop(presetRow.columnSpacing)
+    elseif actionPanel and presetRow and not chatBeside and portrait then
         -- (a narrow hotbar has no room beside P and the pencil: left of
         -- them, in the room beside the joystick; above them it would reach
         -- the health and mana bars)
