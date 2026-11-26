@@ -33,7 +33,7 @@ const SIZE_B = { width: 1000, height: 650 };
     let loads = 0;
     page.on('console', (m) => log.push(m.text()));
     page.on('load', () => loads++);
-    page.on('pageerror', (e) => log.push('pageerror: ' + e.message));
+    page.on('pageerror', (e) => log.push('pageerror: ' + e.message + ' ' + (e.stack || '').split('\n').slice(0, 4).join(' | ')));
     if (gallery)
         await page.addInitScript((g) => { window.otclientConfig = Object.assign(window.otclientConfig || {}, { gallery: g }); }, gallery);
     await page.goto(base + '/otclient.html');
@@ -77,26 +77,34 @@ const SIZE_B = { width: 1000, height: 650 };
     await page.setViewportSize(SIZE_A);
     await page.waitForTimeout(2000);
 
-    const cycle = async (restoreDelay) => {
-        await glWorker.evaluate(() => { self.__loseExt = self.__loseExt || GL.currentContext.GLctx.getExtension('WEBGL_lose_context'); self.__loseExt.loseContext(); });
-        await page.waitForTimeout(restoreDelay);
-        const lost = await isLost();
-        await glWorker.evaluate(() => self.__loseExt.restoreContext());
-        return lost;
-    };
-    // a loss and a restore, then another right after the restore (its
-    // objects may still be being made)
-    const lost1 = await cycle(1500);
+    const lose = () => glWorker.evaluate(() => { self.__loseExt = self.__loseExt || GL.currentContext.GLctx.getExtension('WEBGL_lose_context'); self.__loseExt.loseContext(); });
+    const restore = () => glWorker.evaluate(() => self.__loseExt.restoreContext());
+
+    // 1. lost; the screen turns (resized) while it is away; back
+    await lose();
+    await page.waitForTimeout(1000);
+    const lost1 = await isLost();
+    await page.setViewportSize(SIZE_B);
+    await page.waitForTimeout(1500);
+    await restore();
+    await page.waitForTimeout(4000);
+    const afterB = await shot('after-b');
+    const afterA = await atSize(SIZE_A, 'after-a');
+
+    // 2. lost again, and back right away; then lost and back once more
+    // while that restore may still be busy
+    await lose();
+    await page.waitForTimeout(300);
+    const lost2 = await isLost();
+    await restore();
     await page.waitForTimeout(30);
-    const lost2 = await cycle(500);
+    await lose();
+    await page.waitForTimeout(300);
+    await restore();
     await page.waitForTimeout(4000);
     const lostAfter = await isLost();
-
-    const afterA = await shot('after-a');
-    const afterB = await atSize(SIZE_B, 'after-b');
-    await page.setViewportSize(SIZE_A);
-    await page.waitForTimeout(2500);
     const afterA2 = await shot('after-a2');
+    const afterB2 = await atSize(SIZE_B, 'after-b2');
 
     // compare in the browser (no image libraries): share of pixels that differ
     const cmp = await browser.newPage();
@@ -121,23 +129,21 @@ const SIZE_B = { width: 1000, height: 650 };
         ['game made the graphics again', log.some((l) => l.includes('GL context is back'))],
         ['page not reloaded', loads === 1],
     ];
-    for (const [label, a, b] of [['1280x720 after restore', afterA, refA], ['1000x650 after restore', afterB, refB], ['1280x720 again', afterA2, refA]]) {
+    for (const [label, a, b] of [['1000x650 (resized while lost) after restore', afterB, refB], ['1280x720 after that', afterA, refA],
+        ['1280x720 after two more restores', afterA2, refA], ['1000x650 after that', afterB2, refB]]) {
         const share = await diff(a, b);
         results.push([`${label} matches the one before (${(share * 100).toFixed(2)}% of pixels differ)`, share < 0.002]);
     }
+    const errors = log.filter((l) => /\berror\b|pageerror|Unable|Failed to/i.test(l) && !/config\.ini|option_control_buttons|option_healthcircle|stack traceback|\[C\]|\.lua:|\.otmod:/.test(l));
+    results.push(['no errors in the log', errors.length === 0]);
     let failed = 0;
     for (const [label, ok] of results) {
         if (!ok) failed++;
         console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}: ${label}`);
     }
-    const errors = log.filter((l) => /\berror\b|pageerror|Unable|Failed to/i.test(l) && !/config\.ini|option_control_buttons|option_healthcircle|stack traceback|\[C\]|\.lua:|\.otmod:/.test(l));
     if (errors.length) console.log(`${name}: errors in the log:\n  ` + errors.slice(-15).join('\n  '));
     console.log(log.filter((l) => /GL context/.test(l)).join('\n'));
     if (print) {
-        for (const label of ['before-a', 'after-a', 'after-b']) {
-            const small = await page.screenshot({ type: 'jpeg', quality: 40 }).catch(() => null);
-            void small;
-        }
         for (const label of ['after-a', 'after-b']) {
             const img = fs.readFileSync(path.join(outDir, `${name}-${label}.png`));
             const jpg = await cmp.evaluate(async (src) => {
