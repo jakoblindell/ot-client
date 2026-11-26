@@ -299,9 +299,11 @@ void Connection::onRecv(const std::error_code& error, const size_t recvSize)
 
     if (m_connected) {
         if (!error) {
-            if (m_recvCallback) {
+            // a copy: the callback may close this connection, which clears it
+            const RecvCallback callback = m_recvCallback;
+            if (callback) {
                 const auto* header = asio::buffer_cast<const char*>(m_inputStream.data());
-                m_recvCallback((uint8_t*)header, recvSize);
+                callback((uint8_t*)header, recvSize);
             }
         } else
             handleError(error);

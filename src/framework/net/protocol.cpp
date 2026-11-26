@@ -200,8 +200,11 @@ void Protocol::recv()
     });
 }
 
+// A message that cannot be read ends the connection (onMalformedMessage).
+// Errors are caught here: nothing above the receive path catches them, and
+// an uncaught one stops the client.
 void Protocol::internalRecvHeader(const uint8_t* buffer, const uint16_t size)
-{
+try {
     // read message size
     m_inputMessage->fillBuffer(buffer, size);
     uint32_t remainingSize = m_inputMessage->readSize();
@@ -209,9 +212,11 @@ void Protocol::internalRecvHeader(const uint8_t* buffer, const uint16_t size)
         remainingSize = remainingSize * 8U + 4U;
     }
 
-    constexpr uint32_t MAX_PACKET = std::numeric_limits<uint16_t>::max();
-    if (remainingSize == 0 || remainingSize > MAX_PACKET) {
-        g_logger.error(fmt::format("invalid packet size = {}", remainingSize));
+    // The rest is stored after the size, and the message size is 16 bits
+    const uint32_t maxSize = std::min<uint32_t>(InputMessage::BUFFER_MAXSIZE - m_inputMessage->getReadPos(),
+                                                std::numeric_limits<uint16_t>::max() - m_inputMessage->getMessageSize());
+    if (remainingSize == 0 || remainingSize > maxSize) {
+        onMalformedMessage(fmt::format("invalid packet size = {}", remainingSize));
         return;
     }
 
@@ -221,10 +226,12 @@ void Protocol::internalRecvHeader(const uint8_t* buffer, const uint16_t size)
         capture0->internalRecvData(std::forward<decltype(PH1)>(PH1),
         std::forward<decltype(PH2)>(PH2));
     });
+} catch (const std::exception& e) {
+    onMalformedMessage(e.what());
 }
 
 void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
-{
+try {
     // process data only if really connected
     if (!isConnected()) {
         g_logger.traceError("received data while disconnected");
@@ -244,13 +251,13 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
             fmt::format_to(std::back_inserter(headerHex), "{:02X} ", static_cast<uint8_t>(m_inputMessage->getBuffer()[i]));
         }
 
-        g_logger.traceError(fmt::format("got a network message with invalid checksum, header: {}, size: {}", headerHex, static_cast<int>(m_inputMessage->getMessageSize())));
+        onMalformedMessage(fmt::format("got a network message with invalid checksum, header: {}, size: {}", headerHex, static_cast<int>(m_inputMessage->getMessageSize())));
         return;
     }
 
     if (m_xteaEncryptionEnabled) {
         if (!xteaDecrypt(m_inputMessage)) {
-            g_logger.traceError("failed to decrypt message");
+            onMalformedMessage("failed to decrypt message");
             return;
         }
     }
@@ -278,7 +285,7 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
                 m_compressionMode = COMPRESSION_MODE_STREAM;
                 totalSize = 0;
             } else {
-                g_logger.traceError("failed to decompress message - {}", m_zstream.msg);
+                onMalformedMessage(fmt::format("failed to decompress message - {}", m_zstream.msg ? m_zstream.msg : ""));
                 return;
             }
 
@@ -295,14 +302,14 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
 
             const int32_t ret = inflate(&m_zstream, Z_SYNC_FLUSH);
             if (ret != Z_OK && ret != Z_STREAM_END) {
-                g_logger.traceError("failed to decompress message - {}", m_zstream.msg);
+                onMalformedMessage(fmt::format("failed to decompress message - {}", m_zstream.msg ? m_zstream.msg : ""));
                 return;
             }
             totalSize = m_zstream.total_out;
         }
 
         if (totalSize == 0) {
-            g_logger.traceError("invalid size of decompressed message - %i", totalSize);
+            onMalformedMessage("invalid size of decompressed message");
             return;
         }
 
@@ -314,6 +321,19 @@ void Protocol::internalRecvData(const uint8_t* buffer, const uint16_t size)
         m_recorder->addInputPacket(m_inputMessage);
     }
     onRecv(m_inputMessage);
+} catch (const std::exception& e) {
+    onMalformedMessage(e.what());
+}
+
+void Protocol::onMalformedMessage(const std::string_view reason)
+{
+    // What follows in the stream can't be trusted: end the connection
+    // through the normal error path (the game reconnects from there)
+    g_logger.error("{}; closing the connection", reason);
+
+    // the error handlers may release the last reference to this protocol
+    const auto self = asProtocol();
+    onError(std::make_error_code(std::errc::bad_message));
 }
 
 void Protocol::generateXteaKey()
