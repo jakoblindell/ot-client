@@ -97,6 +97,22 @@ local function getItemNameById(itemId)
     return "this object"
 end
 
+-- The checkerboard over a spell, rune or item that cannot be used now.
+-- Not on touch screens: scaled up on a phone it looks broken, and a tap on
+-- the slot gets the server's own "cannot" message anyway.
+local function showUnusable(panel, unusable)
+    panel:setVisible(unusable and not g_platform.isMobile() or false)
+end
+
+-- Passive abilities (Gift of Life, from the Wheel of Destiny) exist from
+-- Tibia 13.10 on. Older servers, like our 7.92 one, have none: the option
+-- is not offered and a slot that holds one shows nothing (its saved data is
+-- kept, and replaced when something else is assigned to the slot).
+local PASSIVE_ABILITIES_VERSION = 1310
+local function passivesSupported()
+    return g_game.getClientVersion() >= PASSIVE_ABILITIES_VERSION
+end
+
 --- Checks if player can use a spell
 local function playerCanUseSpell(spellData)
     if not g_game.isOnline() then
@@ -459,7 +475,7 @@ function updateButtonState(button)
     button:recursiveGetChildById('activeSpell'):setVisible(false)
     if button.cache.isSpell then
         setupButtonTooltip(button, false)
-        button.item.text.gray:setVisible(not playerCanUseSpell(button.cache.spellData))
+        showUnusable(button.item.text.gray, not playerCanUseSpell(button.cache.spellData))
         local spellId = 0
         button:recursiveGetChildById('activeSpell'):setVisible(button.cache.spellData.id == spellId)
     elseif button.cache.itemId ~= 0 then
@@ -475,7 +491,7 @@ function updateButtonState(button)
                 button.item:setChecked(itemCount ~= 0 and isItemEquipped)
             end
 
-            button.item.gray:setVisible(itemCount == 0)
+            showUnusable(button.item.gray, itemCount == 0)
         end
         if modules.client_options.getOption('showHKObjectsBars') then
             button.item:setDisplayCount(itemCount)
@@ -565,11 +581,11 @@ function resetButtonCache(button)
         if button.item:isDraggable() then button.item:setDraggable(false) end
         
         if button.item.gray and button.item.gray:isVisible() then
-            button.item.gray:setVisible(false)
+            showUnusable(button.item.gray, false)
         end
         if button.item.text then
             if button.item.text.gray and button.item.text.gray:isVisible() then
-                button.item.text.gray:setVisible(false)
+                showUnusable(button.item.text.gray, false)
             end
             button.item.text:setImageSource('')
             button.item.text:setText('')
@@ -774,7 +790,7 @@ function updateActionPassive(button)
             for _, button in pairs(actionbar.tabBar:getChildren()) do
                 local cache = button.cache
                 if cache and cache.isPassive then
-                    button.item.text.gray:setVisible(passiveData.max == 0)
+                    showUnusable(button.item.text.gray, passiveData.max == 0)
                     if cache.cooldownEvent == nil then
                         updateCooldown(button, passiveData.cooldown * 1000)
                         if cache.removeCooldownEvent then
@@ -791,7 +807,7 @@ function updateActionPassive(button)
         return true
     else
         if button.cache.isPassive then
-            button.item.text.gray:setVisible(passiveData.max == 0)
+            showUnusable(button.item.text.gray, passiveData.max == 0)
         end
     end
 
@@ -841,10 +857,12 @@ function configureButtonMouseRelease(button)
             menu:addOption(buttonText:len() > 0 and tr('Edit Text') or tr('Assign Text'), function()
                 assignText(button)
             end)
-            menu:addOption(button.cache.isPassive and tr('Edit Passive Ability') or tr('Assign Passive Ability'),
-                function()
-                    assignPassive(button)
-                end)
+            if passivesSupported() then
+                menu:addOption(button.cache.isPassive and tr('Edit Passive Ability') or tr('Assign Passive Ability'),
+                    function()
+                        assignPassive(button)
+                    end)
+            end
             menu:addOption(button.cache.specialAction and tr('Edit Action') or tr('Assign Action'), function()
                 assignSpecialAction(button, mousePos)
             end)
@@ -1087,7 +1105,7 @@ function updateButton(button)
             button.cache.isRuneSpell = true
             button.cache.spellData = spellData
             if spellData.vocations and not table.contains(spellData.vocations, translateVocation(player:getVocation())) then
-                button.item.gray:setVisible(true)
+                showUnusable(button.item.gray, true)
             end
         end
 
@@ -1129,7 +1147,7 @@ function updateButton(button)
             end
 
             if not playerCanUseSpell(spellData) then
-                button.item.text.gray:setVisible(true)
+                showUnusable(button.item.text.gray, true)
             end
 
             checkRemainSpellCooldown(button, spellData.id)
@@ -1143,7 +1161,7 @@ function updateButton(button)
         button.cache.actionType = UseTypes["chatText"]
     end
 
-    if passiveAbility then
+    if passiveAbility and passivesSupported() then
         local passive = PassiveAbilities[passiveAbility]
         button.item.text:setImageSource(passive.icon)
         button.item.text:setImageClip("0 0 32 32")

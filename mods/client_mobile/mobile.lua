@@ -1000,7 +1000,8 @@ end
 local function onGameEnd()
     stopGameInfo()
     setupOfferReady = false
-    stopUiSetup()
+    -- (a dropped connection being reconnected takes the setup up again)
+    stopUiSetup(modules.client_reconnect and modules.client_reconnect.willReconnect())
     closeOutfitSheet()
     stopEditLayout()
     setHotbarEditing(false)

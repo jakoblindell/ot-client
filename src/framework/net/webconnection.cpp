@@ -25,7 +25,6 @@
 #include "webconnection.h"
 
 #include <framework/core/application.h>
-#include <client/game.h>
 
 #include <utility>
 #include <asio/read.hpp>
@@ -61,33 +60,58 @@ void WebConnection::close()
     if (!m_connected && !m_connecting)
         return;
 
-    emscripten_websocket_deinitialize();
-    m_websocket = 0;
-
-    if (!m_gameWorld)
-        return;
-
     m_connecting = false;
     m_connected = false;
     m_connectCallback = nullptr;
     m_errorCallback = nullptr;
     m_recvCallback = nullptr;
 
-    m_inputStream.consume(m_inputStream.size());
+    // Only this socket: the login and game connections, and the HTTP
+    // WebSockets, can be open at the same time. Deleting it also removes
+    // its handlers, so none of them runs after this.
+    if (m_websocket > 0) {
+        emscripten_websocket_close(m_websocket, 1000, "");
+        emscripten_websocket_delete(m_websocket);
+    }
+    m_websocket = 0;
 
-    //Workaround for the abrupt termination of the websocket
-    g_dispatcher.addEvent([] {
-        g_game.forceLogout();
-    });
+    m_inputStream.consume(m_inputStream.size());
 }
 
-void WebConnection::connect(const std::string_view host, uint16_t port, const std::function<void()>& connectCallback, bool gameWorld)
+void WebConnection::reportClose()
 {
-    m_gameWorld = gameWorld;
+    // As on desktop: the server closing after what it sent is a normal end
+    // (eof); closing before sending anything is a failed connection
+    std::error_code error = asio::error::timed_out;
+    if (m_received)
+        error = asio::error::eof;
 
+    // The callback may release this connection: nothing here after it
+    const ErrorCallback callback = m_errorCallback;
+    close();
+    if (callback)
+        callback(error);
+}
+
+void WebConnection::onSocketClosed()
+{
+    // the browser reports a failure with an error and then a close event
+    if (m_remoteClosed.exchange(true))
+        return;
+
+    // Once open, read() reports it after the data received before it
+    if (m_connected)
+        return;
+
+    emscripten_dispatch_to_thread(m_pthread, EM_FUNC_SIG_VI, reinterpret_cast<void*>(runOnSocketClosed), nullptr, new std::weak_ptr<LuaObject>(weak_from_this()));
+}
+
+void WebConnection::connect(const std::string_view host, uint16_t port, const std::function<void()>& connectCallback, bool /*gameWorld*/)
+{
     m_connected = false;
     m_connecting = true;
     m_remoteClosed = false;
+    m_received = false;
     m_connectCallback = connectCallback;
 
     std::string ip = std::string(host);
@@ -133,25 +157,15 @@ void WebConnection::connect(const std::string_view host, uint16_t port, const st
     }));
 
     emscripten_websocket_set_onerror_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketErrorEvent* /*event*/, void* userData) -> EM_BOOL {
-        WebConnection* webConnection = static_cast<WebConnection*>(userData);
-        if (webConnection->m_errorCallback) {
-            emscripten_dispatch_to_thread(webConnection->m_pthread, EM_FUNC_SIG_VI, reinterpret_cast<void*>(runOnErrorCallback), nullptr, new ErrorCallback(webConnection->m_errorCallback));
-        }
-        if (webConnection->m_connected || webConnection->m_connecting) {
-            webConnection->close();
-        }
+        static_cast<WebConnection*>(userData)->onSocketClosed();
         return EM_TRUE;
     }));
 
     emscripten_websocket_set_onclose_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketCloseEvent* /*event*/, void* userData) -> EM_BOOL {
-        WebConnection* webConnection = static_cast<WebConnection*>(userData);
         // Not closed here: what the server sent right before closing (such
         // as why it ended the session) is still waiting to be read. read()
-        // closes the connection once the received data runs out.
-        if (webConnection->m_connected)
-            webConnection->m_remoteClosed = true;
-        else
-            webConnection->close();
+        // reports the close once the received data runs out.
+        static_cast<WebConnection*>(userData)->onSocketClosed();
         return EM_TRUE;
     }));
 
@@ -240,7 +254,7 @@ void WebConnection::read(const uint16_t size, const RecvCallback& callback, int 
 
     if (m_inputStream.size() < size) {
         if (m_remoteClosed) {
-            close();
+            reportClose();
             return;
         }
         emscripten_thread_sleep(10);
@@ -257,10 +271,12 @@ void WebConnection::runOnConnectCallback(std::function<void()>* callback) {
         (*owned)();
 }
 
-void WebConnection::runOnErrorCallback(ErrorCallback* callback) {
-    const std::unique_ptr<ErrorCallback> owned(callback);
-    if (*owned)
-        (*owned)(asio::error::timed_out);
+void WebConnection::runOnSocketClosed(std::weak_ptr<LuaObject>* connection) {
+    const std::unique_ptr<std::weak_ptr<LuaObject>> owned(connection);
+    const auto webConnection = std::static_pointer_cast<WebConnection>(owned->lock());
+    // not if it was closed here meanwhile: its protocol has moved on
+    if (webConnection && (webConnection->m_connected || webConnection->m_connecting))
+        webConnection->reportClose();
 }
 
 void WebConnection::onWrite(const std::shared_ptr<asio::streambuf>& outputStream)
@@ -273,6 +289,7 @@ void WebConnection::onWrite(const std::shared_ptr<asio::streambuf>& outputStream
 void WebConnection::onRecv(const uint16_t recvSize)
 {
     m_activityTimer.restart();
+    m_received = true;
 
     if (m_connected) {
         if (m_recvCallback) {
