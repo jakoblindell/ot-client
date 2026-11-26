@@ -315,6 +315,19 @@
       function startGame() {
         document.getElementById("start").style.display = "none";
         callMain();
+        // Touches reach the game as touches. The mouse events a browser
+        // makes up from a touch are dropped here, event by event, before the
+        // game sees them: a real mouse, trackpad or pen keeps working next
+        // to the touch screen (iPad with a trackpad, touchscreen laptops;
+        // ot-client#143). Cancelling the touches below already stops them
+        // (all browsers); Chromium also names their source.
+        ["mousedown", "mouseup", "mousemove"].forEach(function (type) {
+          window.addEventListener(type, function (ev) {
+            if (ev.sourceCapabilities && ev.sourceCapabilities.firesTouchEvents) {
+              ev.stopImmediatePropagation();
+            }
+          }, { capture: true });
+        });
         document.addEventListener("touchstart", function (ev) {
           ev.preventDefault();
           ev.stopPropagation();

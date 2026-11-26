@@ -84,7 +84,7 @@ private:
     void touchStart(int64_t id, const Point& pos);
     void touchMove(int64_t id, const Point& pos);
     void touchEnd(int64_t id, const Point& pos, bool cancelled);
-    void sendTouchMouseEvent(Fw::InputEventType type, Fw::MouseButton button, const Point& pos);
+    void sendMouseEvent(Fw::InputEventType type, Fw::MouseButton button, const Point& pos);
 
     struct Touch
     {
@@ -95,7 +95,6 @@ private:
     };
 
     bool m_running;
-    bool m_usingTouch = false;
     // Canvas pixels per CSS pixel: the device's ratio, at most m_maxPixelRatio
     float m_pixelRatio = 1.f;
     float m_maxPixelRatio = 1.f;
