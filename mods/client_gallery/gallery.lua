@@ -418,7 +418,7 @@ end
 PAGES['house-list-keyboard'] = PAGES['house-list']
 
 -- On-screen messages (ot-client#173): game_textmessage's boxes over two
--- busy pictures standing in for the game view (the gallery has no map
+-- busy backgrounds standing in for the game view (the gallery has no map
 -- sprites): a long look message with a status message, and loot with a level
 -- advance and a warning. The boxes stay (no timeout) for the screenshot.
 local BLACKBOARD = 'You see a blackboard.\nYou read: The room of the Oracle\n\nIf you are wise enough you may ' ..
@@ -446,8 +446,6 @@ PAGES.messages = function(page)
     for _, list in ipairs(shown) do
         local view = widget('GalleryGameView', column, function(w)
             w:setSize({ width = width, height = height })
-            -- a busy part of the login picture, shrunk by half
-            w:setImageClip({ x = 960 - width, y = 420 - height, width = width * 2, height = height * 2 })
         end)
         local panel = messages.createMessagesPanel(view)
         panel:fill('parent')
