@@ -11,8 +11,7 @@
 local root
 local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
-    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
-    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map' }
+    'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization', 'map' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -349,9 +348,7 @@ PAGES.npc = function()
     receive(103, {
         id = 1, npc = 'Benjamin', money = 1500,
         text = 'Hello, traveller. I sell runes and fluids. Ask me for a trade, or about the news.',
-        -- every word the NPC takes (ot-server#88): more than four rows scroll
-        keywords = { 'trade', 'news', 'job', 'name', 'time', 'king', 'thais', 'carlin', 'venore', 'magic',
-            'fluids', 'runes', 'blessings', 'rumours', 'tibia', 'excalibug', 'ferumbras', 'library' },
+        keywords = { 'trade', 'news' },
         buy = {
             { item = 3160, name = 'ultimate healing rune', price = 175, words = 'buy ultimate healing rune' },
             { item = 3155, name = 'sudden death rune', price = 325, words = 'buy sudden death rune' },
@@ -384,10 +381,11 @@ PAGES.outfit = function()
 end
 
 -- Text over the map (ot-client#112): names, health and mana bars and a
--- yell, drawn by the map itself, at the size the game screen gives them. No
--- server and no game sprites in this build: the game screen without a game,
--- the creatures on an empty (black) map. Damage numbers are left out: they
--- move, so no two screenshots would match.
+-- yell, and names at the view's edges, drawn by the map itself at the size
+-- the game screen gives them. No server and no game sprites in this build:
+-- the game screen without a game, the creatures and ground not drawn (the
+-- map shows what is behind it). Damage numbers are left out: they move, so
+-- no two screenshots would match.
 PAGES.map = function()
     local gi = modules.game_interface
     if not g_game.startPreview or not gi or not gi.getMapPanel then
@@ -410,6 +408,19 @@ PAGES.map = function()
     ghost:setName('Ghost')
     ghost:setHealthPercent(60)
     g_map.addThing(ghost, ghostPos, -1)
+    -- on the top row and at the left edge of the 15x11 view: their names and
+    -- bars stay inside it
+    local edges = {
+        { 0x40000002, 'Rat', 100, { x = center.x + 3, y = center.y - 5, z = center.z } },
+        { 0x40000003, 'Cave Rat', 30, { x = center.x - 7, y = center.y + 3, z = center.z } },
+    }
+    for _, edge in ipairs(edges) do
+        local creature = Creature.create()
+        creature:setId(edge[1])
+        creature:setName(edge[2])
+        creature:setHealthPercent(edge[3])
+        g_map.addThing(creature, edge[4], -1)
+    end
     -- (a yell: shown twice as long as a word, well past the screenshot)
     local text = StaticText.create()
     text:addMessage('Ghost', MessageModes.MonsterYell, 'LET ME OUT!')
@@ -440,31 +451,6 @@ for _, tab in ipairs({ 'Gameplay', 'Display', 'Controls', 'Layout', 'Optimizatio
         tap(tr(tab))
     end
 end
-
--- Text windows (ot-client#124): a letter as the server opens it (Edit Text),
--- the same letter only to read, and a house list (Edit List). The -keyboard
--- pages are the same windows with the on-screen keyboard open: gallery.js
--- sets keyboardVisibleTop/Bottom as the page would (shell.html).
-local SAMPLE_LETTER = 'Dear Aren,\n\nthe ferry leaves at dawn. Bring the map, two ropes and something to eat; ' ..
-    'the island has nothing but rats.\n\nIf the weather turns, wait for me at the lighthouse.\n\n- Mira'
-
-local function textWindows()
-    return modules.game_textwindow
-end
-
-PAGES.letter = function()
-    textWindows().onGameEditText(1, 0, 1000, SAMPLE_LETTER, 'Mira', '18 Nov 2026')
-end
-PAGES['letter-keyboard'] = PAGES.letter
-
-PAGES['letter-read'] = function()
-    textWindows().onGameEditText(2, 0, #SAMPLE_LETTER, SAMPLE_LETTER, 'Mira', '18 Nov 2026')
-end
-
-PAGES['house-list'] = function()
-    textWindows().onGameEditList(3, 1, 'Mira\nToren\nLune\nKasimir\nOld Bess')
-end
-PAGES['house-list-keyboard'] = PAGES['house-list']
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
 -- scrolled list). nil when none of it shows.
