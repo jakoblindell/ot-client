@@ -1,0 +1,26 @@
+# Doesn't-fit findings the baseline already has (tools/ui-gallery/gallery.js --update).
+# A pull request fails only on findings that are not listed here.
+tablet/layout-edit: outside: HealthCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-edit: outside: HealthCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-edit: outside: ManaCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-edit: outside: ManaCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-extra-rows: outside: HealthCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-extra-rows: outside: HealthCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-extra-rows: outside: ManaCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-extra-rows: outside: ManaCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-lists: outside: HealthCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-lists: outside: HealthCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-lists: outside: ManaCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-lists: outside: ManaCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-panels: outside: HealthCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-panels: outside: HealthCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-panels: outside: ManaCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-panels: outside: ManaCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup-held: outside: HealthCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup-held: outside: HealthCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup-held: outside: ManaCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup-held: outside: ManaCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup: outside: HealthCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup: outside: HealthCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup: outside: ManaCircle#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN
+tablet/layout-setup: outside: ManaCircleFront#widgetN at N,N NxN is outside its parent GameMapPanel#gameMapPanel at N,N NxN

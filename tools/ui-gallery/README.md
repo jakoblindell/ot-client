@@ -14,33 +14,40 @@ with saved baseline images on every pull request (ot-client#70).
 
 ## Pages and devices
 
-| Page | Shows |
-|---|---|
-| `buttons` | `OtButton` states, primary, danger, icon and help buttons, tabs |
-| `controls` | checks, progress bars, a stepper, setting rows in a panel, contrast panel |
-| `text` | title, heading, label, text, hint, the colour tokens |
-| `touch` | round hotbar slots at 32–64 px, chat, P1 and pencil buttons, health/mana bars, toolbar |
-| `movement` | the movement pad: D-Pad, D-Pad (8-way), a lit arrow, analog stick |
-| `hub` | the hub's front page |
-| `journal` | Journal › Quests, with sample quests |
-| `achievements` | Journal › Achievements: unlocked, in progress, hidden |
-| `npc` | the NPC dialog with a sample NPC (text, keywords, shop) |
-| `hotbar` | the hotbar settings sheet |
-| `hotbar-sheet` | the sheet a long press on a hotbar slot opens: a druid's Spells tab |
-| `hotbar-sheet-house` | that sheet's House tab (the house spells) |
-| `hotbar-sheet-novocation` | its Spells tab for a character without a vocation |
-| `outfit` | the outfit screen for touch screens, with sample outfits |
-| `settings-gameplay` … `settings-optimization` | the hub's Settings, one page per tab |
-| `letter`, `letter-read` | a letter in Edit Text: to write (with its limit), and only to read |
-| `house-list` | a house list in Edit List |
-| `letter-keyboard`, `house-list-keyboard` | the same with the on-screen keyboard open (touch devices only; below) |
-| `map` | the game screen without a server: a player and monsters with names, health and mana bars and a yell, two of them on the view's top row and left edge, drawn by the map at its real size (no game sprites: creatures and ground are not drawn) |
-| `layout-panels` | the touch layout (no game) with Containers and Equipment open in their default places |
-| `layout-lists` | the touch layout with the Map, Skills and the Hunt analyzer open (the oldest gives way when they do not all fit) |
-| `layout-edit` | Edit layout with Containers and Equipment open: outlines, - and +, the "Customize Layout" window |
-| `layout-setup` | "Let's build your UI", first step: the piece being placed partly over the game view, with the prompt |
-| `layout-setup-held` | the same with a finger held on the piece: the prompt is hidden |
-| `layout-extra-rows` | the touch layout with the 3x3 hotbar and both extra rows on |
+The pages are in [`mods/client_gallery/pages/`](../../mods/client_gallery/pages),
+one file per page or group of pages, loaded in file name order (the order of
+the report). Each page says what it shows in its `about` text, which the
+report shows next to its name (and the report lists them all). There is no
+list of pages anywhere else, so pull requests that add pages don't touch the
+same lines.
+
+### Adding a page
+
+Add a file to `mods/client_gallery/pages/` (a new number, so it sorts where
+you want it in the report), and nothing else: `gallery.js` asks the client
+for its pages (`gallery = '@list'`), and no image goes into the pull request.
+
+```lua
+-- pages/110-messages.lua
+return function(G)
+    G.page('messages', { about = 'what the page shows' }, function(page)
+        local c = G.column(page, 560)
+        -- ...
+    end)
+end
+```
+
+- `G.page(name, options, build)`: `options.about` says what the page shows;
+  `options.keyboard = true` shows it with the on-screen keyboard open, on
+  touch devices only (below). `build(page)` fills the page; it may return
+  windows of its own that existed before it, and `true` to skip the fit
+  checks on them (a whole game screen).
+- Helpers: `G.widget`, `G.section`, `G.button`, `G.holder`, `G.centered`,
+  `G.column`, `G.roundFace`, `G.receive` (what the server would send on an
+  extended opcode), `G.tap`, `G.findByText`, `G.openHub`, `G.FIXED_TIME`.
+- Styles of the page's own: `pages/<same name>.otui` (every `.otui` there
+  is imported with `gallery.otui`), so they don't go into the shared file.
+- `mods/` is in `.gitignore`: add new files with `git add -f`.
 
 The `layout-*` pages are portrait on `iphone-portrait` and landscape on the
 other phones and the tablet; desktop devices show a note (the desktop layout
@@ -68,9 +75,6 @@ The keyboard pages set `keyboardVisibleTop/Bottom` the way the page does
 while the keyboard is open (`browser/shell.html`), for a keyboard 300 px high
 in portrait and 210 px in landscape. Real keyboard heights vary by phone.
 
-Add a page in `mods/client_gallery/gallery.lua` (`PAGES` and `PAGE_ORDER`)
-and in `PAGES` in `gallery.js`.
-
 ## Text and widgets that don't fit
 
 After a page is ready, the gallery checks every visible widget twice, a
@@ -85,10 +89,14 @@ what both checks find:
   such as a row of buttons wider than its sheet. The rows of a scrolled list
   are left out: the list cuts them off on purpose.
 
-Widgets scrolled out of sight are skipped. A page with such a widget fails,
-even when it matches its baseline, and the report lists the widgets. Fix the
-layout (shorter text, a wider widget, wrap, or move the control) rather than
-updating the baseline.
+Widgets scrolled out of sight are skipped. A finding fails the check, image
+changed or not, unless the baseline has it already:
+`baseline/doesnt-fit.txt` lists the findings of the last run on
+web-client-792 (`device/page: finding`, numbers left out, since widget ids
+and positions move when anything else does). So a pull request fails only on
+what it adds; ones already on the base branch are listed in the summary
+without failing. Fix the layout (shorter text, a wider widget, wrap, or move
+the control).
 
 ## In CI
 
@@ -96,14 +104,26 @@ The "UI screenshots" job in `.github/workflows/web-build.yml` runs after the
 browser build. It uses the build's artifact and needs no game server or
 sprites.
 
-- **Nothing changed:** the check passes.
-- **A page changed:** the check fails. Download the `ui-gallery-<sha>`
-  artifact and open `report.html` to see what changed.
-- **The change is intended:** run the Web Build workflow on the branch
-  (Actions › Web Build › Run workflow) with **update_baselines** ticked. It
-  commits the new images to the branch.
-- **A new page or device** has no baseline yet: it shows as "new" and passes.
-  Update the baselines the same way.
+- **On a pull request** the screenshots are compared with the base branch's
+  `baseline/` (pull requests carry no baseline images; one that does gets a
+  warning, and its images are not used). The job summary lists changed and
+  new pages; the `ui-gallery-<sha>` artifact has `report.html` with the new
+  image, the baseline and a diff (red).
+- **Changed or new images do not fail the check.** Look at them in the
+  summary and the report.
+- **The check fails** on a page that fails to load or doesn't render, a page
+  that has a baseline image but is no longer in the run (a page file that
+  failed to load, or a removed page), and a doesn't-fit finding that
+  `baseline/doesnt-fit.txt` doesn't have.
+- **After a push to web-client-792** (a merge), the run saves its images
+  (changed and new ones), its findings and the removal of gone pages as the
+  new baseline, and commits them to web-client-792 as github-actions[bot].
+  That commit starts no workflow (it is pushed with the workflow's token),
+  so there is no second run and no new pre-release. If web-client-792 moved
+  on during the run, it commits nothing: the newer push's run does it.
+- **By hand:** Actions › Web Build › Run workflow with **update_baselines**
+  ticked does the same on the branch it runs on (meant for web-client-792,
+  for instance after a run that failed).
 
 Baselines come from CI only. Software rendering can differ slightly on
 another machine, so a local run can report small differences.
@@ -116,6 +136,9 @@ npm install && npx playwright install chromium
 node gallery.js --bundle <browser build folder> --out out
 node gallery.js --bundle <folder> --pages touch --devices phone-big   # a subset
 ```
+
+`out/summary.md` says what was found; the exit code is 1 when the check
+would fail.
 
 The browser build folder holds `otclient.html`, `.js`, `.wasm` and `.data`
 (the Web Build artifact, or `bin/` of a local build).
