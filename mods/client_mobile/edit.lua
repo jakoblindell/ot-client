@@ -1,13 +1,17 @@
--- Edit layout for the touch layout (ot-client#23, #124): the pieces around
--- the game view (health and mana bars, chat button, hotbar, joystick and
--- the panels on the screen) can be moved and sized. While editing:
+-- Edit layout for the touch layout (ot-client#23, #124): the pieces (chat
+-- button, hotbar, joystick and the panels on the screen) can be moved and
+-- sized. The health and mana bars stay where the layout puts them (under
+-- the game view in portrait, in the bottom bar in landscape). While editing:
 --   - each piece has a dashed gold outline exactly its size, its name, and
 --     round - and + in its middle (70% to 160%); one finger drags it;
 --   - the game view dims;
 --   - a small "Customize Layout" window offers Save (keep the changes),
 --     Reset (every piece to its default place), Center (the selected piece
 --     to the middle of its area) and Cancel (back to the layout from before).
--- Pieces snap to the screen edges, the game view and each other.
+-- Pieces go anywhere on the screen above the bottom bar, over the game view
+-- too (ot-client#155): the player chooses what covers it; only the bars are
+-- never covered. They snap lightly to the screen edges, the top of the
+-- bottom bar, the bars and each other.
 --
 -- Positions and sizes are saved per character and separately for portrait
 -- and landscape (positions as fractions of the screen), and applied on top
@@ -15,12 +19,11 @@
 -- never moved stays in its default place (panels.lua).
 
 local SETTINGS_NODE = 'client_mobile_layouts'
-local SNAP_DISTANCE = 12
+local SNAP_DISTANCE = 6
 local SCALE_MIN, SCALE_MAX, SCALE_STEP = 0.7, 1.6, 0.1
 
 -- The pieces besides the panels; resize: what an older saved width means
 local STATIC_PIECES = {
-    { key = 'stats', name = 'Health and mana', resize = 'width', minWidth = 100 },
     { key = 'chat', name = 'Chat', resize = 'square', maxSize = 96 },
     { key = 'grid', name = 'Hotbar', resize = 'width', minWidth = 52 },
     { key = 'joystick', name = 'Joystick' },
@@ -132,6 +135,64 @@ local function bottomLimit()
     return r.y + r.height
 end
 
+-- The room a piece needs above its widget: P and the pencil ride on top of
+-- the hotbar (mobile.lua anchors them there), so they count as part of it
+local function topExtra(key)
+    local row = key == 'grid' and getHotbarPresetRow and getHotbarPresetRow()
+    if row and not row:isDestroyed() then
+        return row:getHeight() + row:getMarginBottom()
+    end
+    return 0
+end
+
+-- The rect a piece takes on the screen (the hotbar with P and the pencil)
+local function pieceRect(key, widget)
+    local rect = widget:getRect()
+    local extra = topExtra(key)
+    return { x = rect.x, y = rect.y - extra, width = rect.width, height = rect.height + extra }
+end
+
+-- The health and mana bars: not a piece, and never covered by one
+local function bars()
+    local widget = root():getChildById('mobileStats')
+    return widget and widget:isVisible() and widget or nil
+end
+
+-- x, y for a piece's widget kept on the screen, above the bottom bar and
+-- off the health and mana bars (moved the shortest way past them)
+local function clampToScreen(key, widget, x, y)
+    local r = root():getRect()
+    local w, h, extra = widget:getWidth(), widget:getHeight(), topExtra(key)
+    local left, right = r.x, r.x + r.width - w
+    local top, bottom = r.y + extra, bottomLimit() - h
+    x = math.max(left, math.min(math.floor(x), right))
+    y = math.max(top, math.min(math.floor(y), bottom))
+    local stats = bars()
+    if not stats then
+        return x, y
+    end
+    local b = stats:getRect()
+    if x + w <= b.x or x >= b.x + b.width or y + h <= b.y or y - extra >= b.y + b.height then
+        return x, y
+    end
+    local best, bestDistance
+    for _, spot in ipairs({
+        { x = x, y = b.y - h }, { x = x, y = b.y + b.height + extra },
+        { x = b.x - w, y = y }, { x = b.x + b.width, y = y },
+    }) do
+        if spot.x >= left and spot.x <= right and spot.y >= top and spot.y <= bottom then
+            local distance = math.abs(spot.x - x) + math.abs(spot.y - y)
+            if not bestDistance or distance < bestDistance then
+                best, bestDistance = spot, distance
+            end
+        end
+    end
+    if best then
+        return best.x, best.y
+    end
+    return x, y
+end
+
 -- A piece's size when the player has not changed it: set by the layout
 -- (a joystick in a narrow column is drawn smaller to fit it)
 pieceDefaultScales = {}
@@ -181,13 +242,6 @@ local SCALERS = {
         end
         -- the D-pad arrows follow the pad's size by themselves
     end,
-    -- (only their size: the layout places them, with margins)
-    stats = function(widget, scale)
-        widget:setHeight(math.floor(base(widget).height * scale))
-        for _, bar in ipairs(widget:getChildren()) do
-            bar:setHeight(math.floor(base(bar).height * scale))
-        end
-    end,
     chat = function(widget, scale)
         local b = base(widget)
         widget:setSize({ width = math.floor(b.width * scale), height = math.floor(b.height * scale) })
@@ -212,13 +266,22 @@ local function placePiece(piece, widget, entry)
         widget:setSize({ width = size, height = size })
     end
     widget:breakAnchors()
-    local x = r.x + math.floor(entry.x * r.width)
-    local y = r.y + math.floor(entry.y * r.height)
-    -- keep it on the screen and off the game view
-    x = math.max(r.x, math.min(x, r.x + r.width - widget:getWidth()))
-    y = math.max(r.y, math.min(y, bottomLimit() - widget:getHeight()))
-    x, y = keepOffGameView(x, y, widget:getWidth(), widget:getHeight())
+    -- where the player put it, over the game view too; kept on the screen
+    local x, y = clampToScreen(piece.key, widget, r.x + math.floor(entry.x * r.width),
+        r.y + math.floor(entry.y * r.height))
     widget:setPosition({ x = x, y = y })
+end
+
+-- The piece the setup is placing (setup.lua) keeps its spot through a new
+-- layout until it is saved, and is drawn over the other pieces
+local placingSpot
+
+local function raisePlacing(key, widget)
+    widget:raise()
+    local row = key == 'grid' and getHotbarPresetRow and getHotbarPresetRow()
+    if row and not row:isDestroyed() then
+        row:raise()
+    end
 end
 
 local syncFrames
@@ -237,6 +300,17 @@ function applySavedLayout()
             placePiece(piece, widget, saved[piece.key])
         end
     end
+    if editing and editing.only then
+        local widget = widgets[editing.only]
+        if widget then
+            if placingSpot and not (saved[editing.only] and saved[editing.only].x) then
+                local x, y = clampToScreen(editing.only, widget, placingSpot.x, placingSpot.y)
+                widget:breakAnchors()
+                widget:setPosition({ x = x, y = y })
+            end
+            raisePlacing(editing.only, widget)
+        end
+    end
     -- the bars' fill follows their width
     refreshStats()
     if editing then
@@ -244,7 +318,9 @@ function applySavedLayout()
     end
 end
 
--- Edges a piece snaps to: the screen, the game view and the other pieces
+-- Edges a piece snaps to: the screen, the top of the bottom bar, the health
+-- and mana bars and the other pieces (not the game view: pieces may go over
+-- it)
 local function snapLines(except)
     local r = root():getRect()
     local xs, ys = { r.x, r.x + r.width }, { r.y, r.y + r.height }
@@ -254,14 +330,16 @@ local function snapLines(except)
         table.insert(ys, rect.y)
         table.insert(ys, rect.y + rect.height)
     end
-    add(modules.game_interface.getMapPanel():getRect())
     local toolbar = root():getChildById('mobileToolbar')
-    if toolbar then
+    if toolbar and toolbar:isVisible() then
         table.insert(ys, toolbar:getY())
+    end
+    if bars() then
+        add(bars():getRect())
     end
     for key, widget in pairs(getMovableWidgets()) do
         if key ~= except and widget:isVisible() then
-            add(widget:getRect())
+            add(pieceRect(key, widget))
         end
     end
     return xs, ys
@@ -292,14 +370,15 @@ local function storePiece(piece, widget)
     savePiece(piece.key, entry)
 end
 
--- Puts a widget at x, y: on the screen, above the toolbar, off the game view
-local function moveTo(widget, x, y)
-    local r = root():getRect()
-    x = math.max(r.x, math.min(math.floor(x), r.x + r.width - widget:getWidth()))
-    y = math.max(r.y, math.min(math.floor(y), bottomLimit() - widget:getHeight()))
-    x, y = keepOffGameView(x, y, widget:getWidth(), widget:getHeight())
+-- Puts a piece's widget at x, y: on the screen and above the toolbar (over
+-- the game view too)
+local function moveTo(key, widget, x, y)
+    x, y = clampToScreen(key, widget, x, y)
     widget:breakAnchors()
     widget:setPosition({ x = x, y = y })
+    if editing and editing.only == key then
+        placingSpot = { x = x, y = y }
+    end
 end
 
 -- + and -: a step bigger or smaller, around the piece's middle. A piece in
@@ -322,11 +401,8 @@ local function changeScale(piece, delta)
     relayout()
     if placed and piece.key ~= 'grid' then
         widget = getMovableWidgets()[piece.key] or widget
-        moveTo(widget, centre.x - widget:getWidth() / 2, centre.y - widget:getHeight() / 2)
+        moveTo(piece.key, widget, centre.x - widget:getWidth() / 2, centre.y - widget:getHeight() / 2)
         storePiece(piece, widget)
-        if piece.key == 'stats' then
-            refreshStats()
-        end
     end
     syncFrames()
 end
@@ -334,13 +410,14 @@ end
 -- The outlines ----------------------------------------------------------------
 
 -- The outline is exactly the piece. Its name and - + go in its middle: the
--- name above - +, or between them on a low piece (the bars), or - + beside
+-- name above - +, or between them on a wide, low piece, or - + beside
 -- the piece when it is too small for both (the chat button)
 local SIZE_BUTTON = 34
 local SIZES_WIDTH = 2 * SIZE_BUTTON + 8
 
 local function placeFrame(frame, widget)
-    local rect = widget:getRect()
+    -- (the hotbar's outline takes in P and the pencil above it)
+    local rect = pieceRect(frame.key, widget)
     frame:setRect(rect)
     local name, sizes = frame:getChildById('name'), frame.sizes
     name:breakAnchors()
@@ -416,6 +493,7 @@ end
 local function createFrame(piece, widget)
     local frame = g_ui.createWidget('MobileEditFrame', rootWidget)
     frame:setId('mobileEditFrame_' .. piece.key)
+    frame.key = piece.key
     frame:getChildById('name'):setText(tr(piece.name))
     placeFrame(frame, widget)
 
@@ -429,12 +507,24 @@ local function createFrame(piece, widget)
     frame.followed = widget
     connect(widget, { onGeometryChange = frame.follow })
 
+    -- A finger on the piece the setup is placing: its prompt makes way
+    -- (setup.lua) until the finger lifts
+    local function held(down)
+        if editing and editing.only == piece.key and onPlacingPieceHeld then
+            onPlacingPieceHeld(down)
+        end
+    end
     -- Tapping or dragging a piece selects it (Center moves that one)
     frame.onMousePress = function()
+        held(true)
         if selected ~= piece.key then
             selected = piece.key
             updateFrames()
         end
+        return false
+    end
+    frame.onMouseRelease = function()
+        held(false)
         return false
     end
     frame.onDragEnter = function(self, mousePos)
@@ -445,14 +535,16 @@ local function createFrame(piece, widget)
     frame.onDragMove = function(self, mousePos)
         local current = getMovableWidgets()[piece.key] or widget
         local xs, ys = snapLines(piece.key)
+        local extra = topExtra(piece.key)
         local x = snap(mousePos.x - self.grab.x, current:getWidth(), xs)
-        local y = snap(mousePos.y - self.grab.y, current:getHeight(), ys)
-        -- never onto the game view: it slides along its edge instead
-        moveTo(current, x, y)
+        -- (the hotbar snaps with P and the pencil on top of it)
+        local y = snap(mousePos.y - self.grab.y - extra, current:getHeight() + extra, ys) + extra
+        moveTo(piece.key, current, x, y)
         placeFrame(self, current)
         return true
     end
     frame.onDragLeave = function()
+        held(false)
         storePiece(piece, getMovableWidgets()[piece.key] or widget)
         return true
     end
@@ -540,7 +632,8 @@ local function createDim()
 end
 
 -- Center: the selected piece to the middle of its area, across the screen
--- in portrait, across its side column in landscape
+-- in portrait; in landscape across its side column when it is in one,
+-- else across the screen (it stays at its height, over the game view or not)
 local function centerSelected()
     local key = selected
     local widget = key and getMovableWidgets()[key]
@@ -552,16 +645,13 @@ local function centerSelected()
     local left, right = r.x, r.x + r.width
     if orientation() == 'landscape' then
         local map = modules.game_interface.getMapPanel():getRect()
-        local middle = widget:getX() + widget:getWidth() / 2
-        if widget:getWidth() <= map.x - r.x then
-            if middle < map.x + map.width / 2 then
-                right = map.x
-            else
-                left = map.x + map.width
-            end
+        if widget:getX() + widget:getWidth() <= map.x then
+            right = map.x
+        elseif widget:getX() >= map.x + map.width then
+            left = map.x + map.width
         end
     end
-    moveTo(widget, left + (right - left - widget:getWidth()) / 2, widget:getY())
+    moveTo(key, widget, left + (right - left - widget:getWidth()) / 2, widget:getY())
     storePiece(piece, widget)
     updateFrames()
 end
@@ -575,6 +665,7 @@ end
 local function finishEditing()
     editing = false
     selected = nil
+    placingSpot = nil
     draft = nil
     destroyFrames()
     local toolbar = root():getChildById('mobileToolbar')
@@ -698,8 +789,22 @@ function startPlacingPiece(key)
     end
     editing = { only = key }
     selected = key
+    -- (the setup put it where it is: it stays there, over everything)
+    placingSpot = { x = widget:getX(), y = widget:getY() }
+    raisePlacing(key, widget)
     syncFrames()
     return true
+end
+
+-- Moves the piece being placed (the UI gallery shows one placed over the
+-- game view)
+function movePlacingPiece(x, y)
+    local key = editing and editing.only
+    local widget = key and getMovableWidgets()[key]
+    if widget then
+        moveTo(key, widget, x, y)
+        updateFrames()
+    end
 end
 
 function stopPlacingPiece()
@@ -712,17 +817,17 @@ function stopPlacingPiece()
     end
     editing = false
     selected = nil
+    placingSpot = nil
 end
 
--- Keeps a piece where the player put it (moved off the game view if it is
--- still on it)
+-- Keeps a piece where the player put it (over the game view too)
 function confirmPlacedPiece(key)
     local widget = getMovableWidgets()[key]
     local piece = findPiece(key)
     if not widget or not piece then
         return
     end
-    moveTo(widget, widget:getX(), widget:getY())
+    moveTo(key, widget, widget:getX(), widget:getY())
     storePiece(piece, widget)
 end
 

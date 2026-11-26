@@ -13,7 +13,8 @@ local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
     'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
-    'layout-panels', 'layout-lists', 'layout-edit' }
+    'layout-panels', 'layout-lists', 'layout-edit',
+    'layout-setup', 'layout-setup-held' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -500,10 +501,10 @@ local function sampleBars(game)
     end
 end
 
-local function layoutPage(panels, edit)
+local function layoutPage(panels, edit, setup)
     return function(page)
         local mobile = modules.client_mobile
-        if not (mobile and mobile.startLayoutPreview and mobile.startLayoutPreview(panels, edit)) then
+        if not (mobile and mobile.startLayoutPreview and mobile.startLayoutPreview(panels, edit, setup)) then
             local c = column(page, 560)
             widget('OtHint', section(c, 'Touch layout', 40), function(w)
                 w:setWidth(500)
@@ -511,6 +512,9 @@ local function layoutPage(panels, edit)
             end)
             return
         end
+        -- nothing of the gallery's own behind the game screen: it shows as on
+        -- the device
+        page:setBackgroundColor('#00000000')
         local game = modules.game_interface.getRootPanel()
         -- The empty game view (no map without a game) draws an animation
         -- whose phase depends on timing: covered with plain black, right
@@ -542,6 +546,10 @@ end
 PAGES['layout-panels'] = layoutPage({ 'bag', 'equipment' })
 PAGES['layout-lists'] = layoutPage({ 'map', 'skills', 'hunt' })
 PAGES['layout-edit'] = layoutPage({ 'bag', 'equipment' }, true)
+-- The UI setup's first step, the piece placed partly over the game view;
+-- the same with a finger on the piece (the prompt hidden)
+PAGES['layout-setup'] = layoutPage({}, false, 'placing')
+PAGES['layout-setup-held'] = layoutPage({}, false, 'held')
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
 -- scrolled list). nil when none of it shows.
