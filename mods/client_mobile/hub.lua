@@ -62,6 +62,8 @@ local SETTINGS = {
         id = 'controls', text = 'Controls', rows = {
             { id = 'movement', kind = 'choice', text = 'Movement',
                 help = 'D-Pad: four arrows. D-Pad (8-way): with diagonals. Analog stick: follows your thumb.' },
+            { id = 'turnFromCentre', kind = 'toggle', text = 'Turn from the centre',
+                help = 'Touch the middle of the movement control and drag to turn without walking, like Ctrl+arrow. Touch outside the middle to walk.' },
             { id = 'controller', kind = 'button', text = 'Game controller', buttonText = 'Bind...',
                 help = 'Choose which hotbar slot each controller button uses. Walk with the stick or D-pad.' },
             { id = 'layoutMode', kind = 'choice', text = 'Layout',
@@ -73,11 +75,11 @@ local SETTINGS = {
             { id = 'viewSize', kind = 'choice', text = 'Game view size',
                 help = 'How much of the screen the game takes. Medium and Small leave room beside it for your bag, panels and hotbar. Large makes the game bigger; on small screens panels may then cover its edges.' },
             { id = 'editLayout', kind = 'button', text = 'Move and size pieces', buttonText = 'Edit layout',
-                help = 'Drag pieces to move them. Tap one, then - and + to size it. Long press a toolbar button to pin its panel.' },
+                help = 'Drag pieces, panels too, to move them; - and + size them. Save keeps the changes, Cancel undoes them.' },
             { id = 'setupUi', kind = 'button', text = 'Place pieces one by one', buttonText = 'UI setup',
-                help = 'Places the movement control, hotbar, bars, backpack and chat one at a time, like on your first login.' },
-            { id = 'hotbar', kind = 'button', text = 'Hotbar presets, rows and slots', buttonText = 'Hotbar...',
-                help = 'Number of presets (P button), extra rows and how many slots the hotbar shows.' },
+                help = 'Places the movement control, hotbar, backpack and chat one at a time, like on your first login.' },
+            { id = 'hotbar', kind = 'button', text = 'Hotbar presets and rows', buttonText = 'Hotbar...',
+                help = 'Number of presets (P button) and the extra rows of 3 above the 3x3 hotbar.' },
             { id = 'typing', kind = 'toggle', text = 'Typing suggestions',
                 help = 'Words above the chat line while typing: your spells, what the NPC understands, names and words you used before. Gold ones send at once.' },
             { id = 'clearWords', kind = 'button', text = 'Forget the words you typed', buttonText = 'Clear',
@@ -167,6 +169,8 @@ local function rowValue(row)
         return options().getOption(row.key)
     elseif row.id == 'movement' then
         return modules.game_joystick and modules.game_joystick.getStyle and modules.game_joystick.getStyle()
+    elseif row.id == 'turnFromCentre' then
+        return modules.game_joystick.getTurnFromCentre()
     elseif row.id == 'layoutMode' then
         return g_platform.getTouchMode()
     elseif row.id == 'viewSize' then
@@ -202,6 +206,8 @@ local function setRowValue(row, value)
         options().setOption(row.key, value)
     elseif row.id == 'movement' then
         modules.game_joystick.setStyle(value)
+    elseif row.id == 'turnFromCentre' then
+        modules.game_joystick.setTurnFromCentre(value)
     elseif row.id == 'layoutMode' then
         setTouchMode(value)
     elseif row.id == 'viewSize' then
@@ -240,6 +246,8 @@ local function rowAvailable(row)
         return options() and options().getOption(row.key) ~= nil
     elseif row.id == 'movement' then
         return modules.game_joystick and modules.game_joystick.STYLES ~= nil
+    elseif row.id == 'turnFromCentre' then
+        return modules.game_joystick and modules.game_joystick.getTurnFromCentre ~= nil
     elseif row.id == 'controller' then
         return modules.client_gamepad and modules.client_gamepad.openBindWindow ~= nil and g_platform.isBrowser()
     elseif row.id == 'layoutMode' then

@@ -20,6 +20,7 @@ with saved baseline images on every pull request (ot-client#70).
 | `controls` | checks, progress bars, a stepper, setting rows in a panel, contrast panel |
 | `text` | title, heading, label, text, hint, the colour tokens |
 | `touch` | round hotbar slots at 32–64 px, chat, P1 and pencil buttons, health/mana bars, toolbar |
+| `movement` | the movement pad: D-Pad, D-Pad (8-way), a lit arrow, analog stick |
 | `hub` | the hub's front page |
 | `journal` | Journal › Quests, with sample quests |
 | `achievements` | Journal › Achievements: unlocked, in progress, hidden |
@@ -34,6 +35,17 @@ with saved baseline images on every pull request (ot-client#70).
 | `house-list` | a house list in Edit List |
 | `letter-keyboard`, `house-list-keyboard` | the same with the on-screen keyboard open (touch devices only; below) |
 | `map` | the game screen without a server: a player and monsters with names, health and mana bars and a yell, two of them on the view's top row and left edge, drawn by the map at its real size (no game sprites: creatures and ground are not drawn) |
+| `layout-panels` | the touch layout (no game) with Containers and Equipment open in their default places |
+| `layout-lists` | the touch layout with the Map, Skills and the Hunt analyzer open (the oldest gives way when they do not all fit) |
+| `layout-edit` | Edit layout with Containers and Equipment open: outlines, - and +, the "Customize Layout" window |
+| `layout-setup` | "Let's build your UI", first step: the piece being placed partly over the game view, with the prompt |
+| `layout-setup-held` | the same with a finger held on the piece: the prompt is hidden |
+| `layout-extra-rows` | the touch layout with the 3x3 hotbar and both extra rows on |
+
+The `layout-*` pages are portrait on `iphone-portrait` and landscape on the
+other phones and the tablet; desktop devices show a note (the desktop layout
+has no touch pieces). They have no gallery backdrop behind the game screen,
+so they show what the device shows (the stone around the game view).
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock
