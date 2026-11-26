@@ -104,6 +104,10 @@ private:
     // set from Lua's thread; the window's own thread (poll) applies it
     std::atomic<float> m_wantedMaxPixelRatio{ 1.f };
     std::atomic<bool> m_pixelRatioChanged{ false };
+    // The GL context lost / back (ot-client#142): set by the canvas's events,
+    // handled in poll()
+    enum : int32_t { GL_CONTEXT_LOST = 1, GL_CONTEXT_RESTORED = 2 };
+    std::atomic<int32_t> m_glContextEvents{ 0 };
     void applyCanvasSize(bool force);
     std::unordered_map<int64_t, Touch> m_touches;
     // The finger that acts as the mouse (fingers on touch controls do not)

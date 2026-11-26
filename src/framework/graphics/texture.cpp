@@ -31,17 +31,37 @@
 #include <framework/core/graphicalapplication.h>
 #include <framework/util/stats.h>
 
+#include <mutex>
+#include <unordered_set>
+
  // UINT16_MAX = just to avoid conflicts with GL generated ID.
 static std::atomic_uint32_t UID(UINT16_MAX);
+
+namespace
+{
+    // Every texture, to make them again in a new GL context (ot-client#142)
+    std::mutex s_texturesMutex;
+    std::unordered_set<Texture*> s_textures;
+}
+
+void Texture::registerTexture()
+{
+    std::scoped_lock l(s_texturesMutex);
+    s_textures.insert(this);
+}
 
 Texture::Texture() : m_uniqueId(UID.fetch_add(1)) {
     generateHash();
     g_stats.addTexture();
+    registerTexture();
 }
 Texture::Texture(const Size& size) : m_uniqueId(UID.fetch_add(1))
 {
     generateHash();
     g_stats.addTexture();
+    registerTexture();
+    // what is drawn into it is drawn again: a new context needs only the storage
+    setProp(sizeOnly, true);
     if (!setupSize(size))
         return;
 
@@ -56,6 +76,7 @@ Texture::Texture(const ImagePtr& image, const bool buildMipmaps, const bool comp
 {
     generateHash();
     g_stats.addTexture();
+    registerTexture();
 
     setProp(Prop::compress, compress);
     setProp(Prop::buildMipmaps, buildMipmaps);
@@ -65,6 +86,10 @@ Texture::Texture(const ImagePtr& image, const bool buildMipmaps, const bool comp
 
 Texture::~Texture()
 {
+    {
+        std::scoped_lock l(s_texturesMutex);
+        s_textures.erase(this);
+    }
 #ifndef NDEBUG
     assert(!g_app.isTerminated());
 #endif
@@ -79,10 +104,75 @@ Texture::~Texture()
 
 void Texture::create()
 {
+    // made again in a new GL context: its pixels again
+    if (m_reloadPending && !m_image) {
+        m_reloadPending = false;
+        m_image = m_reload();
+        if (!m_image)
+            m_lost = true;
+    }
+
     if (m_image) {
+#ifdef __EMSCRIPTEN__
+        // The browser can lose the GL context (ot-client#142): keep the
+        // pixels to make the texture again, unless they can be had again.
+        // (the mipmaps are made in the image itself: keep a copy then)
+        if (!m_reload && !getProp(ownerRestores))
+            m_restoreImage = getProp(buildMipmaps) ? std::make_shared<Image>(*m_image) : m_image;
+#endif
         createTexture();
         uploadPixels(m_image, getProp(buildMipmaps), getProp(compress));
         m_image = nullptr;
+        m_lost = false;
+    }
+}
+
+void Texture::forgetGL(const uint32_t generation)
+{
+    // made in the new context, or not made (an animation has its frames'
+    // name, made by them)
+    if (m_glGeneration >= generation || (m_glGeneration == 0 && m_id == 0))
+        return;
+
+    // the old name means nothing in the new context (and is not deleted)
+    m_glGeneration = 0;
+    m_id = 0;
+    m_atlas.fill(nullptr);
+    setProp(hasMipMaps, false);
+    generateHash();
+
+    if (m_image)
+        return; // its pixels go up on its next use anyway
+
+    if (getProp(sizeOnly))
+        m_restoreEmpty = true;
+    else if (m_reload)
+        m_reloadPending = true;
+    else if (m_restoreImage)
+        m_image = m_restoreImage;
+    else
+        m_lost = true;
+}
+
+void Texture::forgetOldContext(const uint32_t generation)
+{
+    std::scoped_lock l(s_texturesMutex);
+    for (auto* texture : s_textures)
+        texture->forgetGL(generation);
+}
+
+void Texture::restoreEmptyTextures()
+{
+    std::scoped_lock l(s_texturesMutex);
+    for (auto* texture : s_textures) {
+        if (!texture->m_restoreEmpty)
+            continue;
+        texture->m_restoreEmpty = false;
+        texture->createTexture();
+        texture->bind();
+        texture->setupPixels(0, texture->m_size, nullptr, 4);
+        texture->setupWrap();
+        texture->setupFilters();
     }
 }
 
@@ -179,7 +269,7 @@ void Texture::createTexture()
         glDeleteTextures(1, &m_id);
 
     glGenTextures(1, &m_id);
-    assert(m_id != 0);
+    m_glGeneration = g_graphics.getContextGeneration();
 
     generateHash();
 }

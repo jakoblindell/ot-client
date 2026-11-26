@@ -107,9 +107,12 @@ void LightView::draw(const Rect& dest, const Rect& src)
     m_pool->getHashController().reset();
 
     g_drawPool.addAction([=, this] {
-        if (m_updatePixel.load(std::memory_order_relaxed)) {
+        // (again into a texture made again for a new GL context, ot-client#142)
+        const bool textureRemade = m_uploadedTextureId != 0 && m_texture->getId() != m_uploadedTextureId;
+        if (m_updatePixel.load(std::memory_order_relaxed) || textureRemade) {
             SpinLock::Guard guard(m_pool->getThreadLock());
             m_texture->updatePixels(m_pixels[1].data());
+            m_uploadedTextureId = m_texture->getId();
             m_updatePixel.store(false, std::memory_order_relaxed);
         }
 

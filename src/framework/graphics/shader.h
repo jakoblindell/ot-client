@@ -31,14 +31,22 @@ public:
     Shader(ShaderType shaderType);
     ~Shader();
 
-    bool compileSourceCode(std::string_view sourceCode) const;
-    bool compileSourceFile(std::string_view sourceFile) const;
+    bool compileSourceCode(std::string_view sourceCode);
+    bool compileSourceFile(std::string_view sourceFile);
     std::string log() const;
+
+    // Made again (and compiled from the same source) in a new GL context
+    // (ot-client#142); once per context, as programs can share a shader
+    void restore(uint32_t generation);
 
     uint32_t getShaderId() const { return m_shaderId; }
     ShaderType getShaderType() const { return m_shaderType; }
 
 private:
+    bool compile();
+
     uint32_t m_shaderId{ 0 };
     ShaderType m_shaderType;
+    std::string m_source;
+    uint32_t m_glGeneration{ 0 };
 };

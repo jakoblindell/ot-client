@@ -22,9 +22,15 @@
 
 #include "graphics.h"
 
+#include "drawpoolmanager.h"
 #include "fontmanager.h"
+#include "framebuffer.h"
 #include "painter.h"
+#include "shadermanager.h"
+#include "texture.h"
 #include "texturemanager.h"
+#include <framework/core/eventdispatcher.h>
+#include <framework/core/garbagecollection.h>
 #include <framework/core/logger.h>
 
 Graphics g_graphics;
@@ -100,3 +106,46 @@ void Graphics::terminate()
 }
 
 void Graphics::resize(const Size& size) { m_viewportSize = size; }
+
+void Graphics::contextLost()
+{
+    m_contextState = ContextState::Lost;
+    g_logger.info("The GL context was lost: nothing is drawn until it is back");
+}
+
+void Graphics::contextRestored()
+{
+    const uint32_t generation = ++m_contextGeneration;
+    m_contextState = ContextState::Restoring;
+    g_logger.info("The GL context is back: making the graphics again");
+
+    // The GL state and the shader programs: made again in place, here (their
+    // users keep pointers to them)
+    glEnable(GL_BLEND);
+    FrameBuffer::restoreBinding();
+    if (g_painter)
+        g_painter->restore(generation);
+    g_shaders.restore(generation);
+
+    // The textures and the recorded drawings belong to the event thread
+    // (it records the drawings and makes the sprites): they forget their GL
+    // names there, between two frames. Then the GL thread makes what the
+    // drawing needs (framebuffers, atlases) and drawing goes on.
+    g_dispatcher.addEvent([this, generation] {
+        if (generation != m_contextGeneration)
+            return; // lost and back again meanwhile: that restore does it
+
+        Texture::forgetOldContext(generation);
+        GarbageCollection::unloadLostThingTypes();
+        g_drawPool.forgetDrawings();
+
+        g_mainDispatcher.addEvent([this, generation] {
+            if (generation != m_contextGeneration || m_contextState != ContextState::Restoring)
+                return;
+
+            g_drawPool.restoreGL();
+            Texture::restoreEmptyTextures();
+            m_contextState = ContextState::Ready;
+        });
+    });
+}

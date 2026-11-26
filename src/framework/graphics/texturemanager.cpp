@@ -99,7 +99,7 @@ void TextureManager::liveReload()
 // button face made at exactly <size> pixels, with smooth (antialiased) edges,
 // so round buttons look clean at any size (ot-client#66). Colours are hex
 // without '#' (rrggbb or rrggbbaa); "0" is no ring or no fill.
-static TexturePtr makeCircleTexture(const std::string& path)
+static ImagePtr makeCircleImage(const std::string& path)
 {
     const auto parts = stdext::split(path.substr(18), "/"); // after "/generated/circle/"
     if (parts.size() < 4)
@@ -146,7 +146,7 @@ static TexturePtr makeCircleTexture(const std::string& path)
             px[3] = static_cast<uint8_t>(std::min(255.f, alpha * 255.f + .5f));
         }
     }
-    return std::make_shared<Texture>(image);
+    return image;
 }
 
 TexturePtr TextureManager::getTexture(const std::string& fileName, const bool smooth)
@@ -177,8 +177,13 @@ TexturePtr TextureManager::getTexture(const std::string& fileName, const bool sm
     }
 #endif
 
-    if (!texture && filePath.rfind("/generated/circle/", 0) == 0)
-        texture = makeCircleTexture(filePath);
+    if (!texture && filePath.rfind("/generated/circle/", 0) == 0) {
+        if (const auto& image = makeCircleImage(filePath)) {
+            texture = std::make_shared<Texture>(image);
+            // made again in a new GL context (ot-client#142)
+            texture->setReload([filePath] { return makeCircleImage(filePath); });
+        }
+    }
 
     // texture not found, load it
     if (!texture) {
@@ -189,6 +194,10 @@ TexturePtr TextureManager::getTexture(const std::string& fileName, const bool sm
             std::stringstream fin;
             g_resources.readFileStream(filePathEx, fin);
             texture = loadTexture(fin);
+            // made again from the file in a new GL context (ot-client#142);
+            // an animation's frames keep their images
+            if (texture && !texture->isAnimatedTexture())
+                texture->setReload([filePathEx] { return Image::load(filePathEx); });
         } catch (const stdext::exception& e) {
             g_logger.error("Unable to load texture '{}': {}", fileName, e.what());;
         }

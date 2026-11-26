@@ -32,6 +32,9 @@ public:
     static void lua();
     static void texture();
     static void thingType();
+    // (the event thread) a new GL context, ot-client#142: the sprites whose
+    // textures it lost are made again on their next use
+    static void unloadLostThingTypes();
 
 private:
     static bool canCheck(Timer& timer, const uint32_t delay) {

@@ -92,3 +92,12 @@ void GarbageCollection::thingType() {
         ++category;
     }
 }
+
+void GarbageCollection::unloadLostThingTypes() {
+    for (const auto& thingTypes : g_things.m_thingTypes) {
+        for (const auto& thing : thingTypes) {
+            if (thing->hasTexture() && !thing->isLoading() && thing->hasLostTexture())
+                thing->unload();
+        }
+    }
+}

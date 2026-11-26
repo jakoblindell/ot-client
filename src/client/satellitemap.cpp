@@ -347,6 +347,18 @@ int SatelliteMap::pickLod(const float scale)
 
 TexturePtr SatelliteMap::loadChunkTexture(const std::string& path)
 {
+    const auto& image = loadChunkImage(path);
+    if (!image)
+        return nullptr;
+
+    const auto& texture = std::make_shared<Texture>(image);
+    // made again from the file in a new GL context (ot-client#142)
+    texture->setReload([path] { return loadChunkImage(path); });
+    return texture;
+}
+
+ImagePtr SatelliteMap::loadChunkImage(const std::string& path)
+{
     std::string fileData;
     try {
         fileData = g_resources.readFileContents(path);
@@ -369,7 +381,7 @@ TexturePtr SatelliteMap::loadChunkTexture(const std::string& path)
         return nullptr;
     }
 
-    return std::make_shared<Texture>(image);
+    return image;
 }
 
 std::vector<uint8_t> SatelliteMap::decompressLzma(const std::string& fileData)

@@ -27,7 +27,8 @@
 #include "framework/core/graphicalapplication.h"
 #include "framework/core/resourcemanager.h"
 
-Shader::Shader(ShaderType shaderType) : m_shaderId(glCreateShader(static_cast<GLenum>(shaderType))), m_shaderType(shaderType)
+Shader::Shader(ShaderType shaderType) : m_shaderId(glCreateShader(static_cast<GLenum>(shaderType))), m_shaderType(shaderType),
+    m_glGeneration(g_graphics.getContextGeneration())
 {
     if (!m_shaderId)
         g_logger.fatal("Unable to create GL shader");
@@ -45,7 +46,7 @@ Shader::~Shader()
     }
 }
 
-bool Shader::compileSourceCode(const std::string_view sourceCode) const
+bool Shader::compileSourceCode(const std::string_view sourceCode)
 {
 #ifdef OPENGL_ES
     static constexpr std::string_view qualifierDefines =
@@ -60,9 +61,14 @@ bool Shader::compileSourceCode(const std::string_view sourceCode) const
         "#define highp\n";
 #endif
 
-    auto code = std::string{ qualifierDefines };
-    code.append(sourceCode);
-    const char* c_source = code.data();
+    m_source = std::string{ qualifierDefines };
+    m_source.append(sourceCode);
+    return compile();
+}
+
+bool Shader::compile()
+{
+    const char* c_source = m_source.data();
     glShaderSource(m_shaderId, 1, &c_source, nullptr);
     glCompileShader(m_shaderId);
 
@@ -71,7 +77,19 @@ bool Shader::compileSourceCode(const std::string_view sourceCode) const
     return (res == GL_TRUE);
 }
 
-bool Shader::compileSourceFile(const std::string_view sourceFile) const
+void Shader::restore(const uint32_t generation)
+{
+    if (m_glGeneration >= generation)
+        return;
+
+    // (the old name means nothing in the new context)
+    m_glGeneration = generation;
+    m_shaderId = glCreateShader(static_cast<GLenum>(m_shaderType));
+    if (!m_source.empty() && !compile())
+        g_logger.error("Failed to compile shader again: {}", log());
+}
+
+bool Shader::compileSourceFile(const std::string_view sourceFile)
 {
     try {
         const auto& sourceCode = g_resources.readFileContents(sourceFile.data());

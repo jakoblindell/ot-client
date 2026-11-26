@@ -86,4 +86,6 @@ private:
     LightData m_lightData;
     std::array<std::vector<uint8_t>, 2> m_pixels;
     std::atomic_bool m_updatePixel{ false };
+    // the texture the pixels went into last (a new one in a new GL context)
+    uint32_t m_uploadedTextureId{ 0 };
 };

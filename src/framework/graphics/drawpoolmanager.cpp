@@ -27,6 +27,8 @@
 #include "textureatlas.h"
 #include <framework/core/configmanager.h>
 
+#include <set>
+
 thread_local static uint8_t CURRENT_POOL = static_cast<uint8_t>(DrawPoolType::LAST);
 
 void resetSelectedPool() {
@@ -266,6 +268,39 @@ void DrawPoolManager::drawPool(const DrawPoolType type) {
         pool->m_framebuffer->draw();
         if (pool->m_afterDraw) pool->m_afterDraw();
     }
+}
+
+void DrawPoolManager::forgetDrawings()
+{
+    for (auto* pool : m_pools) {
+        {
+            SpinLock::Guard guard(pool->m_threadLock);
+            for (auto& objs : pool->m_objectsDraw)
+                objs.clear();
+            pool->m_shouldRepaint.store(false, std::memory_order_relaxed);
+        }
+        for (auto& objs : pool->m_objects)
+            objs.clear();
+        pool->m_objectsFlushed.clear();
+        pool->repaint();
+    }
+}
+
+void DrawPoolManager::restoreGL()
+{
+    std::set<TextureAtlas*> atlases;
+    for (auto* pool : m_pools) {
+        if (pool->m_framebuffer)
+            pool->m_framebuffer->restore();
+        for (const auto& framebuffer : pool->m_temporaryFramebuffers)
+            framebuffer->restore();
+        if (pool->m_atlas)
+            atlases.insert(pool->m_atlas.get());
+    }
+
+    // (shared by pools)
+    for (auto* atlas : atlases)
+        atlas->reset();
 }
 
 void DrawPoolManager::removeTextureFromAtlas(uint32_t id, bool smooth) {

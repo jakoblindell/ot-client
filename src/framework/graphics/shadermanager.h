@@ -45,6 +45,8 @@ public:
     void init();
     void terminate();
     void clear();
+    // the programs made again in a new GL context (ot-client#142)
+    void restore(uint32_t generation) const;
 
     // TODO: Move these setup methods to a ClientShaderManager
     void setupMapShader(std::string_view name);

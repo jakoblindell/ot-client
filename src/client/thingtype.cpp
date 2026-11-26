@@ -855,6 +855,11 @@ const TexturePtr& ThingType::getTexture(const int animationPhase)
     return m_textureNull;
 }
 
+bool ThingType::hasLostTexture() const
+{
+    return std::ranges::any_of(m_textureData, [](const auto& data) { return data.source && data.source->isLost(); });
+}
+
 void ThingType::loadTexture(const int animationPhase)
 {
     auto& textureData = m_textureData[animationPhase];
@@ -979,6 +984,8 @@ void ThingType::loadTexture(const int animationPhase)
 
     textureData.source = std::make_shared<Texture>(fullImage, true, false);
     textureData.source->allowAtlasCache();
+    // (made again from the sprites when lost, keeps no image)
+    textureData.source->setOwnerRestores();
 }
 
 Size ThingType::getBestTextureDimension(int w, int h, const int count)

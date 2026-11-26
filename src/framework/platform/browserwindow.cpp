@@ -26,6 +26,7 @@
 #include <framework/core/application.h>
 #include "browserwindow.h"
 #include <framework/core/clock.h>
+#include <framework/graphics/graphics.h>
 #include <framework/core/eventdispatcher.h>
 #include <framework/core/resourcemanager.h>
 #include <framework/util/crypt.h>
@@ -219,6 +220,49 @@ void BrowserWindow::internalInitGL() {
     EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context("#canvas", &attr);
     emscripten_webgl_make_context_current(ctx);
 
+    // The browser can lose the GL context (iOS Safari, Android Chrome: a
+    // page in the background) and give it back empty (ot-client#142).
+    // Cancelling "lost" lets it come back. The canvas is this thread's (an
+    // OffscreenCanvas), and so are its events. Here Emscripten's own state
+    // for the context is set up again; the game's graphics in poll().
+    // clang-format off
+    EM_ASM({
+        var context = GL.currentContext;
+        var canvas = context && context.GLctx && context.GLctx.canvas;
+        if (!canvas || !canvas.addEventListener) {
+            console.warn("No GL context events on this thread: a lost context is not restored");
+            return;
+        }
+        var events = $0 >> 2;
+        canvas.addEventListener("webglcontextlost", function (ev) {
+            ev.preventDefault();
+            Atomics.or(HEAP32, events, 1);
+        });
+        canvas.addEventListener("webglcontextrestored", function () {
+            var gl = context.GLctx;
+            // the old context's objects are gone: their names name nothing
+            [GL.buffers, GL.programs, GL.framebuffers, GL.renderbuffers, GL.textures, GL.shaders,
+             GL.vaos, GL.queries, GL.samplers, GL.transformFeedbacks, GL.syncs].forEach(function (table) {
+                if (table) table.fill(null);
+            });
+            // enable the extensions again, new buffers for client-side vertex arrays,
+            // and the new context's default state
+            context.initExtensionsDone = false;
+            GL.initExtensions(context);
+            GL.generateTempBuffers(false, context);
+            context.clientBuffers.forEach(function (buffer) {
+                buffer.enabled = false;
+                buffer.clientside = false;
+            });
+            gl.currentArrayBufferBinding = gl.currentElementArrayBufferBinding = 0;
+            gl.currentPixelPackBufferBinding = gl.currentPixelUnpackBufferBinding = 0;
+            GL.unpackAlignment = 4;
+            GL.unpackRowLength = 0;
+            Atomics.or(HEAP32, events, 2);
+        });
+    }, &m_glContextEvents);
+    // clang-format on
+
 
     glViewport(0, 0, int(w), int(h));
 }
@@ -230,6 +274,14 @@ void BrowserWindow::poll() {
     if (m_pixelRatioChanged.exchange(false)) {
         m_maxPixelRatio = m_wantedMaxPixelRatio;
         applyCanvasSize(true);
+    }
+
+    // (both can come between two frames)
+    if (const int32_t events = m_glContextEvents.exchange(0)) {
+        if (events & GL_CONTEXT_LOST)
+            g_graphics.contextLost();
+        if (events & GL_CONTEXT_RESTORED)
+            g_graphics.contextRestored();
     }
 
 

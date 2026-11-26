@@ -74,6 +74,9 @@ public:
     void setProjectionMatrix(const Matrix3& matrix) { if (m_projectionMatrix != matrix) m_projectionMatrix = matrix; }
 
     void resetState();
+    // In a new GL context (ot-client#142): its programs made again, and the
+    // GL state set again from what the painter has
+    void restore(uint32_t generation);
     void resetBlendEquation() { setBlendEquation(BlendEquation::ADD); }
     void resetTexture() { setTexture(0, 0); }
     void resetAlphaWriting() { setAlphaWriting(false); }

@@ -47,6 +47,10 @@ public:
     static void release();
     std::string log() const;
 
+    // Made again in a new GL context (ot-client#142): a new program from the
+    // same shaders, linked, with its uniforms found again
+    void restore(uint32_t generation);
+
     static void disableAttributeArray(const int location) { glDisableVertexAttribArray(location); }
     static void enableAttributeArray(const int location) { glEnableVertexAttribArray(location); }
     void disableAttributeArray(const char* name) const
@@ -117,4 +121,7 @@ private:
     static uint32_t m_currentProgram;
     ShaderList m_shaders;
     std::array<int, MAX_UNIFORM_LOCATIONS> m_uniformLocations{ };
+    // the names bound to the uniform locations, to find them again
+    std::array<std::string, MAX_UNIFORM_LOCATIONS> m_uniformNames;
+    uint32_t m_glGeneration{ 0 };
 };
