@@ -4,12 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       update_baselines:
-        description: "UI screenshots: save this run's images as the new baseline (commits to the branch)"
+        description: "UI screenshots: save this run's images as the new baseline (commits to the branch; web-client-792 does this by itself after every push)"
         type: boolean
         default: false
   push:
     branches:
       - web-client-792
+    # (the baselines' own commit; it is pushed with the workflow's token,
+    # which starts no workflow anyway)
+    paths-ignore:
+      - "tools/ui-gallery/baseline/**"
   # (built to test a change before it is merged; only pushes publish)
   pull_request:
     branches:
@@ -74,9 +78,13 @@ jobs:
           retention-days: 14
 
   # UI screenshot tests (ot-client#70): the gallery pages on phones, a tablet
-  # and desktop, compared with tools/ui-gallery/baseline. The report is an
-  # artifact; changed pages fail the check. An intended change: run this
-  # workflow on the branch with "update_baselines".
+  # and desktop, compared with tools/ui-gallery/baseline. On a pull request
+  # the baseline is the base branch's (pull requests carry no baseline
+  # images); changed pages are listed in the job summary and the report
+  # artifact, and do not fail the check. It fails on a page that fails or is
+  # missing, and on a doesn't-fit finding the baseline doesn't have
+  # (baseline/doesnt-fit.txt). After a push to web-client-792 the run saves
+  # its images and findings as the new baseline and commits them there.
   ui-gallery:
     name: UI screenshots
     needs: build-browser
@@ -88,6 +96,25 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      # Compared with the base branch's baseline, whatever the pull request
+      # has in baseline/ (a changed image is reported, not committed)
+      - name: Use the base branch's baseline
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.base_ref }}
+        run: |
+          dir=tools/ui-gallery/baseline
+          git fetch --no-tags --depth=1 origin "$BASE"
+          if [ -n "$(git diff --name-only FETCH_HEAD HEAD -- "$dir")" ]; then
+            echo "::warning title=UI gallery::This pull request changes $dir. Baselines are made on $BASE after the merge; drop these files from the pull request (they are not used here and conflict with other pull requests)."
+          fi
+          seed="$RUNNER_TEMP/doesnt-fit.txt"
+          cp "$dir/doesnt-fit.txt" "$seed" 2>/dev/null || true
+          rm -rf "$dir"
+          git checkout FETCH_HEAD -- "$dir"
+          # (until $BASE has a list of known findings: the pull request's)
+          if [ ! -f "$dir/doesnt-fit.txt" ] && [ -f "$seed" ]; then cp "$seed" "$dir/doesnt-fit.txt"; fi
 
       - name: Download browser artifact
         uses: actions/download-artifact@v5
@@ -106,13 +133,20 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Take and compare screenshots
+        id: shots
         working-directory: tools/ui-gallery
+        env:
+          UPDATE: ${{ github.event_name == 'push' || inputs.update_baselines }}
         run: |
-          if [ "${{ inputs.update_baselines }}" = "true" ]; then
+          if [ "$UPDATE" = "true" ]; then
             node gallery.js --bundle ../../build-emscripten-web --out ../../ui-gallery --update
           else
             node gallery.js --bundle ../../build-emscripten-web --out ../../ui-gallery
           fi
+
+      - name: Write the job summary
+        if: always()
+        run: cat ui-gallery/summary.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
       - name: Upload the report
         if: always()
@@ -122,13 +156,26 @@ jobs:
           path: ui-gallery
           retention-days: 14
 
+      # (also when a page failed: the others are saved, the failed one keeps
+      # its old image). Pushed with the workflow's token, so the commit starts
+      # no workflow: no new run, no new pre-release.
       - name: Commit the new baselines
-        if: inputs.update_baselines
+        if: always() && (steps.shots.outcome == 'success' || steps.shots.outcome == 'failure') && (github.event_name == 'push' || inputs.update_baselines)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/ui-gallery/baseline
-          git commit -m "UI gallery: new baseline images" || exit 0
+          git add -A tools/ui-gallery/baseline
+          if git diff --cached --quiet; then
+            echo "The baseline did not change"
+            exit 0
+          fi
+          git commit -q -m "UI gallery: new baseline images" -m "From the Web Build run of ${GITHUB_SHA::7}: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # (a newer push's run saves its own baseline: this one is stale)
+          head="$(git ls-remote origin "refs/heads/${GITHUB_REF_NAME}" | cut -f1)"
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "::notice title=UI gallery::${GITHUB_REF_NAME} moved on to ${head::7}; its own run saves the baseline"
+            exit 0
+          fi
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
   publish:
