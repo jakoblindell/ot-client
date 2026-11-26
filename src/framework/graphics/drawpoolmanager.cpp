@@ -282,6 +282,7 @@ void DrawPoolManager::forgetDrawings()
         for (auto& objs : pool->m_objects)
             objs.clear();
         pool->m_objectsFlushed.clear();
+        pool->m_hashCtrl.forgetLast();
         pool->repaint();
     }
 }
