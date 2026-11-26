@@ -12,7 +12,7 @@ local root
 local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
-    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard' }
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'messages' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -416,6 +416,49 @@ PAGES['house-list'] = function()
     textWindows().onGameEditList(3, 1, 'Mira\nToren\nLune\nKasimir\nOld Bess')
 end
 PAGES['house-list-keyboard'] = PAGES['house-list']
+
+-- On-screen messages (ot-client#173): game_textmessage's boxes over two
+-- busy pictures standing in for the game view (the gallery has no map
+-- sprites): a long look message with a status message, and loot with a level
+-- advance and a warning. The boxes stay (no timeout) for the screenshot.
+local BLACKBOARD = 'You see a blackboard.\nYou read: The room of the Oracle\n\nIf you are wise enough you may ' ..
+    'leave this isle and explore the great continent of Tibia. Once you are at level eight you may talk to the ' ..
+    'Oracle who will send you to the continent.'
+
+PAGES.messages = function(page)
+    local messages = modules.game_textmessage
+    if not (messages and messages.createMessagesPanel) then
+        return
+    end
+    local settings = messages.MessageSettings
+    -- (the page is not laid out yet: sizes from the screen, less the page's
+    -- padding and the column's spacing)
+    local screen = g_ui.getRootWidget():getSize()
+    local width = math.min(480, screen.width - 16)
+    local height = math.min(240, math.floor((screen.height - 16 - 10) / 2))
+    local column = widget('GalleryColumn', page, function(w) w:setWidth(width) end)
+    local shown = {
+        { { settings.centerGreen, BLACKBOARD }, { settings.status, 'Sorry, not possible.' } },
+        { { settings.centerGreen, 'Loot of a rat: 3 gold coins, cheese, a mace.' },
+          { settings.centerWhite, 'You advanced from Level 7 to Level 8.' },
+          { settings.centerRed, 'Warning! The murder of Bob was not justified.' } },
+    }
+    for _, list in ipairs(shown) do
+        local view = widget('GalleryGameView', column, function(w)
+            w:setSize({ width = width, height = height })
+            -- a busy part of the login picture, shrunk by half
+            w:setImageClip({ x = 960 - width, y = 420 - height, width = width * 2, height = height * 2 })
+        end)
+        local panel = messages.createMessagesPanel(view)
+        panel:fill('parent')
+        for _, entry in ipairs(list) do
+            local box = messages.showOnScreen(panel, entry[1], entry[2])
+            if box then
+                removeEvent(box.hideEvent)
+            end
+        end
+    end
+end
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
 -- scrolled list). nil when none of it shows.

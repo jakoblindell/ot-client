@@ -1,13 +1,22 @@
 TextMessageLabel < UILabel
-  font: verdana-11px-rounded
+  font: $ot-font-text
   text-align: center
   text-wrap: true
   text-auto-resize: true
+
+// A message on the game view: its text on a see-through box. textmessage.lua
+// wraps the text and sizes the box to it (the label stays as wide as the
+// wrap, its lines centred in the box)
+TextMessageBox < OtTextBackdrop
   margin-bottom: 2
   visible: false
 
+  TextMessageLabel
+    id: text
+    anchors.centerIn: parent
+
+// (anchored to the game view in textmessage.lua)
 Panel
-  anchors.fill: gameMapPanel
   focusable: false
 
   Panel
@@ -15,27 +24,30 @@ Panel
     layout:
       type: verticalBox
       fit-children: true
-    width: 303
+    width: 300
     anchors.centerIn: parent
 
-    TextMessageLabel
+    TextMessageBox
       id: highCenterLabel
-    TextMessageLabel
+    TextMessageBox
       id: middleCenterLabel
-    TextMessageLabel
+    TextMessageBox
       id: lowCenterLabel
 
-  TextMessageLabel
-    id: privateLabel
+  // private messages: centred between the top and the centre messages
+  Panel
+    id: privateArea
     anchors.top: parent.top
     anchors.bottom: centerTextMessagePanel.top
-    anchors.horizontalCenter: parent.horizontalCenter
-    text-auto-resize: false
-    width: 290
+    anchors.left: parent.left
+    anchors.right: parent.right
 
-  TextMessageLabel
+    TextMessageBox
+      id: privateLabel
+      anchors.centerIn: parent
+
+  TextMessageBox
     id: statusLabel
     anchors.bottom: parent.bottom
     anchors.horizontalCenter: parent.horizontalCenter
     margin-bottom: 7
-    width: 300

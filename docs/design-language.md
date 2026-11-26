@@ -33,6 +33,7 @@ Classic Tibia materials, nothing new to draw:
 | `OtHeading` | A section heading: gold capitals over a line (set `text`) |
 | `OtLabel` | A setting's or field's name (11 px bold) |
 | `OtText` / `OtHint` | Body text / quieter grey help text (wrap) |
+| `OtTextBackdrop` | A see-through dark box behind text shown over the game view (on-screen messages); its module sizes it to the text |
 | `OtButton` | Any button, 40 px high; `checked`/`on` = selected |
 | `OtButtonPrimary` | The main action of a screen (Confirm, Buy, Done): gold edge, gold text |
 | `OtButtonDanger` | Logout, Delete, Reset: red |
@@ -47,7 +48,9 @@ Classic Tibia materials, nothing new to draw:
 Tokens (`&ot-…` in the same file): fonts `$ot-font-title`, `$ot-font-label`,
 `$ot-font-text`, `$ot-font-small`; colours `$ot-text`, `$ot-text-strong`,
 `$ot-text-muted`, `$ot-gold`, `$ot-positive` (green: you can afford it),
-`$ot-negative` (red: you cannot), `$ot-backdrop`; paper `$ot-paper`,
+`$ot-negative` (red: you cannot), `$ot-backdrop`, `$ot-text-backdrop` (55%
+black behind text over the game view: the text reads on bright floors and the
+game still shows through); paper `$ot-paper`,
 `$ot-paper-text`, `$ot-paper-selection` and its font `$ot-font-paper` (a TTF
 file name) at `$ot-font-paper-size`.
 
@@ -87,4 +90,5 @@ Built with ot-ui: the touch hub and settings, the hotbar sheet and hotbar
 settings, the layout editor's bars and frames (`mods/client_mobile`), the
 controller bind window (`mods/client_gamepad`), and the NPC dialog's
 buttons, offers and travel rows (`mods/client_npcdialog`; the dialog keeps
-the classic movable window).
+the classic movable window). The on-screen messages over the game view
+(`modules/game_textmessage`) sit on `OtTextBackdrop`, on touch and desktop.
