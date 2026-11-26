@@ -6,6 +6,11 @@
 -- the middle of a game.
 
 local CHECK_EVERY = 15 * 60 * 1000
+-- After a game ends the page reloads once the player has been out of the
+-- game this long (the other modules have saved their settings by then, and a
+-- quick pick of another character starts a login first)
+local OUT_FOR = 1500
+local WATCH_EVERY = 250
 local LAST_BUILD_SETTING = 'clientUpdatesLastBuild'
 local BUTTON_ID = 'clientUpdateButton'
 
@@ -13,7 +18,8 @@ local ownBuild -- {build = '2026-10-28-0927', commit = '46aee97'} or nil: a loca
 local pending -- the newer build's version.json
 local notified -- the build the toast was shown for
 local checkEvent, toast, toastEvent, sheet, button
-local applying = false
+local exitEvent -- watches for the player to be out of the game
+local outSince -- when the player was first seen out of the game
 local justUpdated = false
 
 
@@ -66,7 +72,6 @@ local function applyNow()
     closeSheet()
     if g_game.isOnline() then
         -- the reload follows the logout (onGameEnd); a fight keeps you in
-        applying = true
         g_game.safeLogout()
     else
         reload()
@@ -149,7 +154,51 @@ function check(done)
     end)
 end
 
+-- Out of the game: at the login screen or the character list, with no login
+-- in flight and no reconnect going on. A character switch, the OK after a
+-- death, a waiting list or a reconnect are not out.
+local function isOut()
+    if g_game.isOnline() or g_game.isLogging() then
+        return false
+    end
+    local reconnect = modules.client_reconnect
+    if reconnect and reconnect.isReconnecting and reconnect.isReconnecting() then
+        return false
+    end
+    if CharacterList and CharacterList.isVisible() then
+        return true
+    end
+    return EnterGame ~= nil and EnterGame.isVisible ~= nil and EnterGame.isVisible()
+end
+
+local function stopWatching()
+    if exitEvent then
+        removeEvent(exitEvent)
+        exitEvent = nil
+    end
+    outSince = nil
+end
+
+local function watch()
+    if not pending then
+        stopWatching()
+        return
+    end
+    if not isOut() then
+        outSince = nil
+        return
+    end
+    local now = g_clock.millis()
+    outSince = outSince or now
+    if now - outSince >= OUT_FOR then
+        stopWatching()
+        reload()
+    end
+end
+
 local function onGameStart()
+    -- back in a game: the update waits for the next logout
+    stopWatching()
     if justUpdated then
         justUpdated = false
         showToast(tr('Updated to build %s.', ownBuild.build))
@@ -168,16 +217,13 @@ local function onGameEnd()
         checkEvent = nil
     end
     closeSheet()
-    if not pending then
+    if not pending or exitEvent then
         return
     end
-    -- a dropped connection that reconnects is not a logout
-    local reconnect = modules.client_reconnect
-    if not applying and reconnect and reconnect.willReconnect and reconnect.willReconnect() then
-        return
-    end
-    -- (after the other modules have saved their settings for this game)
-    scheduleEvent(reload, 1500)
+    -- (it keeps watching until the player is out or the next game starts, so
+    -- a login that fails still ends in the reload)
+    outSince = nil
+    exitEvent = cycleEvent(watch, WATCH_EVERY)
 end
 
 function getBuild()
@@ -234,6 +280,7 @@ function terminate()
         removeEvent(checkEvent)
         checkEvent = nil
     end
+    stopWatching()
     if toastEvent then
         removeEvent(toastEvent)
         toastEvent = nil
