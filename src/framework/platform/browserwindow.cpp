@@ -373,9 +373,16 @@ extern "C" {
 }
 
 void BrowserWindow::handleMouseCallback(int eventType, const EmscriptenMouseEvent* mouseEvent) {
-    if (!m_usingTouch && mouseEvent->screenX != 0 && mouseEvent->screenY != 0 && mouseEvent->clientX != 0 && mouseEvent->clientY != 0 && mouseEvent->targetX != 0 && mouseEvent->targetY != 0) {
+    // Every mouse event here is a real mouse, trackpad or pen: the mouse
+    // events a browser makes up from a touch are dropped in shell.html, per
+    // event, so touch and mouse can take turns in one session (ot-client#143)
+    if (mouseEvent->screenX != 0 && mouseEvent->screenY != 0 && mouseEvent->clientX != 0 && mouseEvent->clientY != 0 && mouseEvent->targetX != 0 && mouseEvent->targetY != 0) {
         int button = mouseEvent->button;
-        g_dispatcher.addEvent([this, eventType, button] {
+        const Point pos(mouseEvent->clientX * m_pixelRatio / m_displayDensity, mouseEvent->clientY * m_pixelRatio / m_displayDensity);
+        g_dispatcher.addEvent([this, eventType, button, pos] {
+            // press where the mouse is, not where the last finger was
+            if (pos != m_inputEvent.mousePos)
+                sendMouseEvent(Fw::MouseMoveInputEvent, Fw::MouseNoButton, pos);
             m_inputEvent.reset();
             m_inputEvent.type = (eventType == EMSCRIPTEN_EVENT_MOUSEDOWN) ? Fw::MousePressInputEvent : Fw::MouseReleaseInputEvent;
             switch (button) {
@@ -440,8 +447,6 @@ namespace {
 }
 
 void BrowserWindow::handleTouchCallback(int eventType, const EmscriptenTouchEvent* event) {
-    m_usingTouch = true;
-
     // The event is only valid during this callback: copy the fingers that
     // changed (started, moved or ended) before handing them to the main loop
     std::vector<std::pair<int64_t, Point>> touches;
@@ -478,9 +483,9 @@ void BrowserWindow::touchStart(const int64_t id, const Point& pos) {
         return;
 
     m_mouseTouchId = id;
-    sendTouchMouseEvent(Fw::MouseMoveInputEvent, Fw::MouseNoButton, pos);
+    sendMouseEvent(Fw::MouseMoveInputEvent, Fw::MouseNoButton, pos);
     m_mouseButtonStates |= 1 << Fw::MouseLeftButton;
-    sendTouchMouseEvent(Fw::MousePressInputEvent, Fw::MouseLeftButton, pos);
+    sendMouseEvent(Fw::MousePressInputEvent, Fw::MouseLeftButton, pos);
 }
 
 void BrowserWindow::touchMove(const int64_t id, const Point& pos) {
@@ -495,7 +500,7 @@ void BrowserWindow::touchMove(const int64_t id, const Point& pos) {
     if (touch.onControl)
         g_ui.touchMove(id, pos);
     else if (id == m_mouseTouchId)
-        sendTouchMouseEvent(Fw::MouseMoveInputEvent, Fw::MouseNoButton, pos);
+        sendMouseEvent(Fw::MouseMoveInputEvent, Fw::MouseNoButton, pos);
 }
 
 void BrowserWindow::touchEnd(const int64_t id, const Point& pos, const bool cancelled) {
@@ -515,7 +520,7 @@ void BrowserWindow::touchEnd(const int64_t id, const Point& pos, const bool canc
         return;
 
     m_mouseTouchId = -1;
-    sendTouchMouseEvent(Fw::MouseMoveInputEvent, Fw::MouseNoButton, pos);
+    sendMouseEvent(Fw::MouseMoveInputEvent, Fw::MouseNoButton, pos);
     // Input events are handled on a later dispatcher cycle; keep the button
     // down until the release has been handled, as for the mouse
     g_dispatcher.addEvent([this] { m_mouseButtonStates &= ~(1 << Fw::MouseLeftButton); });
@@ -525,16 +530,16 @@ void BrowserWindow::touchEnd(const int64_t id, const Point& pos, const bool canc
         // the menu instead of also walking or using
         g_ui.cancelMousePress();
         if (longPress) {
-            sendTouchMouseEvent(Fw::MousePressInputEvent, Fw::MouseRightButton, pos);
-            sendTouchMouseEvent(Fw::MouseReleaseInputEvent, Fw::MouseRightButton, pos);
+            sendMouseEvent(Fw::MousePressInputEvent, Fw::MouseRightButton, pos);
+            sendMouseEvent(Fw::MouseReleaseInputEvent, Fw::MouseRightButton, pos);
         }
         return;
     }
 
-    sendTouchMouseEvent(Fw::MouseReleaseInputEvent, Fw::MouseLeftButton, pos);
+    sendMouseEvent(Fw::MouseReleaseInputEvent, Fw::MouseLeftButton, pos);
 }
 
-void BrowserWindow::sendTouchMouseEvent(const Fw::InputEventType type, const Fw::MouseButton button, const Point& pos) {
+void BrowserWindow::sendMouseEvent(const Fw::InputEventType type, const Fw::MouseButton button, const Point& pos) {
     m_inputEvent.reset(type);
     m_inputEvent.mouseButton = button;
     m_inputEvent.mouseMoved = pos - m_inputEvent.mousePos;
