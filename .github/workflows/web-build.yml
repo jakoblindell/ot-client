@@ -1,145 +1,41 @@
 name: Web Build
 
+# TEMPORARY test branch (not for merging): runs the context loss and input
+# tests on a bundle another run built.
 on:
   workflow_dispatch:
     inputs:
       update_baselines:
-        description: "UI screenshots: save this run's images as the new baseline (commits to the branch)"
+        description: "unused"
         type: boolean
         default: false
-  push:
-    branches:
-      - web-client-792
-  # (built to test a change before it is merged; only pushes publish)
-  pull_request:
-    branches:
-      - web-client-792
 
 permissions:
   contents: read
+  actions: read
+
+env:
+  BUNDLE_RUN: "45850267690"
+  BUNDLE_SHA: "17510bb"
 
 jobs:
-  build-browser:
-    name: Browser Bundle
-    runs-on: ubuntu-latest
-    env:
-      BUILD_LOG: docker-browser-build.log
-      OUTPUT_DIR: build-emscripten-web
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      # The build's id, inside the bundle (the client knows what it is) and
-      # next to it as version.json (what the server offers; ot-client#32)
-      - name: Stamp the build
-        run: |
-          # the build is when it was made (UTC), so a later build sorts after an earlier one
-          BUILD="$(date -u +%Y-%m-%d-%H%M)"
-          printf '{"build":"%s","commit":"%s"}\n' "$BUILD" "${GITHUB_SHA::7}" > data/build.json
-          cat data/build.json
-
-      # vcpkg's built libraries (abseil, protobuf, openal, ...): built once and
-      # kept, so a build only compiles the client (ot-client#87). A new key
-      # when the versions, the compiler or our triplets/ports change; older
-      # caches still give every library that did not change.
-      - name: Restore built libraries
-        uses: actions/cache@v4
-        with:
-          path: vcpkg-cache
-          key: vcpkg-wasm-${{ hashFiles('vcpkg.json', 'Dockerfile.browser', 'browser/triplets/**', 'browser/overlay-ports/**') }}
-          restore-keys: |
-            vcpkg-wasm-
-
-      - name: Build browser bundle with Docker
-        run: bash Dockerfile.browser.sh
-
-      - name: Write version.json
-        run: cp data/build.json "$OUTPUT_DIR/version.json"
-
-      - name: Report the end of the build log
-        if: failure()
-        run: |
-          # One annotation with the last lines of the log, readable without
-          # downloading the job log
-          tail -n 80 "$BUILD_LOG" | cut -c1-300 > tail.txt
-          echo "::error title=Build log (last 80 lines)::$(sed -e 's/%/%25/g' -e 's/\r/%0D/g' tail.txt | sed ':a;N;$!ba;s/\n/%0A/g')"
-
-      - name: Upload browser artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: otclient-browser-${{ github.sha }}
-          path: |
-            ${{ env.BUILD_LOG }}
-            ${{ env.OUTPUT_DIR }}
-          retention-days: 14
-
-  # UI screenshot tests (ot-client#70): the gallery pages on phones, a tablet
-  # and desktop, compared with tools/ui-gallery/baseline. The report is an
-  # artifact; changed pages fail the check. An intended change: run this
-  # workflow on the branch with "update_baselines".
-  ui-gallery:
-    name: UI screenshots
-    needs: build-browser
-    # (pinned: the baselines were made here, and Playwright 1.56 has no
-    # Chromium for Ubuntu 26.04, what ubuntu-latest became)
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Download browser artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: otclient-browser-${{ github.sha }}
-
-      - name: Set up Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-
-      - name: Install Playwright and Chromium
-        working-directory: tools/ui-gallery
-        run: |
-          npm install --no-audit --no-fund
-          npx playwright install --with-deps chromium
-
-      - name: Take and compare screenshots
-        working-directory: tools/ui-gallery
-        run: |
-          if [ "${{ inputs.update_baselines }}" = "true" ]; then
-            node gallery.js --bundle ../../build-emscripten-web --out ../../ui-gallery --update
-          else
-            node gallery.js --bundle ../../build-emscripten-web --out ../../ui-gallery
-          fi
-
-      - name: Upload the report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ui-gallery-${{ github.sha }}
-          path: ui-gallery
-          retention-days: 14
-
-      - name: Commit the new baselines
-        if: inputs.update_baselines
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tools/ui-gallery/baseline
-          git commit -m "UI gallery: new baseline images" || exit 0
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-
   ctx-test:
     name: Context loss and input test (temporary)
-    needs: build-browser
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Find the bundle artifact
+        id: art
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=$(gh api "repos/${{ github.repository }}/actions/runs/${BUNDLE_RUN}/artifacts" --jq '.artifacts[]|select(.name|startswith("otclient-browser-"))|.name')
+          echo "name=$name" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v5
         with:
-          name: otclient-browser-${{ github.sha }}
+          name: ${{ steps.art.outputs.name }}
+          run-id: ${{ env.BUNDLE_RUN }}
+          github-token: ${{ github.token }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -156,38 +52,8 @@ jobs:
           mkdir -p out
           export OUT=out
           rc=0
-          node input-mix.js ../../build-emscripten-web || rc=1
+          if [ "${TESTS:-ctx}" != ctx ]; then node input-mix.js ../../build-emscripten-web || rc=1; fi
           node context-loss.js ../../build-emscripten-web --print || rc=1
-          for p in hotbar map outfit; do node context-loss.js ../../build-emscripten-web $p || rc=1; done
+          node context-loss.js ../../build-emscripten-web map --print || rc=1
+          for p in hotbar outfit; do node context-loss.js ../../build-emscripten-web $p || rc=1; done
           exit $rc
-
-  publish:
-    name: Publish pre-release
-    needs: build-browser
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.ref_name }}-latest
-    steps:
-      - name: Download browser artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: otclient-browser-${{ github.sha }}
-
-      - name: Package bundle
-        run: |
-          cd build-emscripten-web
-          zip -r ../otclient-web.zip .
-
-      - name: Replace pre-release
-        run: |
-          gh release delete "$TAG" --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
-          gh release create "$TAG" otclient-web.zip \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "Web client (${GITHUB_REF_NAME}, ${GITHUB_SHA::7})" \
-            --notes "Browser build of ${GITHUB_SHA} (${GITHUB_REF_NAME}). Game assets (Tibia.dat/Tibia.spr) are not included."

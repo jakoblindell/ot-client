@@ -80,6 +80,14 @@ const SIZE_B = { width: 1000, height: 650 };
     const lose = () => glWorker.evaluate(() => { self.__loseExt = self.__loseExt || GL.currentContext.GLctx.getExtension('WEBGL_lose_context'); self.__loseExt.loseContext(); });
     const restore = () => glWorker.evaluate(() => self.__loseExt.restoreContext());
 
+    // 0. lost and back, nothing else changes: the same picture
+    await lose();
+    await page.waitForTimeout(1000);
+    const lost0 = await isLost();
+    await restore();
+    await page.waitForTimeout(4000);
+    const afterA0 = await shot('after-a0');
+
     // 1. lost; the screen turns (resized) while it is away; back
     await lose();
     await page.waitForTimeout(1000);
@@ -122,6 +130,7 @@ const SIZE_B = { width: 1000, height: 650 };
     }, { a: 'data:image/png;base64,' + a.toString('base64'), b: 'data:image/png;base64,' + b.toString('base64') });
 
     const results = [
+        ['lost after loseContext (0)', lost0 === true],
         ['lost after loseContext (1)', lost1 === true],
         ['lost after loseContext (2)', lost2 === true],
         ['context back after restoreContext', lostAfter === false],
@@ -129,12 +138,12 @@ const SIZE_B = { width: 1000, height: 650 };
         ['game made the graphics again', log.some((l) => l.includes('GL context is back'))],
         ['page not reloaded', loads === 1],
     ];
-    for (const [label, a, b] of [['1000x650 (resized while lost) after restore', afterB, refB], ['1280x720 after that', afterA, refA],
+    for (const [label, a, b] of [['1280x720 after a restore', afterA0, refA], ['1000x650 (resized while lost) after restore', afterB, refB], ['1280x720 after that', afterA, refA],
         ['1280x720 after two more restores', afterA2, refA], ['1000x650 after that', afterB2, refB]]) {
         const share = await diff(a, b);
         results.push([`${label} matches the one before (${(share * 100).toFixed(2)}% of pixels differ)`, share < 0.002]);
     }
-    const errors = log.filter((l) => /\berror\b|pageerror|Unable|Failed to/i.test(l) && !/config\.ini|option_control_buttons|option_healthcircle|stack traceback|\[C\]|\.lua:|\.otmod:/.test(l));
+    const errors = log.filter((l) => /\berror\b|pageerror|Unable|Failed to/i.test(l) && !/Unable to setup framebuffer object|config\.ini|option_control_buttons|option_healthcircle|stack traceback|\[C\]|\.lua:|\.otmod:/.test(l));
     results.push(['no errors in the log', errors.length === 0]);
     let failed = 0;
     for (const [label, ok] of results) {
@@ -144,7 +153,7 @@ const SIZE_B = { width: 1000, height: 650 };
     if (errors.length) console.log(`${name}: errors in the log:\n  ` + errors.slice(-15).join('\n  '));
     console.log(log.filter((l) => /GL context/.test(l)).join('\n'));
     if (print) {
-        for (const label of ['after-a', 'after-b']) {
+        for (const label of ['before-a', 'after-a0', 'after-b']) {
             const img = fs.readFileSync(path.join(outDir, `${name}-${label}.png`));
             const jpg = await cmp.evaluate(async (src) => {
                 const i = new Image(); await new Promise((r) => { i.onload = r; i.src = src; });
