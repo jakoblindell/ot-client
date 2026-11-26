@@ -68,7 +68,8 @@ void WebConnection::close()
 
     // Only this socket: the login and game connections, and the HTTP
     // WebSockets, can be open at the same time. Deleting it also removes
-    // its handlers, so none of them runs after this.
+    // its handlers, so none of them runs after this, and what they queued
+    // before is dropped (receive()).
     if (m_websocket > 0) {
         emscripten_websocket_close(m_websocket, 1000, "");
         emscripten_websocket_delete(m_websocket);
@@ -91,19 +92,6 @@ void WebConnection::reportClose()
     close();
     if (callback)
         callback(error);
-}
-
-void WebConnection::onSocketClosed()
-{
-    // the browser reports a failure with an error and then a close event
-    if (m_remoteClosed.exchange(true))
-        return;
-
-    // Once open, read() reports it after the data received before it
-    if (m_connected)
-        return;
-
-    emscripten_dispatch_to_thread(m_pthread, EM_FUNC_SIG_VI, reinterpret_cast<void*>(runOnSocketClosed), nullptr, new std::weak_ptr<LuaObject>(weak_from_this()));
 }
 
 void WebConnection::connect(const std::string_view host, uint16_t port, const std::function<void()>& connectCallback, bool /*gameWorld*/)
@@ -143,46 +131,30 @@ void WebConnection::connect(const std::string_view host, uint16_t port, const st
         return;
     }
 
-    emscripten_websocket_set_onopen_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketOpenEvent* /*event*/, void* userData) -> EM_BOOL {
-        WebConnection* webConnection = static_cast<WebConnection*>(userData);
-        webConnection->m_connected = true;
-
-        if (webConnection->m_connectCallback) {
-            emscripten_dispatch_to_thread(webConnection->m_pthread, EM_FUNC_SIG_VI, reinterpret_cast<void*>(runOnConnectCallback), nullptr, new std::function<void()>(webConnection->m_connectCallback));
-        }
-
-        webConnection->m_connecting = false;
-
+    emscripten_websocket_set_onopen_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketOpenEvent* event, void* userData) -> EM_BOOL {
+        dispatch(reinterpret_cast<void*>(runOnOpen), userData, event->socket);
         return EM_TRUE;
     }));
 
-    emscripten_websocket_set_onerror_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketErrorEvent* /*event*/, void* userData) -> EM_BOOL {
-        static_cast<WebConnection*>(userData)->onSocketClosed();
+    emscripten_websocket_set_onerror_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketErrorEvent* event, void* userData) -> EM_BOOL {
+        dispatch(reinterpret_cast<void*>(runOnSocketClosed), userData, event->socket);
         return EM_TRUE;
     }));
 
-    emscripten_websocket_set_onclose_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketCloseEvent* /*event*/, void* userData) -> EM_BOOL {
+    emscripten_websocket_set_onclose_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketCloseEvent* event, void* userData) -> EM_BOOL {
         // Not closed here: what the server sent right before closing (such
         // as why it ended the session) is still waiting to be read. read()
         // reports the close once the received data runs out.
-        static_cast<WebConnection*>(userData)->onSocketClosed();
+        dispatch(reinterpret_cast<void*>(runOnSocketClosed), userData, event->socket);
         return EM_TRUE;
     }));
 
-    emscripten_websocket_set_onmessage_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketMessageEvent* webSocketEvent, void* userData) -> EM_BOOL {
-        auto numBytes = webSocketEvent->numBytes;
-        if (numBytes == 0)
-            return EM_TRUE;
-        if (webSocketEvent->isText)
+    emscripten_websocket_set_onmessage_callback(m_websocket, this, ([](int /*eventType*/, const EmscriptenWebSocketMessageEvent* event, void* userData) -> EM_BOOL {
+        if (event->numBytes == 0 || event->isText)
             return EM_TRUE;
 
-        uint8_t* const data = webSocketEvent->data;
-        auto webConnection = static_cast<WebConnection*>(userData);
-
-        std::ostream os(&webConnection->m_inputStream);
-        os.write((const char*)data, numBytes);
-        os.flush();
-
+        // the browser frees the data when this returns
+        dispatch(reinterpret_cast<void*>(runOnMessage), userData, event->socket, event->data, event->numBytes);
         return EM_TRUE;
     }));
 }
@@ -265,17 +237,69 @@ void WebConnection::read(const uint16_t size, const RecvCallback& callback, int 
     onRecv(size);
 }
 
-void WebConnection::runOnConnectCallback(std::function<void()>* callback) {
-    const std::unique_ptr<std::function<void()>> owned(callback);
-    if (*owned)
-        (*owned)();
+void WebConnection::dispatch(void* handler, void* userData, const EMSCRIPTEN_WEBSOCKET_T socket, const uint8_t* data, const uint32_t size)
+{
+    // Read the connection before allocating anything: waiting on the
+    // allocator's lock can let this thread run close()'s socket delete, and the
+    // connection may be released after that. Only locals from here on.
+    auto* const webConnection = static_cast<WebConnection*>(userData);
+    const pthread_t thread = webConnection->m_pthread;
+    std::weak_ptr<LuaObject> connection = webConnection->weak_from_this();
+
+    auto* const event = new SocketEvent{ std::move(connection), socket, std::vector<uint8_t>(data, data + size) };
+    emscripten_dispatch_to_thread(thread, EM_FUNC_SIG_VI, handler, nullptr, event);
 }
 
-void WebConnection::runOnSocketClosed(std::weak_ptr<LuaObject>* connection) {
-    const std::unique_ptr<std::weak_ptr<LuaObject>> owned(connection);
-    const auto webConnection = std::static_pointer_cast<WebConnection>(owned->lock());
-    // not if it was closed here meanwhile: its protocol has moved on
-    if (webConnection && (webConnection->m_connected || webConnection->m_connecting))
+WebConnectionPtr WebConnection::receive(const SocketEvent& event)
+{
+    // close() clears the socket: what it sent before that is not for the
+    // protocol any more
+    auto webConnection = std::static_pointer_cast<WebConnection>(event.connection.lock());
+    if (!webConnection || webConnection->m_websocket < 1 || webConnection->m_websocket != event.socket)
+        return nullptr;
+    return webConnection;
+}
+
+void WebConnection::runOnOpen(SocketEvent* event)
+{
+    const std::unique_ptr<SocketEvent> owned(event);
+    const auto webConnection = receive(*owned);
+    if (!webConnection || !webConnection->m_connecting)
+        return;
+
+    webConnection->m_connected = true;
+    webConnection->m_connecting = false;
+
+    // The callback may close or release this connection
+    const std::function<void()> callback = webConnection->m_connectCallback;
+    if (callback)
+        callback();
+}
+
+void WebConnection::runOnMessage(SocketEvent* event)
+{
+    const std::unique_ptr<SocketEvent> owned(event);
+    const auto webConnection = receive(*owned);
+    if (!webConnection)
+        return;
+
+    std::ostream os(&webConnection->m_inputStream);
+    os.write(reinterpret_cast<const char*>(owned->data.data()), owned->data.size());
+    os.flush();
+}
+
+void WebConnection::runOnSocketClosed(SocketEvent* event)
+{
+    const std::unique_ptr<SocketEvent> owned(event);
+    const auto webConnection = receive(*owned);
+    // the browser reports a failure with an error and then a close event
+    if (!webConnection || webConnection->m_remoteClosed)
+        return;
+
+    webConnection->m_remoteClosed = true;
+
+    // Once open, read() reports it after the data received before it
+    if (!webConnection->m_connected)
         webConnection->reportClose();
 }
 
