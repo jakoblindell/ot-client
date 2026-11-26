@@ -22,7 +22,6 @@
 
 #include "protocolhttp.h"
 
-#include "framework/core/asyncdispatcher.h"
 #include "framework/core/eventdispatcher.h"
 #include "framework/util/crypt.h"
 
@@ -30,6 +29,9 @@
 #ifdef __EMSCRIPTEN__
 #include <cstring>
 #include <limits>
+
+#include <emscripten/emscripten.h>
+#include <emscripten/proxying.h>
 #else
 #include <fmt/format.h>
 #include <ixwebsocket/IXNetSystem.h>
@@ -82,6 +84,8 @@ struct Http::FetchContext
     int lastBytes = 0;
     std::vector<std::string> headerStorage;
     std::vector<const char*> headerPointers;
+    emscripten_fetch_attr_t attr{};
+    std::string url;
 };
 
 struct Http::WebSocketContext
@@ -96,7 +100,36 @@ void Http::init()
 {
     if (m_working.load())
         return;
+    if (!startFetchThread())
+        g_logger.error("Http: could not start the fetch thread, requests will fail");
     m_working.store(true);
+}
+
+// The fetch thread only waits in its Web Worker's event loop: it takes the
+// fetches proxied to it and the browser reports back to it there.
+void* Http::fetchThreadMain(void* arg)
+{
+    auto* http = static_cast<Http*>(arg);
+    {
+        std::lock_guard<std::mutex> lock(http->m_fetchThreadMutex);
+        http->m_fetchThreadReady = true;
+    }
+    http->m_fetchThreadCv.notify_all();
+    emscripten_exit_with_live_runtime();
+    return nullptr;
+}
+
+bool Http::startFetchThread()
+{
+    if (m_fetchThreadStarted)
+        return true;
+    if (pthread_create(&m_fetchThread, nullptr, &Http::fetchThreadMain, this) != 0)
+        return false;
+    m_fetchThreadStarted = true;
+    // (proxied work is only taken once the thread runs)
+    std::unique_lock<std::mutex> lock(m_fetchThreadMutex);
+    m_fetchThreadCv.wait(lock, [this] { return m_fetchThreadReady; });
+    return true;
 }
 
 void Http::terminate()
@@ -207,26 +240,36 @@ void Http::onFetchProgress(emscripten_fetch_t* fetch)
     });
 }
 
-// The game runs on a worker thread (PROXY_TO_PTHREAD) that never returns to
-// the browser's event loop, so an asynchronous fetch would never report
-// back. Like the HTTP login, each request is a synchronous fetch on a
-// background thread, and its result goes to the dispatcher as before.
+// The game loop runs on a thread of g_asyncDispatcher that never returns to
+// the browser's event loop, so a fetch started there would never report
+// back; and a fetch that waits on a pool thread takes a slot from the draw
+// tasks each frame waits for. Every fetch is started asynchronously on the
+// fetch thread instead: the browser runs the request, the callbacks come
+// back on that thread, and the result goes to the dispatcher.
 void Http::startFetch(std::unique_ptr<FetchContext> context, emscripten_fetch_attr_t attr, const std::string& url)
 {
-    attr.attributes |= EMSCRIPTEN_FETCH_SYNCHRONOUS;
-    attr.onsuccess = nullptr;
-    attr.onerror = nullptr;
-    attr.onprogress = nullptr;
+    context->attr = attr;
+    context->url = url;
     auto* rawContext = context.release();
-    g_asyncDispatcher->detach_task([this, rawContext, attr, url]() mutable {
-        attr.requestHeaders = rawContext->headerPointers.data();
-        if (!rawContext->body.empty()) {
-            attr.requestData = rawContext->body.data();
-            attr.requestDataSize = rawContext->body.size();
-        }
-        emscripten_fetch_t* fetch = emscripten_fetch(&attr, url.c_str());
-        completeFetch(rawContext, fetch, fetch ? "" : "http_error::queue");
-    });
+    if (!m_fetchThreadStarted ||
+        !emscripten_proxy_async(emscripten_proxy_get_system_queue(), m_fetchThread, &Http::runFetch, rawContext)) {
+        completeFetch(rawContext, nullptr, "http_error::queue");
+    }
+}
+
+// On the fetch thread
+void Http::runFetch(void* arg)
+{
+    auto* context = static_cast<FetchContext*>(arg);
+    auto& attr = context->attr;
+    attr.requestHeaders = context->headerPointers.data();
+    if (!context->body.empty()) {
+        attr.requestData = context->body.data();
+        attr.requestDataSize = context->body.size();
+    }
+    attr.userData = context;
+    if (!emscripten_fetch(&attr, context->url.c_str()))
+        context->http->completeFetch(context, nullptr, "http_error::queue");
 }
 
 void Http::completeFetch(FetchContext* rawContext, emscripten_fetch_t* fetch, std::string error)
