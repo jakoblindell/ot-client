@@ -107,6 +107,8 @@ private:
     // handled in poll()
     enum : int32_t { GL_CONTEXT_LOST = 1, GL_CONTEXT_RESTORED = 2 };
     std::atomic<int32_t> m_glContextEvents{ 0 };
+    // the screen changed size while the context was lost
+    bool m_canvasSizePending = false;
     void applyCanvasSize(bool force);
     std::unordered_map<int64_t, Touch> m_touches;
     // The finger that acts as the mouse (fingers on touch controls do not)
