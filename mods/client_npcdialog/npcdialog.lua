@@ -1,14 +1,18 @@
 -- Tap-to-talk NPC dialog. The server (extended opcode 103, JSON) describes
--- the NPC the player talks to after each answer: what it said, the keywords
--- in it, whether it asked a yes/no question, and its shop and travel offers
--- as this player gets them. Buttons say the words for the player (the NPC's
--- own rules do the trading); after a shop or travel choice the NPC's
--- "Do you want...?" is answered "yes" automatically. Typing still works.
+-- the NPC the player talks to after each answer: what it said, every word it
+-- takes now (the answers to what it said first, then its keywords), whether
+-- it asked a yes/no question, and its shop and travel offers as this player
+-- gets them. Buttons say the words for the player (the NPC's own rules do
+-- the trading); after a shop or travel choice the NPC's "Do you want...?" is
+-- answered "yes" automatically. Typing still works.
+-- A dialog over 8 KB comes in parts that gamelib's
+-- registerExtendedJSONOpcode joins before decoding (ot-server#66).
 
 local NPC_DIALOG_OPCODE = 103
 local TEXT_COLOR = '#e8e8e8'
 local KEYWORD_COLOR = '#e0b84c' -- $ot-gold
 local AUTO_YES_TIMEOUT = 4000
+local WORD_ROWS = 4 -- rows of words in view; more scroll
 local AFFORD_COLOR = '#70d070'
 local SHORT_COLOR = '#e05050'
 -- Buy without asking when the goods weigh more than the free capacity
@@ -80,7 +84,8 @@ local function fitWindow()
 end
 
 -- The talk view's buttons, as wide as their words, packed into centred rows
--- (ot-client#51). entries: { text, onClick, on (gold edge), keyword (gold text) }
+-- (ot-client#51). entries: { text, onClick, on (gold edge), keyword (gold text) }.
+-- Returns the number of rows.
 local function layoutButtons(parent, entries)
     parent:destroyChildren()
     local room = window:getWidth() - window:getPaddingLeft() - window:getPaddingRight()
@@ -117,6 +122,7 @@ local function layoutButtons(parent, entries)
             x = x + button:getWidth() + spacing
         end
     end
+    return #rows
 end
 
 local CONTRAST_SETTING = 'client_mobile_hubContrast' -- the hub's contrast (client_mobile)
@@ -243,8 +249,11 @@ local function confirm()
     if view == 'trade' then
         local amount = offerAmount()
         if amount > 1 then
-            -- the NPC's amount rules: "5 torch", "sell 5 rope"
-            if tradeTab == 'sell' then
+            -- the NPC's amount rules: "5 torch", "sell 5 rope", or how the
+            -- server says this NPC takes them ("5 throwing kni")
+            if selected.amountWords then
+                words = (selected.amountWords:gsub('{n}', tostring(amount)))
+            elseif tradeTab == 'sell' then
                 words = 'sell ' .. amount .. ' ' .. words:gsub('^sell ', '')
             else
                 words = amount .. ' ' .. words
@@ -309,7 +318,8 @@ render = function()
     answer:setColoredText(coloredAnswer(dialog.text or '', dialog.keywords or {}))
 
     local buttons = window:recursiveGetChildById('buttons')
-    local entries = {}
+    local words = window:recursiveGetChildById('words')
+    local entries, wordEntries = {}, {}
     if view == 'talk' then
         if dialog.question then
             table.insert(entries, { text = tr('Yes'), onClick = function() say('yes') end, on = true })
@@ -324,7 +334,7 @@ render = function()
             local covered = (hasShop and (word == 'trade' or word == 'offer' or word == 'offers'))
                 or (hasTravel and (word == 'travel' or word == 'passage'))
             if not covered then
-                table.insert(entries, { text = keyword, onClick = function() say(keyword) end, keyword = true })
+                table.insert(wordEntries, { text = keyword, onClick = function() say(keyword) end, keyword = true })
             end
         end
         if hasShop then
@@ -340,6 +350,11 @@ render = function()
     end
     layoutButtons(buttons, entries)
     buttons:setVisible(#entries > 0)
+    local rows = layoutButtons(words, wordEntries)
+    local shown = math.min(rows, WORD_ROWS)
+    words:setHeight(shown > 0 and shown * 40 + (shown - 1) * 6 or 0)
+    words:setVisible(rows > 0)
+    window:recursiveGetChildById('wordsScroll'):setValue(0)
 
     window:recursiveGetChildById('trade'):setVisible(view == 'trade')
     window:recursiveGetChildById('travel'):setVisible(view == 'travel')
@@ -358,9 +373,8 @@ render = function()
     fitWindow()
 end
 
-local function onDialog(protocol, opcode, buffer)
-    local ok, data = pcall(json.decode, buffer)
-    if not ok or type(data) ~= 'table' then
+local function onDialog(protocol, opcode, data)
+    if type(data) ~= 'table' then
         return
     end
     if data.close then
@@ -467,12 +481,12 @@ function init()
         end
     end
 
-    ProtocolGame.registerExtendedOpcode(NPC_DIALOG_OPCODE, onDialog)
+    ProtocolGame.registerExtendedJSONOpcode(NPC_DIALOG_OPCODE, onDialog)
     connect(g_game, { onGameEnd = close })
 end
 
 function terminate()
-    ProtocolGame.unregisterExtendedOpcode(NPC_DIALOG_OPCODE)
+    ProtocolGame.unregisterExtendedJSONOpcode(NPC_DIALOG_OPCODE)
     disconnect(g_game, { onGameEnd = close })
     if window then
         window:destroy()
