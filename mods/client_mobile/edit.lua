@@ -135,21 +135,26 @@ local function bottomLimit()
     return r.y + r.height
 end
 
--- The room a piece needs above its widget: P and the pencil ride on top of
--- the hotbar (mobile.lua anchors them there), so they count as part of it
-local function topExtra(key)
+-- The room a piece needs above and left of its widget: P and the pencil
+-- ride on the hotbar (mobile.lua anchors them there), so they count as part
+-- of it: in a row on top of it, or in a column on its left (portrait,
+-- ot-client#172). Returns top, left.
+local function extraRoom(key)
     local row = key == 'grid' and getHotbarPresetRow and getHotbarPresetRow()
-    if row and not row:isDestroyed() then
-        return row:getHeight() + row:getMarginBottom()
+    if not row or row:isDestroyed() then
+        return 0, 0
     end
-    return 0
+    if row.besideHotbar then
+        return 0, row:getWidth() + row:getMarginRight()
+    end
+    return row:getHeight() + row:getMarginBottom(), 0
 end
 
 -- The rect a piece takes on the screen (the hotbar with P and the pencil)
 local function pieceRect(key, widget)
     local rect = widget:getRect()
-    local extra = topExtra(key)
-    return { x = rect.x, y = rect.y - extra, width = rect.width, height = rect.height + extra }
+    local top, left = extraRoom(key)
+    return { x = rect.x - left, y = rect.y - top, width = rect.width + left, height = rect.height + top }
 end
 
 -- The health and mana bars: not a piece, and never covered by one
@@ -162,8 +167,9 @@ end
 -- off the health and mana bars (moved the shortest way past them)
 local function clampToScreen(key, widget, x, y)
     local r = root():getRect()
-    local w, h, extra = widget:getWidth(), widget:getHeight(), topExtra(key)
-    local left, right = r.x, r.x + r.width - w
+    local w, h = widget:getWidth(), widget:getHeight()
+    local extra, extraLeft = extraRoom(key)
+    local left, right = r.x + extraLeft, r.x + r.width - w
     local top, bottom = r.y + extra, bottomLimit() - h
     x = math.max(left, math.min(math.floor(x), right))
     y = math.max(top, math.min(math.floor(y), bottom))
@@ -172,13 +178,13 @@ local function clampToScreen(key, widget, x, y)
         return x, y
     end
     local b = stats:getRect()
-    if x + w <= b.x or x >= b.x + b.width or y + h <= b.y or y - extra >= b.y + b.height then
+    if x + w <= b.x or x - extraLeft >= b.x + b.width or y + h <= b.y or y - extra >= b.y + b.height then
         return x, y
     end
     local best, bestDistance
     for _, spot in ipairs({
         { x = x, y = b.y - h }, { x = x, y = b.y + b.height + extra },
-        { x = b.x - w, y = y }, { x = b.x + b.width, y = y },
+        { x = b.x - w, y = y }, { x = b.x + b.width + extraLeft, y = y },
     }) do
         if spot.x >= left and spot.x <= right and spot.y >= top and spot.y <= bottom then
             local distance = math.abs(spot.x - x) + math.abs(spot.y - y)
@@ -361,6 +367,10 @@ local function storePiece(piece, widget)
     if piece.resize then
         entry.w = widget:getWidth() / r.width
     end
+    -- (the hotbar keeps P and the pencil the way they were when placed)
+    if piece.key == 'grid' and isHotbarColumn and isHotbarColumn() then
+        entry.col = true
+    end
     savePiece(piece.key, entry)
 end
 
@@ -529,9 +539,9 @@ local function createFrame(piece, widget)
     frame.onDragMove = function(self, mousePos)
         local current = getMovableWidgets()[piece.key] or widget
         local xs, ys = snapLines(piece.key)
-        local extra = topExtra(piece.key)
-        local x = snap(mousePos.x - self.grab.x, current:getWidth(), xs)
-        -- (the hotbar snaps with P and the pencil on top of it)
+        local extra, extraLeft = extraRoom(piece.key)
+        -- (the hotbar snaps with P and the pencil on top of it or beside it)
+        local x = snap(mousePos.x - self.grab.x - extraLeft, current:getWidth() + extraLeft, xs) + extraLeft
         local y = snap(mousePos.y - self.grab.y - extra, current:getHeight() + extra, ys) + extra
         moveTo(piece.key, current, x, y)
         placeFrame(self, current)
