@@ -5,8 +5,7 @@ TextMessageLabel < UILabel
   text-auto-resize: true
 
 // A message on the game view: its text on a see-through box. textmessage.lua
-// wraps the text and sizes the box to it (the label stays as wide as the
-// wrap, its lines centred in the box)
+// wraps the text and sizes the label and the box to it
 TextMessageBox < OtTextBackdrop
   margin-bottom: 2
   visible: false

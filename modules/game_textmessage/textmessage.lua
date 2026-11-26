@@ -207,6 +207,7 @@ local BOXES = { 'highCenterLabel', 'middleCenterLabel', 'lowCenterLabel', 'priva
 -- from the sides of the game view: long text (a blackboard) wraps inside it
 local MAX_BOX_WIDTH = 300
 local VIEW_MARGIN = 16
+local WRAP_SLACK = 2
 
 -- The message boxes (textmessage.otui) in parent: the game view's, or the
 -- UI gallery's
@@ -331,8 +332,8 @@ function displayMessage(mode, text)
 end
 
 -- Wraps a box's text at the widest a box may be in this game view, then
--- sizes the box to the widest line plus its padding. The label stays as wide
--- as the wrap (its lines centred on the box), so nothing wraps again.
+-- sizes the label to its widest line and the box to the label plus its
+-- padding.
 function fitBox(panel, box)
     local label = box:getChildById('text')
     local message = box.message
@@ -350,8 +351,13 @@ function fitBox(panel, box)
         label:setText(message.text)
         label:setColor(message.color)
     end
+    -- the label as wide as its widest line (the wrap measures a line with
+    -- the spacing after its last letter, the text size without it: a few
+    -- pixels more, never past the wrap width, so the lines stay as they are)
     local textSize = label:getTextSize()
-    local width = textSize.width + padWidth
+    local labelWidth = math.min(textSize.width + WRAP_SLACK, limit - padWidth)
+    label:setWidth(labelWidth)
+    local width = labelWidth + padWidth
     box:setSize({ width = width, height = textSize.height + box:getPaddingTop() + box:getPaddingBottom() })
     local parent = box:getParent()
     if parent:getId() == 'centerTextMessagePanel' then

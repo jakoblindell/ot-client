@@ -619,21 +619,37 @@ PAGES.messages = function(page)
         return
     end
     local settings = messages.MessageSettings
-    -- (the page is not laid out yet: sizes from the screen, less the page's
-    -- padding and the column's spacing)
+    -- Two stand-in game views in the space the page has (the page is not laid
+    -- out yet: sizes from the screen, less the page's padding): side by side
+    -- on a wide screen, one above the other on a tall one
     local screen = g_ui.getRootWidget():getSize()
-    local width = math.min(480, screen.width - 16)
-    local height = math.min(240, math.floor((screen.height - 16 - 10) / 2))
-    local column = widget('GalleryColumn', page, function(w) w:setWidth(width) end)
+    local roomWidth, roomHeight = screen.width - 16, screen.height - 16
+    local gap = 10
+    local sideBySide = roomWidth > roomHeight
+    local width, height
+    if sideBySide then
+        width = math.min(480, math.floor((roomWidth - gap) / 2))
+        height = math.min(240, roomHeight)
+    else
+        width = math.min(480, roomWidth)
+        height = math.min(240, math.floor((roomHeight - gap) / 2))
+    end
     local shown = {
         { { settings.centerGreen, BLACKBOARD }, { settings.status, 'Sorry, not possible.' } },
         { { settings.centerGreen, 'Loot of a rat: 3 gold coins, cheese, a mace.' },
           { settings.centerWhite, 'You advanced from Level 7 to Level 8.' },
           { settings.centerRed, 'Warning! The murder of Bob was not justified.' } },
     }
-    for _, list in ipairs(shown) do
-        local view = widget('GalleryGameView', column, function(w)
+    for i, list in ipairs(shown) do
+        local view = widget('GalleryGameView', page, function(w)
             w:setSize({ width = width, height = height })
+            w:addAnchor(AnchorTop, 'parent', AnchorTop)
+            w:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+            if sideBySide then
+                w:setMarginLeft((i - 1) * (width + gap))
+            else
+                w:setMarginTop((i - 1) * (height + gap))
+            end
         end)
         local panel = messages.createMessagesPanel(view)
         panel:fill('parent')
