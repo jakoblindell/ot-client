@@ -27,16 +27,55 @@ end
 
 -- Items -----------------------------------------------------------------------
 
--- An item's key: its id, or "id:fluid" for a vial with something in it
+-- An item's key: its id, or "id_fluid" for a vial with something in it.
+-- (No ':' in keys: the settings file is OTML, which splits a line at the
+-- first ':', so "2874:7: 3" would come back as "2874" = "7: 3".)
 function itemKey(item)
     if item:isFluidContainer() and item:getSubType() > 0 then
-        return item:getId() .. ':' .. item:getSubType()
+        return item:getId() .. '_' .. item:getSubType()
     end
     return tostring(item:getId())
 end
 
+-- A saved "key -> number" map, cleaned up: entries saved with the old
+-- "id:fluid" and "name:<name>" keys get their key back ("2874:7: 3" was
+-- read as "2874" = "7: 3"), and anything else that is not a number is
+-- dropped. Returns the clean map and whether anything changed.
+local function cleanNumbers(map)
+    local clean, changed = {}, false
+    if type(map) ~= 'table' then
+        return clean, map ~= nil
+    end
+    for key, value in pairs(map) do
+        key = tostring(key)
+        local number = tonumber(value)
+        if not number and type(value) == 'string' then
+            local rest, tail = value:match('^(.-):%s*(%-?[%d%.]+)$')
+            if rest and rest ~= '' then
+                key, number = key .. ':' .. rest, tonumber(tail)
+            end
+        end
+        local newKey = key:gsub('^(%d+):(%d+)$', '%1_%2'):gsub('^name:', 'name_')
+        if newKey:find(':') then
+            number = nil
+        end
+        if number then
+            clean[newKey] = (clean[newKey] or 0) + number
+        end
+        if not number or newKey ~= key or number ~= value then
+            changed = true
+        end
+    end
+    return clean, changed
+end
+
 local function customPrices()
-    return g_settings.getNode(CUSTOM_PRICES) or {}
+    local all, changed = cleanNumbers(g_settings.getNode(CUSTOM_PRICES))
+    if changed then
+        g_settings.setNode(CUSTOM_PRICES, all)
+        g_settings.save()
+    end
+    return all
 end
 
 function setCustomPrice(key, price)
@@ -54,9 +93,9 @@ local function itemData()
     return modules.client_itemdata
 end
 
--- The id and the fluid of a key ("2874:10")
+-- The id and the fluid of a key ("2874_10")
 local function splitKey(key)
-    local id, fluid = key:match('^(%d+):(%d+)$')
+    local id, fluid = key:match('^(%d+)_(%d+)$')
     if id then
         return tonumber(id), tonumber(fluid)
     end
@@ -91,7 +130,7 @@ FLUID_NAMES = { [1] = 'water', [2] = 'blood', [3] = 'beer', [4] = 'slime', [5] =
     [21] = 'oil', [26] = 'rum', [27] = 'fruit juice', [28] = 'coconut milk' }
 
 function itemName(key)
-    local name = key:match('^name:(.+)')
+    local name = key:match('^name_(.+)')
     if name then
         return name
     end
@@ -113,7 +152,7 @@ local function resolveNames()
     end
     for _, map in ipairs({ session.dropped, session.looted }) do
         for key, count in pairs(map) do
-            local name = key:match('^name:(.+)')
+            local name = key:match('^name_(.+)')
             local id = name and itemData().findByName(name)
             if id then
                 map[key] = nil
@@ -345,7 +384,7 @@ local function parseLootItem(text)
         count = 1
     end
     local id = itemData() and itemData().findByName(name)
-    return id and tostring(id) or ('name:' .. name:lower():gsub('^an? ', '')), tonumber(count)
+    return id and tostring(id) or ('name_' .. name:lower():gsub('^an? ', '')), tonumber(count)
 end
 
 local function onTextMessage(mode, text)
@@ -543,6 +582,19 @@ local function loadSession()
         for key, value in pairs(saved) do
             session[key] = value
         end
+        -- (counts saved with old keys are converted, broken ones dropped)
+        for _, field in ipairs({ 'kills', 'dropped', 'looted', 'supplies' }) do
+            session[field] = cleanNumbers(session[field])
+        end
+        local drops = {}
+        for monster, map in pairs(type(session.monsterDrops) == 'table' and session.monsterDrops or {}) do
+            drops[tostring(monster)] = cleanNumbers(map)
+        end
+        session.monsterDrops = drops
+        for _, field in ipairs({ 'xp', 'elapsed' }) do
+            session[field] = tonumber(session[field]) or 0
+        end
+        session.started = session.started and tonumber(session.started)
         -- (a hunt carries on where it was after a relog)
         if session.state == 'paused' and session.resumeOnLogin then
             session.stretchStart = g_clock.seconds()
