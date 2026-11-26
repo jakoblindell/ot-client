@@ -71,3 +71,20 @@ GalleryFontSmall < Label
   font: $ot-font-small
   color: $ot-text
   text-auto-resize: true
+
+// A picture of the movement pad (game_joystick's keypad: the same size and
+// picture area); game_joystick.dressPad gives it a style
+GalleryPad < UIWidget
+  size: 175 150
+  background: #00000044
+  image-fixed-ratio: true
+  image-rect: 12 0 150 150
+
+  UIWidget
+    id: pointer
+    size: 49 49
+    anchors.verticalCenter: parent.verticalCenter
+    anchors.horizontalCenter: parent.horizontalCenter
+    image-source: /images/game/mobile/keypad_pointer
+    image-fixed-ratio: true
+    phantom: true

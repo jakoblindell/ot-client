@@ -10,7 +10,7 @@
 
 local root
 local PAGES = {}
-local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
+local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'movement', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
     'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
     'layout-panels', 'layout-lists', 'layout-edit',
@@ -450,6 +450,28 @@ PAGES.map = function()
     return { screen }, true
 end
 
+-- The movement pad's styles at their first size, as game_joystick draws them
+PAGES.movement = function(page)
+    local joystick = modules.game_joystick
+    if not joystick or not joystick.dressPad then
+        return
+    end
+    local c = column(page, 360)
+    local function pad(parent, style, lit)
+        local w = widget('GalleryPad', parent)
+        joystick.dressPad(w, style)
+        for _, arrow in ipairs(w.arrows) do
+            arrow:setOn(arrow.dir == lit)
+        end
+    end
+    local row = section(c, 'Movement: D-Pad, D-Pad (8-way)', 150)
+    pad(row, 'dpad4')
+    pad(row, 'dpad8')
+    row = section(c, 'A lit arrow (walking or turning); analog stick', 150)
+    pad(row, 'dpad8', Directions.North)
+    pad(row, 'stick')
+end
+
 -- The hub's Settings, one page per tab
 for _, tab in ipairs({ 'Gameplay', 'Display', 'Controls', 'Layout', 'Optimization' }) do
     PAGES['settings-' .. tab:lower()] = function()
@@ -771,6 +793,7 @@ function init()
     g_ui.importStyle('/mods/client_mobile/hotbar_sheet')
     g_ui.importStyle('/mods/client_mobile/hub')
     g_ui.importStyle('/mods/client_mobile/outfit')
+    g_ui.importStyle('/modules/game_joystick/joystick_styles')
     g_ui.importStyle('gallery')
     -- through the options (they apply their own scale shortly after start,
     -- over a direct g_app.setHUDScale); option value v is a scale of v / 2 + 0.5
