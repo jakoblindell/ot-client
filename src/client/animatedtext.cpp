@@ -34,7 +34,7 @@ AnimatedText::AnimatedText()
     m_cachedText.setAlign(Fw::AlignLeft);
 }
 
-void AnimatedText::drawText(const Point& dest, const Rect& visibleRect)
+void AnimatedText::drawText(const Point& dest, const Rect& visibleRect, const float scale, const float mapZoom)
 {
     const float tf = g_gameConfig.getAnimatedTextDuration(),
         tftf = g_gameConfig.getAnimatedTextDuration() * g_gameConfig.getAnimatedTextDuration();
@@ -42,19 +42,34 @@ void AnimatedText::drawText(const Point& dest, const Rect& visibleRect)
     const auto& textSize = m_cachedText.getTextSize();
     const float t = m_animationTimer.ticksElapsed();
 
-    Point p = dest;
-    p.x += (24.f / g_app.getAnimatedTextScale() - (textSize.width() / 2.f));
-    if (g_game.getFeature(Otc::GameDiagonalAnimatedText)) {
-        p.x -= (4 * g_app.getAnimatedTextScale() * t / tf) + (8 * g_app.getAnimatedTextScale() * t * t / tftf);
+    Point p;
+    if (mapZoom > 0.f) {
+        // the classic path, in map pixels, then to the drawing's scaled
+        // coordinates (centred on its scaled width)
+        float x = dest.x + 24.f * mapZoom;
+        if (g_game.getFeature(Otc::GameDiagonalAnimatedText)) {
+            x -= mapZoom * ((4 * t / tf) + (8 * t * t / tftf));
+        }
+        const float y = dest.y + mapZoom * (8.f - 48.f * t / tf);
+        p = Point(x / scale - textSize.width() / 2.f, y / scale) + m_offset;
+
+        if (!visibleRect.contains({ p * scale, textSize * scale }))
+            return;
+    } else {
+        p = dest;
+        p.x += (24.f / scale - (textSize.width() / 2.f));
+        if (g_game.getFeature(Otc::GameDiagonalAnimatedText)) {
+            p.x -= (4 * scale * t / tf) + (8 * scale * t * t / tftf);
+        }
+
+        p.y += ((8.f / scale) + ((-48.f * scale * t) / tf));
+        p += m_offset;
+
+        if (!visibleRect.contains({ p, textSize }))
+            return;
+
+        p.scale(scale);
     }
-
-    p.y += ((8.f / g_app.getAnimatedTextScale()) + ((-48.f * g_app.getAnimatedTextScale() * t) / tf));
-    p += m_offset;
-
-    if (!visibleRect.contains({ p, textSize }))
-        return;
-
-    p.scale(g_app.getAnimatedTextScale());
 
     const Rect& rect{ p, textSize };
     const float t0 = tf / 1.2;

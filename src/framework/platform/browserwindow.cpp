@@ -171,15 +171,15 @@ void BrowserWindow::terminate() {
 
 // The canvas in screen pixels: its CSS size times the pixel ratio (the
 // device's, capped by the Sharpness setting; ot-client#66)
-static float wantedPixelRatio(float maxRatio) {
-    const double device = emscripten_get_device_pixel_ratio();
-    return std::max(1.f, std::min(static_cast<float>(device), maxRatio));
+static float wantedPixelRatio(float device, float maxRatio) {
+    return std::max(1.f, std::min(device, maxRatio));
 }
 
 void BrowserWindow::applyCanvasSize(bool force) {
     double w, h;
     emscripten_get_element_css_size("#canvas", &w, &h);
-    const float ratio = wantedPixelRatio(m_maxPixelRatio);
+    m_devicePixelRatio = std::max(1.f, static_cast<float>(emscripten_get_device_pixel_ratio()));
+    const float ratio = wantedPixelRatio(m_devicePixelRatio, m_maxPixelRatio);
     const Size size(static_cast<int>(w * ratio + 0.5), static_cast<int>(h * ratio + 0.5));
     if (!force && size == m_size && ratio == m_pixelRatio)
         return;
@@ -207,6 +207,7 @@ void BrowserWindow::setMaxPixelRatio(float ratio) {
 void BrowserWindow::internalInitGL() {
     double w, h;
     emscripten_get_element_css_size("#canvas", &w, &h);
+    m_devicePixelRatio = std::max(1.f, static_cast<float>(emscripten_get_device_pixel_ratio()));
     m_size = Size(int(w * m_pixelRatio + 0.5), int(h * m_pixelRatio + 0.5));
     emscripten_set_canvas_element_size("#canvas", m_size.width(), m_size.height());
 

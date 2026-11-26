@@ -38,7 +38,10 @@ public:
         setColor(color);
     }
 
-    void drawText(const Point& dest, const Rect& visibleRect);
+    // dest and visibleRect in screen pixels; the text drawn scale times its
+    // size. mapZoom > 0: sized with the map (ot-client#112), rising and
+    // drifting as far as at classic size
+    void drawText(const Point& dest, const Rect& visibleRect, float scale, float mapZoom = 0.f);
 
     void onAppear();
 

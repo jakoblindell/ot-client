@@ -34,6 +34,11 @@ class StaticText final : public LuaObject
 public:
     StaticText();
 
+    // dest and parentRect in screen pixels; the text drawn scale times its
+    // size. mapZoom > 0: sized with the map (ot-client#112), placed as at
+    // classic size and kept inside parentRect
+    void drawText(const Point& dest, const Rect& parentRect, float scale, float mapZoom = 0.f);
+    // a tile's texts (timers), as they have always been drawn
     void drawText(const Point& dest, const Rect& parentRect);
 
     std::string getName() { return m_name; }

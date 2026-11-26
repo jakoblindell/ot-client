@@ -207,9 +207,21 @@ void Creature::drawInformation(const MapPosInfo& mapRect, const Point& dest, con
     const int cropSizeText = g_gameConfig.isAdjustCreatureInformationBasedCropSize() ? getExactSize() : 12;
     const int cropSizeBackGround = g_gameConfig.isAdjustCreatureInformationBasedCropSize() ? cropSizeText - nameSize.height() : 0;
 
-    const bool isScaled = g_app.getCreatureInformationScale() != DEFAULT_DISPLAY_DENSITY;
+    // Sized with the map on the touch layout (ot-client#112), else fixed
+    const bool withMap = g_app.getCreatureInformationMapScale() > 0.f;
+    const float infoScale = g_app.getCreatureInformationScaleFor(mapRect.scaleFactor * std::min(mapRect.horizontalStretchFactor, mapRect.verticalStretchFactor));
+    const bool isScaled = infoScale != DEFAULT_DISPLAY_DENSITY;
     if (isScaled) {
-        p.scale(g_app.getCreatureInformationScale());
+        p.scale(infoScale);
+    }
+
+    // Sized with the map, the bars stack upwards from where the health bar
+    // ends, so the mana bar and a larger scale never cover the character
+    if (withMap && (drawFlags & Otc::DrawBars) && (drawFlags & Otc::DrawManaBar) && isLocalPlayer()) {
+        if (const auto& player = g_game.getLocalPlayer()) {
+            const int extraBars = 1 + (player->isMage() && player->getMaxManaShield() > 0 ? 1 : 0);
+            p.y -= 4 * extraBars;
+        }
     }
 
     auto backgroundRect = Rect(p.x - (15.5), p.y - cropSizeBackGround, 31, 4);
@@ -221,10 +233,15 @@ void Creature::drawInformation(const MapPosInfo& mapRect, const Point& dest, con
         backgroundRect.moveTop(textRect.bottom() + minNameBarSpacing);
     }
 
-    if (!isScaled) {
-        backgroundRect.bind(parentRect);
-        textRect.bind(parentRect);
-    }
+    // Kept inside the visible map, in the coordinates the rects are drawn
+    // in: scaled, the map's rect divided by the scale (ot-client#112: names
+    // on the top row were drawn above the view)
+    const Rect bounds = isScaled
+        ? Rect(Point(std::ceil(parentRect.left() / infoScale), std::ceil(parentRect.top() / infoScale)),
+               Point(std::floor((parentRect.right() + 1) / infoScale) - 1, std::floor((parentRect.bottom() + 1) / infoScale) - 1))
+        : parentRect;
+    backgroundRect.bind(bounds);
+    textRect.bind(bounds);
 
     // distance them
     uint8_t offset = 12 * mapRect.scaleFactor;
@@ -232,9 +249,9 @@ void Creature::drawInformation(const MapPosInfo& mapRect, const Point& dest, con
         offset *= 2 * mapRect.scaleFactor;
     }
 
-    if (textRect.top() == parentRect.top())
+    if (textRect.top() == bounds.top())
         backgroundRect.moveTop(textRect.top() + offset);
-    if (backgroundRect.bottom() == parentRect.bottom())
+    if (backgroundRect.bottom() == bounds.bottom())
         textRect.moveTop(backgroundRect.top() - offset);
 
     // health rect is based on background rect, so no worries
@@ -245,7 +262,7 @@ void Creature::drawInformation(const MapPosInfo& mapRect, const Point& dest, con
 
     g_drawPool.select(DrawPoolType::CREATURE_INFORMATION);
     if (isScaled)
-        g_drawPool.scale(g_app.getCreatureInformationScale());
+        g_drawPool.scale(infoScale);
 
     if ((drawFlags & Otc::DrawBars) && (g_game.getClientVersion() >= 1100 ? !isNpc() : true)) {
         g_drawPool.addFilledRect(backgroundRect, Color::black);
