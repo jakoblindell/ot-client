@@ -23,6 +23,9 @@
 &ot-positive: #70d070
 &ot-negative: #e05050
 &ot-backdrop: #000000a0
+// The line between list rows, and a row under the finger
+&ot-line: #ffffff14
+&ot-row-pressed: #00000040
 // Paper: letters, books and labels, dark text in a large readable TTF font
 &ot-paper: #e4d6ae
 &ot-paper-text: #2a2016
@@ -271,4 +274,16 @@ OtSettingRow < UIWidget
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     height: 1
-    background-color: #ffffff14
+    background-color: $ot-line
+
+// A tappable row in a list (52 high, a line under it), darker while the
+// finger is on it. (background-color is set when not pressed too: a state's
+// property stays once the state ends otherwise, and the row stays dark)
+OtListRow < UIButton
+  height: 52
+  background-color: alpha
+  border-width-bottom: 1
+  border-color-bottom: $ot-line
+  focusable: false
+  $pressed:
+    background-color: $ot-row-pressed

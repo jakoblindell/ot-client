@@ -26,6 +26,9 @@ with saved baseline images on every pull request (ot-client#70).
 | `achievements` | Journal › Achievements: unlocked, in progress, hidden |
 | `npc` | the NPC dialog with a sample NPC (text, keywords, shop) |
 | `hotbar` | the hotbar settings sheet |
+| `hotbar-sheet` | the sheet a long press on a hotbar slot opens: a druid's Spells tab |
+| `hotbar-sheet-house` | that sheet's House tab (the house spells) |
+| `hotbar-sheet-novocation` | its Spells tab for a character without a vocation |
 | `outfit` | the outfit screen for touch screens, with sample outfits |
 | `settings-gameplay` … `settings-optimization` | the hub's Settings, one page per tab |
 | `letter`, `letter-read` | a letter in Edit Text: to write (with its limit), and only to read |
@@ -68,18 +71,22 @@ in portrait and 210 px in landscape. Real keyboard heights vary by phone.
 Add a page in `mods/client_gallery/gallery.lua` (`PAGES` and `PAGE_ORDER`)
 and in `PAGES` in `gallery.js`.
 
-## Text that doesn't fit
+## Text and widgets that don't fit
 
 After a page is ready, the gallery checks every visible widget twice, a
-second apart, and logs `[gallery] clipped ...` for what both checks find:
+second apart, and logs `[gallery] clipped ...` or `[gallery] outside ...` for
+what both checks find:
 
 - **Cut off:** text wider than its widget (minus padding), when the widget
   doesn't wrap its text.
 - **Covered:** text drawn under a button or switch it doesn't belong to, such
   as a setting's name under its row of choices.
+- **Outside:** a widget that sticks out of its parent, or off the screen,
+  such as a row of buttons wider than its sheet. The rows of a scrolled list
+  are left out: the list cuts them off on purpose.
 
-Widgets scrolled out of sight are skipped. A page with such text fails, even
-when it matches its baseline, and the report lists the widgets. Fix the
+Widgets scrolled out of sight are skipped. A page with such a widget fails,
+even when it matches its baseline, and the report lists the widgets. Fix the
 layout (shorter text, a wider widget, wrap, or move the control) rather than
 updating the baseline.
 

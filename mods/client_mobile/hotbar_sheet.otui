@@ -1,10 +1,5 @@
 // Built from the ot-ui styles (data/styles/50-ot-ui.otui)
-HotbarSheetRow < UIButton
-  height: 52
-  border-width-bottom: 1
-  border-color-bottom: #ffffff14
-  $pressed:
-    background-color: #00000040
+HotbarSheetRow < OtListRow
 
   Item
     id: item
@@ -65,6 +60,11 @@ HotbarSheetHeading < Label
 
 HotbarSheetButton < OtButton
 
+// A note in place of a list (no vocation yet)
+HotbarSheetMessage < OtHint
+  margin: 12 8 0 8
+  text-align: center
+
 HotbarSheet < OtBackdrop
   OtPanel
     id: panel
@@ -97,25 +97,14 @@ HotbarSheet < OtBackdrop
       height: 40
       layout:
         type: grid
-        cell-size: 94 40
+        cell-size: 74 40
         cell-spacing: 6
-        num-columns: 4
+        num-columns: 5
         flow: true
-
-    UIWidget
-      id: filters
-      anchors.top: tabs.bottom
-      anchors.left: parent.left
-      anchors.right: parent.right
-      margin-top: 8
-      height: 40
-      layout:
-        type: horizontalBox
-        spacing: 6
 
     ScrollablePanel
       id: list
-      anchors.top: filters.bottom
+      anchors.top: tabs.bottom
       anchors.left: parent.left
       anchors.right: listScroll.left
       anchors.bottom: footer.top
@@ -127,7 +116,7 @@ HotbarSheet < OtBackdrop
 
     VerticalScrollBar
       id: listScroll
-      anchors.top: filters.bottom
+      anchors.top: tabs.bottom
       anchors.bottom: footer.top
       anchors.right: parent.right
       margin-top: 8

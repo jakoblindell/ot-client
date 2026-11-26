@@ -26,7 +26,8 @@ const PAGES = ['buttons', 'controls', 'text', 'touch', 'movement', 'hub', 'journ
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
     'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
     'layout-panels', 'layout-lists', 'layout-edit', 'layout-setup', 'layout-setup-held',
-    'layout-extra-rows'];
+    'layout-extra-rows',
+    'hotbar-sheet', 'hotbar-sheet-house', 'hotbar-sheet-novocation'];
 
 // Pages shown with the on-screen keyboard open (touch devices only): the
 // page tells the game the part of the canvas above the keyboard, as
@@ -122,8 +123,9 @@ async function capture(context, base, device, page, file, clipped) {
             tab.on('console', (msg) => {
                 const text = msg.text();
                 log.push(text);
-                const cut = text.indexOf('[gallery] clipped ');
-                if (cut >= 0) clipped.push(text.slice(cut + 18));
+                // text that doesn't fit, a widget outside its parent or the screen
+                const found = text.match(/\[gallery\] (clipped|outside) (.*)/);
+                if (found) clipped.push((found[1] === 'outside' ? 'outside: ' : '') + found[2]);
                 if (text.includes('[gallery] checked ' + page)) markChecked();
                 if (text.includes('[gallery] ready ' + page)) resolve();
                 if (text.includes('[gallery] no page')) reject(new Error(text));
@@ -140,7 +142,8 @@ async function capture(context, base, device, page, file, clipped) {
         }
         await tab.waitForTimeout(300);
         await tab.screenshot({ path: file });
-        // the text checks (cut off or covered text) run after "ready"
+        // the checks (cut off or covered text, widgets outside their parent
+        // or the screen) run after "ready"
         await Promise.race([checked, tab.waitForTimeout(10000)]);
         return null;
     } catch (e) {
@@ -218,7 +221,7 @@ function report(outDir, results, devices, pages) {
         if (r.error) {
             return `<td class="bad"><b>failed</b><pre>${r.error.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre></td>`;
         }
-        const cut = r.clipped ? `<b>clipped text</b><pre>${r.clipped.join('\n').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>` : '';
+        const cut = r.clipped ? `<b>doesn't fit</b><pre>${r.clipped.join('\n').replace(/&/g, '&amp;').replace(/</g, '&lt;')}</pre>` : '';
         const status = cut + (r.status === 'same' ? '' : `<b>${r.status}</b>${r.share !== undefined ? ` (${(r.share * 100).toFixed(2)}% of pixels)` : ''}${r.size ? ' ' + r.size : ''}`);
         const images = [`<a href="${rel(r.file)}"><img src="${rel(r.file)}" title="new"></a>`];
         if (r.status === 'changed') {
@@ -286,13 +289,14 @@ async function main() {
                     const c = await compare(browser, file, baseline, diffFile);
                     r = { status: c.share > PAGE_TOLERANCE ? 'changed' : 'same', share: c.share, size: c.size, file, baselineCopy, diffFile: c.diff ? diffFile : null };
                 }
-                // text cut off by its widget fails the page, baseline or not
+                // text cut off by its widget, or a widget outside its parent
+                // or the screen, fails the page, baseline or not
                 if (!r.error && clipped.length) r.clipped = clipped;
                 if (r.error || r.status === 'changed' || r.clipped) failed++;
                 if (args.update && !r.error) fs.copyFileSync(file, baseline);
                 results[key] = r;
                 console.log(`${key}: ${r.error ? 'FAILED ' + r.error.split('\n')[0] : r.status + (r.share ? ` (${(r.share * 100).toFixed(2)}%)` : '')}`);
-                for (const line of r.clipped || []) console.log(`  clipped text: ${line}`);
+                for (const line of r.clipped || []) console.log(`  doesn't fit: ${line}`);
             }
             await context.close();
         }

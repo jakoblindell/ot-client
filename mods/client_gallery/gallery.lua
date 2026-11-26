@@ -14,7 +14,8 @@ local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'movement', 'hub', 
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
     'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
     'layout-panels', 'layout-lists', 'layout-edit',
-    'layout-setup', 'layout-setup-held', 'layout-extra-rows' }
+    'layout-setup', 'layout-setup-held', 'layout-extra-rows',
+    'hotbar-sheet', 'hotbar-sheet-house', 'hotbar-sheet-novocation' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -377,6 +378,34 @@ PAGES.hotbar = function()
     end
 end
 
+-- The sheet a long press on a hotbar slot opens (ot-client#159), for slot 3
+-- of bar 1 (a stand-in: the sheet reads the ids "bar.slot"). No character
+-- here: the page names the tab and the vocation (spell data ids).
+local function hotbarSheet(page, tab, vocation)
+    local mobile = modules.client_mobile
+    if not (mobile and mobile.openHotbarSheet) then
+        return
+    end
+    local bar = widget('UIWidget', page, function(w) w:hide() end)
+    local slot = widget('UIWidget', widget('UIWidget', bar), function(w) w:setId('1.3') end)
+    mobile.openHotbarSheet(slot, { tab = tab, vocation = vocation })
+end
+
+-- A druid's spells, by magic level
+PAGES['hotbar-sheet'] = function(page)
+    hotbarSheet(page, 'spells', 2)
+end
+
+-- The house spells, for every vocation
+PAGES['hotbar-sheet-house'] = function(page)
+    hotbarSheet(page, 'house', 2)
+end
+
+-- A character without a vocation (Rookgaard): no spells yet
+PAGES['hotbar-sheet-novocation'] = function(page)
+    hotbarSheet(page, 'spells', 0)
+end
+
 -- The outfit screen for touch screens (ot-client#101), with sample outfits
 PAGES.outfit = function()
     local mobile = modules.client_mobile
@@ -690,6 +719,41 @@ local function checkCovered(top, found)
     end
 end
 
+-- A widget that sticks out of its parent, or off the screen (a row of
+-- buttons wider than its sheet): logged like clipped text. The rows of a
+-- scrolled list (a clipping parent) are left out: the list cuts them off on
+-- purpose, and they scroll off the screen.
+local function describe(widget)
+    return widget:getStyleName() .. '#' .. widget:getId()
+end
+
+local function sticksOut(r, outer)
+    -- (1 pixel of rounding at in-between scales)
+    return r.x < outer.x - 1 or r.y < outer.y - 1 or r.x + r.width > outer.x + outer.width + 1
+        or r.y + r.height > outer.y + outer.height + 1
+end
+
+local function checkOutside(widget, found, inList)
+    if not widget:isVisible() or widget:getWidth() <= 0 or widget:getHeight() <= 0 then
+        return
+    end
+    local r = widget:getRect()
+    if not inList and sticksOut(r, g_ui.getRootWidget():getRect()) then
+        table.insert(found, string.format('%s at %d,%d %dx%d is off the screen', describe(widget), r.x, r.y, r.width,
+            r.height))
+    end
+    local parent = widget:getParent()
+    if parent and parent:isVisible() and not parent:isClipping() and parent:getWidth() > 0 and parent:getHeight() > 0
+        and sticksOut(r, parent:getRect()) then
+        local p = parent:getRect()
+        table.insert(found, string.format('%s at %d,%d %dx%d is outside its parent %s at %d,%d %dx%d', describe(widget),
+            r.x, r.y, r.width, r.height, describe(parent), p.x, p.y, p.width, p.height))
+    end
+    for _, child in ipairs(widget:getChildren()) do
+        checkOutside(child, found, inList or widget:isClipping())
+    end
+end
+
 -- Showing a page ----------------------------------------------------------------
 
 local function show(name)
@@ -701,6 +765,9 @@ local function show(name)
     fixClock()
     local rootWidget = g_ui.getRootWidget()
     root = g_ui.createWidget('GalleryRoot', rootWidget)
+    -- the component pages are a 560 px column: a narrow phone shows the part
+    -- that fits (cut off on purpose, like a list, not checked as outside)
+    root:setClipping(true)
     -- the background over everything else; a screen page's own windows
     -- (opened by build, after it) over the background
     -- everything already there (the login screen, its locked Enter Game
@@ -750,18 +817,31 @@ local function show(name)
         if root then
             raiseAll()
             g_logger.info('[gallery] ready ' .. name)
-            -- the text checks, once everything is laid out (a scale or a
-            -- list may still settle after "ready"): twice, a second apart,
-            -- and only what both passes find counts
+            -- the checks (text that doesn't fit, widgets outside their
+            -- parent or the screen), once everything is laid out (a scale
+            -- or a list may still settle after "ready"): twice, a second
+            -- apart, and only what both passes find counts
             local function check()
-                local found = {}
-                checkClipped(root, found)
-                checkCovered(root, found)
-                for _, widget in ipairs(opened) do
-                    if not uncheckedOpened and not widget:isDestroyed() then
-                        checkClipped(widget, found)
-                        checkCovered(widget, found)
+                local clipped, outside = {}, {}
+                local widgets = { root }
+                if not uncheckedOpened then
+                    for _, widget in ipairs(opened) do
+                        table.insert(widgets, widget)
                     end
+                end
+                for _, widget in ipairs(widgets) do
+                    if not widget:isDestroyed() then
+                        checkClipped(widget, clipped)
+                        checkCovered(widget, clipped)
+                        checkOutside(widget, outside)
+                    end
+                end
+                local found = {}
+                for _, line in ipairs(clipped) do
+                    table.insert(found, 'clipped ' .. line)
+                end
+                for _, line in ipairs(outside) do
+                    table.insert(found, 'outside ' .. line)
                 end
                 return found
             end
@@ -773,7 +853,7 @@ local function show(name)
                 scheduleEvent(function()
                     for _, line in ipairs(check()) do
                         if first[line] then
-                            g_logger.info('[gallery] clipped ' .. line)
+                            g_logger.info('[gallery] ' .. line)
                         end
                     end
                     g_logger.info('[gallery] checked ' .. name)
