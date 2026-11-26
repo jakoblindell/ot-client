@@ -85,6 +85,8 @@ protected:
     void onProxyPacket(const std::shared_ptr<std::vector<uint8_t>>& packet);
     void onPlayerPacket(const std::shared_ptr<std::vector<uint8_t>>& packet);
     void onLocalDisconnected(std::error_code ec);
+    // A received message could not be read: logs why and ends the connection
+    void onMalformedMessage(std::string_view reason);
     bool m_disconnected = false;
     uint32_t m_proxy = 0;
 

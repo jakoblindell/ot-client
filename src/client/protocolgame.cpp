@@ -71,7 +71,7 @@ void ProtocolGame::onRecv(const InputMessagePtr& inputMessage)
         } else if (g_game.getFeature(Otc::GameMessageSizeCheck)) {
             const int size = inputMessage->getU16();
             if (size != inputMessage->getUnreadSize()) {
-                g_logger.traceError("invalid message size");
+                onMalformedMessage("invalid message size");
                 return;
             }
         }

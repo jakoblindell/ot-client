@@ -3956,8 +3956,9 @@ int ProtocolGame::setTileDescription(const InputMessagePtr& msg, const Position 
             g_logger.traceError("ProtocolGame::setTileDescription: too many things, pos={}, stackpos={}", position, stackPos);
         }
 
+        // (null for a creature the client does not know; addThing skips it)
         const auto& thing = getThing(msg);
-        if (thing->isLocalPlayer()) {
+        if (thing && thing->isLocalPlayer()) {
             thing->static_self_cast<LocalPlayer>()->resetPreWalk();
         }
 
