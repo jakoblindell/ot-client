@@ -5,6 +5,9 @@ local lastTurn = 0
 local nextWalkDir = nil
 local lastCancelWalkTime = 0
 local walkKeyDownTime = {}
+-- The shortest time between two turns (a held Ctrl+arrow waits
+-- walkCtrlTurnDelay instead)
+local TURN_DELAY_DEFAULT = 50
 
 
 local keys = {
@@ -186,7 +189,6 @@ local function turn(dir, repeated)
     cancelWalkEvent()
 
     local TURN_DELAY_REPEATED = modules.client_options.getOption('walkCtrlTurnDelay') or 150
-    local TURN_DELAY_DEFAULT = 50
 
     local delay = repeated and TURN_DELAY_REPEATED or TURN_DELAY_DEFAULT
 
@@ -264,6 +266,24 @@ function controllerWalk(dir)
     end
 end
 
+--- Turning from the touch joystick (a touch that started in its centre): like
+--- Ctrl+arrow, with the same shortest time between turns. Returns true when
+--- the turn was sent, false when it has to wait (the joystick asks again)
+function controllerTurn(dir)
+    local player = g_game.getLocalPlayer()
+    if not player or g_game.isDead() or player:isDead() then
+        return false
+    end
+    if lastTurn + TURN_DELAY_DEFAULT >= g_clock.millis() then
+        return false
+    end
+    cancelWalkEvent()
+    g_game.turn(dir)
+    lastTurn = g_clock.millis()
+    player:lockWalk(g_settings.getNumber("walkTurnDelay"))
+    return true
+end
+
 --- Sets up game-related events for the WalkController.
 function WalkController:onGameStart()
     self:registerEvents(g_game, {
@@ -282,6 +302,7 @@ function WalkController:onGameStart()
     -- The joystick reports its direction every few milliseconds while held;
     -- walk like a held arrow key (one step at a time) and stop on release
     modules.game_joystick.addOnJoystickMoveListener(controllerWalk)
+    modules.game_joystick.addOnJoystickTurnListener(controllerTurn)
 
     if not g_game.isOfficialTibia() then
         g_game.enableFeature(GameForceFirstAutoWalkStep)

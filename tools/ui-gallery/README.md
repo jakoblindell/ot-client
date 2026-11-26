@@ -20,6 +20,7 @@ with saved baseline images on every pull request (ot-client#70).
 | `controls` | checks, progress bars, a stepper, setting rows in a panel, contrast panel |
 | `text` | title, heading, label, text, hint, the colour tokens |
 | `touch` | round hotbar slots at 32–64 px, chat, P1 and pencil buttons, health/mana bars, toolbar |
+| `movement` | the movement pad: D-Pad, D-Pad (8-way), a lit arrow, analog stick |
 | `hub` | the hub's front page |
 | `journal` | Journal › Quests, with sample quests |
 | `achievements` | Journal › Achievements: unlocked, in progress, hidden |
