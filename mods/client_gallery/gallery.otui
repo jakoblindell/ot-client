@@ -71,3 +71,8 @@ GalleryFontSmall < Label
   font: $ot-font-small
   color: $ot-text
   text-auto-resize: true
+
+// Stands in for the game view behind on-screen messages: the busy login
+// picture (the part shown is set in gallery.lua)
+GalleryGameView < UIWidget
+  image-source: /images/background

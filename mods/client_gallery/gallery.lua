@@ -12,7 +12,7 @@ local root
 local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
-    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard' }
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'messages' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -416,6 +416,54 @@ PAGES['house-list'] = function()
     textWindows().onGameEditList(3, 1, 'Mira\nToren\nLune\nKasimir\nOld Bess')
 end
 PAGES['house-list-keyboard'] = PAGES['house-list']
+
+-- BEFORE screenshots for ot-client#173 (temporary branch, not for merging):
+-- the old textmessage.otui, its labels set the way the old displayMessage did
+local BLACKBOARD = 'You see a blackboard.\nYou read: The room of the Oracle\n\nIf you are wise enough you may ' ..
+    'leave this isle and explore the great continent of Tibia. Once you are at level eight you may talk to the ' ..
+    'Oracle who will send you to the continent.'
+
+PAGES.messages = function(page)
+    local screen = g_ui.getRootWidget():getSize()
+    local width = math.min(480, screen.width - 16)
+    local height = math.min(240, math.floor((screen.height - 16 - 10) / 2))
+    local column = widget('GalleryColumn', page, function(w) w:setWidth(width) end)
+    local shown = {
+        { { 'highCenterLabel', TextColors.green, BLACKBOARD }, { 'statusLabel', TextColors.white, 'Sorry, not possible.' } },
+        { { 'highCenterLabel', TextColors.green, 'Loot of a rat: 3 gold coins, cheese, a mace.' },
+          { 'middleCenterLabel', TextColors.white, 'You advanced from Level 7 to Level 8.' },
+          { 'lowCenterLabel', TextColors.red, 'Warning! The murder of Bob was not justified.' } },
+    }
+    for _, list in ipairs(shown) do
+        local view = widget('GalleryGameView', column, function(w)
+            w:setSize({ width = width, height = height })
+            w:setImageClip({ x = 960 - width, y = 420 - height, width = width * 2, height = height * 2 })
+        end)
+        local panel = g_ui.loadUI('/modules/game_textmessage/textmessage', view)
+        panel:fill('parent')
+        for _, entry in ipairs(list) do
+            local label = panel:recursiveGetChildById(entry[1])
+            local text = entry[3]
+            label:setText(text)
+            label:setColor(entry[2])
+            local isLoot = text:find('^Loot of ') ~= nil
+            local colored = isLoot and modules.game_textmessage.lootColors(text, entry[2])
+            if colored then
+                label:setColoredText(colored)
+            end
+            label:setFont(isLoot and 'Verdana Bold-11px-outline' or 'verdana-11px-rounded')
+            label:setBackgroundColor(isLoot and '#000000a0' or 'alpha')
+            label:setPadding(isLoot and 3 or 0)
+            local sideMargin = 0
+            if isLoot then
+                sideMargin = math.max(0, math.floor((label:getParent():getWidth() - label:getTextSize().width - 6) / 2))
+            end
+            label:setMarginLeft(sideMargin)
+            label:setMarginRight(sideMargin)
+            label:setVisible(true)
+        end
+    end
+end
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
 -- scrolled list). nil when none of it shows.
