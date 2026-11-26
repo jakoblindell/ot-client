@@ -295,8 +295,8 @@ void WebConnection::onRecv(const uint16_t recvSize)
         // a copy: the callback may close this connection, which clears it
         const RecvCallback callback = m_recvCallback;
         if (callback) {
-            const auto* header = asio::buffer_cast<const char*>(m_inputStream.data());
-            callback((uint8_t*)header, recvSize);
+            auto* const header = const_cast<uint8_t*>(asio::buffer_cast<const uint8_t*>(m_inputStream.data()));
+            callback(header, recvSize);
         }
     }
     m_inputStream.consume(recvSize);
