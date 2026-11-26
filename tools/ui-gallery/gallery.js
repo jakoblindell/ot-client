@@ -27,7 +27,8 @@ const PAGES = ['buttons', 'controls', 'text', 'touch', 'movement', 'hub', 'journ
     'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
     'layout-panels', 'layout-lists', 'layout-edit', 'layout-setup', 'layout-setup-held',
     'layout-extra-rows',
-    'hotbar-sheet', 'hotbar-sheet-house', 'hotbar-sheet-novocation'];
+    'hotbar-sheet', 'hotbar-sheet-house', 'hotbar-sheet-novocation',
+    'messages'];
 
 // Pages shown with the on-screen keyboard open (touch devices only): the
 // page tells the game the part of the canvas above the keyboard, as

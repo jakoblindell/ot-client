@@ -201,13 +201,38 @@ MessageTypes = {
 
 messagesPanel = nil
 
+-- The message boxes on the game view
+local BOXES = { 'highCenterLabel', 'middleCenterLabel', 'lowCenterLabel', 'privateLabel', 'statusLabel' }
+-- A message's box is at most this wide (with its padding), and keeps this far
+-- from the sides of the game view: long text (a blackboard) wraps inside it
+local MAX_BOX_WIDTH = 300
+local VIEW_MARGIN = 16
+local WRAP_SLACK = 2
+
+-- The message boxes (textmessage.otui) in parent: the game view's, or the
+-- UI gallery's
+function createMessagesPanel(parent)
+    local panel = g_ui.loadUI('textmessage', parent)
+    -- a smaller game view (a phone turned): the shown messages wrap again
+    panel.onGeometryChange = function()
+        for _, id in ipairs(BOXES) do
+            local box = panel:recursiveGetChildById(id)
+            if box and box:isVisible() and box.message then
+                fitBox(panel, box)
+            end
+        end
+    end
+    return panel
+end
+
 function init()
     for messageMode, _ in pairs(MessageTypes) do
         registerMessageMode(messageMode, displayMessage)
     end
 
     connect(g_game, 'onGameEnd', clearMessages)
-    messagesPanel = g_ui.loadUI('textmessage', modules.game_interface.getRootPanel())
+    messagesPanel = createMessagesPanel(modules.game_interface.getRootPanel())
+    messagesPanel:fill('gameMapPanel')
 end
 
 function terminate()
@@ -299,67 +324,85 @@ function displayMessage(mode, text)
     end
 
     if msgtype.screenTarget then
-        local label = messagesPanel:recursiveGetChildById(msgtype.screenTarget)
         if msgtype == MessageSettings.loot and not modules.client_options.getOption('showLootMessagesOnScreen') then
             return
-        elseif msgtype == MessageSettings.loot or msgtype == MessageSettings.valuableLoot then
-            local coloredText = ItemsDatabase.setColorLootMessage(text)
-            label:setColoredText(coloredText)
-        else
-            label:setText(text)
-            label:setColor(msgtype.color)
         end
-
-        -- Loot messages ("Loot of a rat: cheese", 7.x sends them as plain
-        -- info messages) stand out: bold, on a dark box
-        local isLoot = text:find('^Loot of ') ~= nil
-        -- each item in the colour of its rarity (client_itemdata)
-        local colored = isLoot and lootColors(text, msgtype.color)
-        if colored then
-            label:setColoredText(colored)
-        end
-        label:setFont(isLoot and 'Verdana Bold-11px-outline' or 'verdana-11px-rounded')
-        label:setBackgroundColor(isLoot and '#000000a0' or 'alpha')
-        label:setPadding(isLoot and 3 or 0)
-        -- the box hugs the text (the panel's layout stretches labels)
-        local sideMargin = 0
-        if isLoot then
-            local panelWidth = label:getParent():getWidth()
-            sideMargin = math.max(0, math.floor((panelWidth - label:getTextSize().width - 6) / 2))
-        end
-        label:setMarginLeft(sideMargin)
-        label:setMarginRight(sideMargin)
-
-        label:setVisible(true)
-        removeEvent(label.hideEvent)
-        label.hideEvent = scheduleEvent(function()
-            label:setVisible(false)
-        end, calculateVisibleTime(text))
+        showOnScreen(messagesPanel, msgtype, text)
     end
+end
+
+-- Wraps a box's text at the widest a box may be in this game view, then
+-- sizes the label to its widest line and the box to the label plus its
+-- padding.
+function fitBox(panel, box)
+    local label = box:getChildById('text')
+    local message = box.message
+    local padWidth = box:getPaddingLeft() + box:getPaddingRight()
+    local limit = math.max(60, math.min(MAX_BOX_WIDTH, panel:getWidth() - 2 * VIEW_MARGIN))
+    label:setWidth(limit - padWidth)
+    label.baseFont = label.baseFont or label:getFont()
+    label:setFont(message.font or label.baseFont)
+    -- (setText wraps at the label's width now; '' first, or the same text
+    -- would keep its old wrap)
+    label:setText('')
+    if message.colored then
+        label:setColoredText(message.colored)
+    else
+        label:setText(message.text)
+        label:setColor(message.color)
+    end
+    -- the label as wide as its widest line (the wrap measures a line with
+    -- the spacing after its last letter, the text size without it: a few
+    -- pixels more, never past the wrap width, so the lines stay as they are)
+    local textSize = label:getTextSize()
+    local labelWidth = math.min(textSize.width + WRAP_SLACK, limit - padWidth)
+    label:setWidth(labelWidth)
+    local width = labelWidth + padWidth
+    box:setSize({ width = width, height = textSize.height + box:getPaddingTop() + box:getPaddingBottom() })
+    local parent = box:getParent()
+    if parent:getId() == 'centerTextMessagePanel' then
+        -- the column's layout stretches its boxes to its width: margins
+        -- centre each box at the width of its text
+        parent:setWidth(limit)
+        local side = math.max(0, math.floor((limit - width) / 2))
+        box:setMarginLeft(side)
+        box:setMarginRight(side)
+    end
+end
+
+-- Shows text in its box on panel (msgtype.screenTarget), on the see-through
+-- backdrop, until it times out. Returns the box.
+function showOnScreen(panel, msgtype, text)
+    local box = panel:recursiveGetChildById(msgtype.screenTarget)
+    if not box then
+        return nil
+    end
+    local message = { text = text, color = msgtype.color }
+    if msgtype == MessageSettings.loot or msgtype == MessageSettings.valuableLoot then
+        message.colored = ItemsDatabase.setColorLootMessage(text)
+    end
+    -- Loot messages ("Loot of a rat: cheese", 7.x sends them as plain info
+    -- messages) stand out in bold, each item in the colour of its rarity
+    -- (client_itemdata)
+    if text:find('^Loot of ') then
+        message.colored = lootColors(text, msgtype.color) or message.colored
+        message.font = 'Verdana Bold-11px-outline'
+    end
+    box.message = message
+    fitBox(panel, box)
+    box:setVisible(true)
+    removeEvent(box.hideEvent)
+    box.hideEvent = scheduleEvent(function()
+        box:setVisible(false)
+    end, calculateVisibleTime(text))
+    return box
 end
 
 function displayPrivateMessage(text)
     if not g_game.isOnline() then
         return
     end
-    
-    local msgtype = MessageSettings.private
-    if not msgtype or not msgtype.screenTarget then
-        return
-    end
-    
-    local label = messagesPanel:recursiveGetChildById(msgtype.screenTarget)
-    if not label then
-        return
-    end
-    
-    label:setText(text)
-    label:setColor(msgtype.color)
-    label:setVisible(true)
-    removeEvent(label.hideEvent)
-    label.hideEvent = scheduleEvent(function()
-        label:setVisible(false)
-    end, calculateVisibleTime(text))
+    showOnScreen(messagesPanel, MessageSettings.private, text)
 end
 
 function displayStatusMessage(text)

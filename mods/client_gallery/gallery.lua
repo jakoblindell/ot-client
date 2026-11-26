@@ -15,7 +15,8 @@ local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'movement', 'hub', 
     'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
     'layout-panels', 'layout-lists', 'layout-edit',
     'layout-setup', 'layout-setup-held', 'layout-extra-rows',
-    'hotbar-sheet', 'hotbar-sheet-house', 'hotbar-sheet-novocation' }
+    'hotbar-sheet', 'hotbar-sheet-house', 'hotbar-sheet-novocation',
+    'messages' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -603,6 +604,71 @@ PAGES['layout-setup'] = layoutPage({}, false, 'placing')
 PAGES['layout-setup-held'] = layoutPage({}, false, 'held')
 -- The 3x3 hotbar with both extra rows on
 PAGES['layout-extra-rows'] = layoutPage({}, false, nil, { extra1 = true, extra2 = true })
+
+-- On-screen messages (ot-client#173): game_textmessage's boxes over two
+-- busy backgrounds standing in for the game view (the gallery has no map
+-- sprites): a long look message with a status message, and loot with a level
+-- advance and a warning. The boxes stay (no timeout) for the screenshot.
+local BLACKBOARD = 'You see a blackboard.\nYou read: The room of the Oracle\n\nIf you are wise enough you may ' ..
+    'leave this isle and explore the great continent of Tibia. Once you are at level eight you may talk to the ' ..
+    'Oracle who will send you to the continent.'
+
+PAGES.messages = function(page)
+    local messages = modules.game_textmessage
+    if not (messages and messages.createMessagesPanel) then
+        return
+    end
+    local settings = messages.MessageSettings
+    local shown = {
+        { { settings.centerGreen, BLACKBOARD }, { settings.status, 'Sorry, not possible.' } },
+        { { settings.centerGreen, 'Loot of a rat: 3 gold coins, cheese, a mace.' },
+          { settings.centerWhite, 'You advanced from Level 7 to Level 8.' },
+          { settings.centerRed, 'Warning! The murder of Bob was not justified.' } },
+    }
+    local views = {}
+    for _, list in ipairs(shown) do
+        local view = widget('GalleryGameView', page, function(w)
+            w:addAnchor(AnchorTop, 'parent', AnchorTop)
+            w:addAnchor(AnchorLeft, 'parent', AnchorLeft)
+        end)
+        table.insert(views, view)
+        local panel = messages.createMessagesPanel(view)
+        panel:fill('parent')
+        for _, entry in ipairs(list) do
+            local box = messages.showOnScreen(panel, entry[1], entry[2])
+            if box then
+                removeEvent(box.hideEvent)
+            end
+        end
+    end
+    -- The two stand-in game views in the room the screen has, less the
+    -- page's padding: side by side on a wide screen, one above the other on
+    -- a tall one. Again when the screen changes size (the interface scale is
+    -- applied after the page is built; the messages wrap again with it)
+    local gap = 10
+    local function layout()
+        local screen = g_ui.getRootWidget():getSize()
+        local roomWidth, roomHeight = screen.width - 16, screen.height - 16
+        local sideBySide = roomWidth > roomHeight
+        local width, height
+        if sideBySide then
+            width = math.min(480, math.floor((roomWidth - gap) / 2))
+            height = math.min(240, roomHeight)
+        else
+            width = math.min(480, roomWidth)
+            height = math.min(240, math.floor((roomHeight - gap) / 2))
+        end
+        for i, view in ipairs(views) do
+            if not view:isDestroyed() then
+                view:setSize({ width = width, height = height })
+                view:setMarginLeft(sideBySide and (i - 1) * (width + gap) or 0)
+                view:setMarginTop(sideBySide and 0 or (i - 1) * (height + gap))
+            end
+        end
+    end
+    layout()
+    connect(g_ui.getRootWidget(), { onGeometryChange = layout })
+end
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
 -- scrolled list). nil when none of it shows.

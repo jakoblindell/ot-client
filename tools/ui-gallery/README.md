@@ -41,6 +41,7 @@ with saved baseline images on every pull request (ot-client#70).
 | `layout-setup` | "Let's build your UI", first step: the piece being placed partly over the game view, with the prompt |
 | `layout-setup-held` | the same with a finger held on the piece: the prompt is hidden |
 | `layout-extra-rows` | the touch layout with the 3x3 hotbar and both extra rows on |
+| `messages` | on-screen messages (`game_textmessage`) on their see-through boxes over a busy picture: a long look message and a status message; loot, a level advance and a warning |
 
 The `layout-*` pages are portrait on `iphone-portrait` and landscape on the
 other phones and the tablet; desktop devices show a note (the desktop layout

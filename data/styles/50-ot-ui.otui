@@ -26,6 +26,9 @@
 // The line between list rows, and a row under the finger
 &ot-line: #ffffff14
 &ot-row-pressed: #00000040
+// Behind text shown over the game view (on-screen messages): see-through
+// (55%), so the text reads on bright floors and the game still shows
+&ot-text-backdrop: #0000008c
 // Paper: letters, books and labels, dark text in a large readable TTF font
 &ot-paper: #e4d6ae
 &ot-paper-text: #2a2016
@@ -128,6 +131,15 @@ OtHint < Label
   color: $ot-text-muted
   text-wrap: true
   text-auto-resize: true
+
+// Text over the game view (on-screen messages): a see-through dark box with
+// a little padding. The text keeps its own colour and outline; the module
+// sizes the box to the text (game_textmessage)
+OtTextBackdrop < UIWidget
+  background-color: $ot-text-backdrop
+  padding: 2 6
+  phantom: true
+  focusable: false
 
 // --- Buttons ----------------------------------------------------------------
 // Touch-sized (40 high). checked/on = selected: gold edge and gold text.
