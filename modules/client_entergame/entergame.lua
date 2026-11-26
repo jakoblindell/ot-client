@@ -657,6 +657,11 @@ function EnterGame.hide()
     enterGame:hide()
 end
 
+-- The login screen is showing and no account login is in flight
+function EnterGame.isVisible()
+    return enterGame ~= nil and enterGame:isVisible() and not loadBox
+end
+
 function EnterGame.openWindow()
     if g_game.isOnline() then
         CharacterList.show()
