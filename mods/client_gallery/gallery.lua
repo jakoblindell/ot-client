@@ -437,7 +437,6 @@ PAGES.messages = function(page)
     for _, list in ipairs(shown) do
         local view = widget('GalleryGameView', column, function(w)
             w:setSize({ width = width, height = height })
-            w:setImageClip({ x = 960 - width, y = 420 - height, width = width * 2, height = height * 2 })
         end)
         local panel = g_ui.loadUI('/modules/game_textmessage/textmessage', view)
         panel:fill('parent')
