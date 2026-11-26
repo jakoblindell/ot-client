@@ -619,38 +619,19 @@ PAGES.messages = function(page)
         return
     end
     local settings = messages.MessageSettings
-    -- Two stand-in game views in the space the page has (the page is not laid
-    -- out yet: sizes from the screen, less the page's padding): side by side
-    -- on a wide screen, one above the other on a tall one
-    local screen = g_ui.getRootWidget():getSize()
-    local roomWidth, roomHeight = screen.width - 16, screen.height - 16
-    local gap = 10
-    local sideBySide = roomWidth > roomHeight
-    local width, height
-    if sideBySide then
-        width = math.min(480, math.floor((roomWidth - gap) / 2))
-        height = math.min(240, roomHeight)
-    else
-        width = math.min(480, roomWidth)
-        height = math.min(240, math.floor((roomHeight - gap) / 2))
-    end
     local shown = {
         { { settings.centerGreen, BLACKBOARD }, { settings.status, 'Sorry, not possible.' } },
         { { settings.centerGreen, 'Loot of a rat: 3 gold coins, cheese, a mace.' },
           { settings.centerWhite, 'You advanced from Level 7 to Level 8.' },
           { settings.centerRed, 'Warning! The murder of Bob was not justified.' } },
     }
-    for i, list in ipairs(shown) do
+    local views = {}
+    for _, list in ipairs(shown) do
         local view = widget('GalleryGameView', page, function(w)
-            w:setSize({ width = width, height = height })
             w:addAnchor(AnchorTop, 'parent', AnchorTop)
             w:addAnchor(AnchorLeft, 'parent', AnchorLeft)
-            if sideBySide then
-                w:setMarginLeft((i - 1) * (width + gap))
-            else
-                w:setMarginTop((i - 1) * (height + gap))
-            end
         end)
+        table.insert(views, view)
         local panel = messages.createMessagesPanel(view)
         panel:fill('parent')
         for _, entry in ipairs(list) do
@@ -660,6 +641,33 @@ PAGES.messages = function(page)
             end
         end
     end
+    -- The two stand-in game views in the room the screen has, less the
+    -- page's padding: side by side on a wide screen, one above the other on
+    -- a tall one. Again when the screen changes size (the interface scale is
+    -- applied after the page is built; the messages wrap again with it)
+    local gap = 10
+    local function layout()
+        local screen = g_ui.getRootWidget():getSize()
+        local roomWidth, roomHeight = screen.width - 16, screen.height - 16
+        local sideBySide = roomWidth > roomHeight
+        local width, height
+        if sideBySide then
+            width = math.min(480, math.floor((roomWidth - gap) / 2))
+            height = math.min(240, roomHeight)
+        else
+            width = math.min(480, roomWidth)
+            height = math.min(240, math.floor((roomHeight - gap) / 2))
+        end
+        for i, view in ipairs(views) do
+            if not view:isDestroyed() then
+                view:setSize({ width = width, height = height })
+                view:setMarginLeft(sideBySide and (i - 1) * (width + gap) or 0)
+                view:setMarginTop(sideBySide and 0 or (i - 1) * (height + gap))
+            end
+        end
+    end
+    layout()
+    connect(g_ui.getRootWidget(), { onGeometryChange = layout })
 end
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
