@@ -131,6 +131,36 @@ jobs:
           git commit -m "UI gallery: new baseline images" || exit 0
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
+  ctx-test:
+    name: Context loss and input test (temporary)
+    needs: build-browser
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v5
+        with:
+          name: otclient-browser-${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install Playwright
+        working-directory: tools/ui-gallery
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Tests
+        working-directory: tools/ctx-test
+        env:
+          PW_MODULE: ${{ github.workspace }}/tools/ui-gallery/node_modules/playwright
+        run: |
+          mkdir -p out
+          export OUT=out
+          rc=0
+          node input-mix.js ../../build-emscripten-web || rc=1
+          node context-loss.js ../../build-emscripten-web --print || rc=1
+          for p in hotbar map outfit; do node context-loss.js ../../build-emscripten-web $p || rc=1; done
+          exit $rc
+
   publish:
     name: Publish pre-release
     needs: build-browser
