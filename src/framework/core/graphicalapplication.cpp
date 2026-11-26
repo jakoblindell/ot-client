@@ -452,6 +452,30 @@ void GraphicalApplication::doMapScreenshot(std::string fileName)
     if (m_drawEvents) m_drawEvents->doMapScreenshot(fileName);
 }
 
+// Bitmap fonts are drawn without smoothing, so a font pixel covers as many
+// screen (canvas) pixels as the scale gives, rounded: at 1.5, every other
+// pixel is twice as wide as the one before it, and the letters look uneven
+// and blocky. The page then shows the canvas at devicePixelRatio / pixel
+// ratio device pixels per canvas pixel, also without smoothing
+// (image-rendering: crisp-edges), which must come out whole as well. So: a
+// whole number of canvas pixels that is a whole number of device pixels,
+// the closest to the target (the smaller one on a tie); a plain whole number
+// where the device's ratio allows none (an odd one, like 2.625).
+float GraphicalApplication::getCrispTextScale(const float target) const
+{
+    const float devicePerCanvas = std::max(1.f, g_window.getDevicePixelRatio() / g_window.getPixelRatio());
+    const int nearest = std::max(1, static_cast<int>(std::round(target)));
+    int best = 0;
+    for (int scale = 1; scale <= nearest * 2; ++scale) {
+        const float device = scale * devicePerCanvas;
+        if (std::abs(device - std::round(device)) > 0.01f)
+            continue;
+        if (best == 0 || std::abs(scale - target) < std::abs(best - target))
+            best = scale;
+    }
+    return static_cast<float>(best > 0 ? best : nearest);
+}
+
 // The HUD scale is in CSS pixels; the density is that times the pixel ratio
 float GraphicalApplication::getHUDScale() const { return g_window.getDisplayDensity() / g_window.getPixelRatio(); }
 void GraphicalApplication::setHUDScale(const float v) {

@@ -103,9 +103,9 @@ local function changed()
     end
 end
 
-local function onTasks(protocol, opcode, buffer)
-    local ok, data = pcall(json.decode, buffer)
-    if not ok or type(data) ~= 'table' then
+-- JSON, joined from parts when the server splits a long one (ot-server#66)
+local function onTasks(protocol, opcode, data)
+    if type(data) ~= 'table' then
         return
     end
     if type(data.daily) == 'table' then
@@ -487,7 +487,7 @@ local function onGameEnd()
 end
 
 function init()
-    ProtocolGame.registerExtendedOpcode(TASKS_OPCODE, onTasks)
+    ProtocolGame.registerExtendedJSONOpcode(TASKS_OPCODE, onTasks)
     g_ui.importStyle('tasks')
     connect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd })
     tickEvent = cycleEvent(tick, 60000)
@@ -497,7 +497,7 @@ function init()
 end
 
 function terminate()
-    ProtocolGame.unregisterExtendedOpcode(TASKS_OPCODE)
+    ProtocolGame.unregisterExtendedJSONOpcode(TASKS_OPCODE)
     disconnect(g_game, { onGameStart = onGameStart, onGameEnd = onGameEnd })
     if tickEvent then
         removeEvent(tickEvent)

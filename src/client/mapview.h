@@ -213,6 +213,9 @@ private:
 
     Rect calcFramebufferSource(const Size& destSize);
 
+    // Screen pixels per sprite pixel: how big the map is drawn
+    float getMapZoom() const { return m_posInfo.scaleFactor * std::min(m_posInfo.horizontalStretchFactor, m_posInfo.verticalStretchFactor); }
+
     Point transformPositionTo2D(const Position& position) const {
         return transformPositionTo2D(position, m_posInfo.camera);
     }

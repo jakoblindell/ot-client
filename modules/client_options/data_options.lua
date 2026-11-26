@@ -541,6 +541,17 @@ return {
                 'Creature Information Scale: %sx', math.max(value + 0.5, 1)))
         end
     },
+    -- Touch layout (ot-client#112): names, bars, speech and damage numbers
+    -- sized with the map, in percent of its zoom (100: classic proportions),
+    -- rounded to a scale that keeps the letters sharp. 0: the fixed
+    -- creatureInformationScale, staticTextScale and animatedTextScale, as on
+    -- desktop
+    creatureInformationSize           = {
+        value = g_platform.isMobile() and 100 or 0,
+        action = function(value, options, controller, panels, extraWidgets)
+            g_app.setCreatureInformationMapScale((tonumber(value) or 0) / 100)
+        end
+    },
     staticTextScale                   = {
         value = g_platform.isMobile() and 2 or 0,
         action = function(value, options, controller, panels, extraWidgets)
