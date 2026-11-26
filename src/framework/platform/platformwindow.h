@@ -77,6 +77,9 @@ public:
     // devicePixelRatio, capped by setMaxPixelRatio; ot-client#66). The
     // display density is the HUD scale times this.
     virtual float getPixelRatio() { return 1.f; }
+    // The screen's own pixels per window unit (browser: devicePixelRatio,
+    // uncapped). Above getPixelRatio, the canvas is stretched to the screen.
+    virtual float getDevicePixelRatio() { return getPixelRatio(); }
     virtual void setMaxPixelRatio(float) {}
     virtual void setIcon(const std::string& iconFile) = 0;
     virtual void setClipboardText(std::string_view text) = 0;

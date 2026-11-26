@@ -24,6 +24,10 @@ function ProtocolGame:onExtendedOpcode(opcode, buffer)
     if callback then
         local status = buffer:sub(1, 1) -- O - just one message, S - start, P - part, E - end
         local data = buffer:sub(2)
+        -- a part without its start (the callback was registered in between)
+        if (status == 'P' or status == 'E') and not extendedJSONData[opcode] then
+            return
+        end
         if status ~= 'E' and status ~= 'P' then
             extendedJSONData[opcode] = ''
         end

@@ -111,6 +111,25 @@ public:
 
     float getCreatureInformationScale() const { return m_creatureInformationScale; }
     void setCreatureInformationScale(const float v) { m_creatureInformationScale = v; }
+    // Text over the map sized with the map (the touch layout, ot-client#112):
+    // names, bars, speech and damage numbers are drawn at this factor times
+    // the map's zoom, rounded to a crisp scale (getCrispTextScale). 0: the
+    // fixed scales here, as on desktop
+    float getCreatureInformationMapScale() const { return m_creatureInformationMapScale; }
+    void setCreatureInformationMapScale(const float v) { m_creatureInformationMapScale = std::max(0.f, v); }
+    // The scale each kind of map text is drawn at, for a map drawn mapZoom
+    // screen pixels per sprite pixel
+    float getMapTextScaleFor(const float fixedScale, const float mapZoom) const {
+        if (m_creatureInformationMapScale <= 0.f || mapZoom <= 0.f)
+            return fixedScale;
+        return getCrispTextScale(m_creatureInformationMapScale * mapZoom);
+    }
+    float getCreatureInformationScaleFor(const float mapZoom) const { return getMapTextScaleFor(m_creatureInformationScale, mapZoom); }
+    float getStaticTextScaleFor(const float mapZoom) const { return getMapTextScaleFor(m_staticTextScale, mapZoom); }
+    float getAnimatedTextScaleFor(const float mapZoom) const { return getMapTextScaleFor(m_animatedTextScale, mapZoom); }
+    // The whole number of screen pixels per font pixel closest to target
+    // that keeps every pixel of a bitmap font the same size on the device
+    float getCrispTextScale(float target) const;
 
     float getAnimatedTextScale() const { return m_animatedTextScale; }
     void setAnimatedTextScale(const float v) { m_animatedTextScale = v; }
@@ -156,6 +175,7 @@ private:
     bool m_loadingAsyncTexture{ false };
 
     float m_creatureInformationScale{ DEFAULT_DISPLAY_DENSITY };
+    float m_creatureInformationMapScale{ 0.f };
     float m_animatedTextScale{ DEFAULT_DISPLAY_DENSITY };
     float m_staticTextScale{ DEFAULT_DISPLAY_DENSITY };
 

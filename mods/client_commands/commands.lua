@@ -177,9 +177,9 @@ local function onKey(key)
     end
 end
 
-local function onCommands(protocol, opcode, buffer)
-    local ok, data = pcall(json.decode, buffer)
-    if not ok or type(data) ~= 'table' or type(data.commands) ~= 'table' then
+-- JSON, joined from parts when the server splits a long one (ot-server#66)
+local function onCommands(protocol, opcode, data)
+    if type(data) ~= 'table' or type(data.commands) ~= 'table' then
         return
     end
     commands = {}
@@ -220,13 +220,13 @@ function init()
     g_ui.importStyle('commands')
     list = g_ui.createWidget('CommandList', rootWidget)
     list:hide()
-    ProtocolGame.registerExtendedOpcode(COMMANDS_OPCODE, onCommands)
+    ProtocolGame.registerExtendedJSONOpcode(COMMANDS_OPCODE, onCommands)
     connect(g_game, { onGameStart = attach, onGameEnd = onGameEnd })
     attach()
 end
 
 function terminate()
-    ProtocolGame.unregisterExtendedOpcode(COMMANDS_OPCODE)
+    ProtocolGame.unregisterExtendedJSONOpcode(COMMANDS_OPCODE)
     disconnect(g_game, { onGameStart = attach, onGameEnd = onGameEnd })
     if textEdit and textEdit.commandsAttached then
         disconnect(textEdit, { onTextChange = onTextChange })

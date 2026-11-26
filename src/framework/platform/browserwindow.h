@@ -65,6 +65,7 @@ public:
 
     void handleResizeCallback(const EmscriptenUiEvent* event);
     float getPixelRatio() override { return m_pixelRatio; }
+    float getDevicePixelRatio() override { return m_devicePixelRatio; }
     void setMaxPixelRatio(float ratio) override;
     void handleMouseCallback(int eventType, const EmscriptenMouseEvent* event);
     void handleMouseWheelCallback(const EmscriptenWheelEvent* event);
@@ -98,6 +99,8 @@ private:
     // Canvas pixels per CSS pixel: the device's ratio, at most m_maxPixelRatio
     float m_pixelRatio = 1.f;
     float m_maxPixelRatio = 1.f;
+    // the page's devicePixelRatio (read where the canvas is sized)
+    float m_devicePixelRatio = 1.f;
     // set from Lua's thread; the window's own thread (poll) applies it
     std::atomic<float> m_wantedMaxPixelRatio{ 1.f };
     std::atomic<bool> m_pixelRatioChanged{ false };
