@@ -24,7 +24,6 @@
 
 #ifdef __EMSCRIPTEN__
 
-#include <atomic>
 #include "declarations.h"
 #include <framework/luaengine/luaobject.h>
 #include <emscripten/websocket.h>
@@ -74,14 +73,23 @@ protected:
     void onTimeout();
     // Client thread: tells the protocol the connection ended and closes it
     void reportClose();
-    // Browser thread: the socket failed or the server closed it
-    void onSocketClosed();
 
-    // Take ownership of what was queued for the client thread: the member
-    // callbacks may be cleared by close(), and the connection released,
-    // before the dispatched call runs there.
-    static void runOnConnectCallback(std::function<void()>* callback);
-    static void runOnSocketClosed(std::weak_ptr<LuaObject>* connection);
+    // The socket's callbacks run on the browser's main thread (PROXY_TO_PTHREAD),
+    // but the members belong to the client thread: the callbacks copy what
+    // they got and queue it there, in the order it happened (dispatch).
+    struct SocketEvent
+    {
+        std::weak_ptr<LuaObject> connection;
+        EMSCRIPTEN_WEBSOCKET_T socket;
+        std::vector<uint8_t> data;
+    };
+    static void dispatch(void* handler, void* userData, EMSCRIPTEN_WEBSOCKET_T socket, const uint8_t* data = nullptr, uint32_t size = 0);
+    // Client thread: each takes ownership of the event, and does nothing if
+    // the connection is gone or no longer has that socket
+    static WebConnectionPtr receive(const SocketEvent& event);
+    static void runOnOpen(SocketEvent* event);
+    static void runOnMessage(SocketEvent* event);
+    static void runOnSocketClosed(SocketEvent* event);
 
     std::function<void()> m_connectCallback;
     ErrorCallback m_errorCallback;
@@ -94,10 +102,9 @@ protected:
     std::shared_ptr<asio::streambuf> m_outputStream;
     bool m_connected{ false };
     bool m_connecting{ false };
-    // The server closed the socket, or it failed; set on the browser's
-    // thread, the close is reported once the data received before it has
-    // been read
-    std::atomic<bool> m_remoteClosed{ false };
+    // The server closed the socket, or it failed; the close is reported
+    // once the data received before it has been read
+    bool m_remoteClosed{ false };
     // Data came from the server (client thread)
     bool m_received{ false };
     stdext::timer m_activityTimer;
