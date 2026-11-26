@@ -10,6 +10,9 @@
 -- not available for a module table, so they register with onReady(fn)).
 
 local FILE = '/settings/itemdata.json'
+-- seconds per request (the file is bigger than the default 2 s allows on a
+-- slow phone)
+local TIMEOUT = 30
 
 local data -- the decoded file
 local byName = {}
@@ -65,9 +68,6 @@ function check()
         return
     end
     checking = true
-    -- (the file is bigger than the default 2 s allows on a slow phone)
-    local timeout = HTTP.timeout
-    HTTP.timeout = 30
     HTTP.getJSON(base .. '/data/items/version', function(info, err)
         if err or type(info) ~= 'table' or not info.version then
             checking = false
@@ -91,9 +91,8 @@ function check()
             end
             g_resources.writeFileContents(FILE, body)
             use(decoded)
-        end)
-    end)
-    HTTP.timeout = timeout
+        end, TIMEOUT)
+    end, TIMEOUT)
 end
 
 function isReady()

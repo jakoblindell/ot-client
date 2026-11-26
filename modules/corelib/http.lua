@@ -8,25 +8,26 @@ HTTP = {
   enableTimeOut = false, -- only work in read/write
 }
 
-function HTTP.get(url, callback)
+-- timeout (seconds) is optional on each request; HTTP.timeout otherwise
+function HTTP.get(url, callback, timeout)
   if not g_http or not g_http.get then
     return error("HTTP.get is not supported")
   end
-  local operation = g_http.get(url, HTTP.timeout)
+  local operation = g_http.get(url, timeout or HTTP.timeout)
   HTTP.operations[operation] = { type = "get", url = url, callback = callback }
   return operation
 end
 
-function HTTP.getJSON(url, callback)
+function HTTP.getJSON(url, callback, timeout)
   if not g_http or not g_http.get then
     return error("HTTP.getJSON is not supported")
   end
-  local operation = g_http.get(url, HTTP.timeout)
+  local operation = g_http.get(url, timeout or HTTP.timeout)
   HTTP.operations[operation] = { type = "get", json = true, url = url, callback = callback }
   return operation
 end
 
-function HTTP.post(url, data, callback, checkContentLength)
+function HTTP.post(url, data, callback, checkContentLength, timeout)
   if not g_http or not g_http.post then
     return error("HTTP.post is not supported")
   end
@@ -40,28 +41,28 @@ function HTTP.post(url, data, callback, checkContentLength)
     checkContentLength = true
   end
 
-  local operation = g_http.post(url, data, HTTP.timeout, is_json, checkContentLength)
+  local operation = g_http.post(url, data, timeout or HTTP.timeout, is_json, checkContentLength)
   HTTP.operations[operation] = { type = "post", url = url, callback = callback }
   return operation
 end
 
-function HTTP.postJSON(url, data, callback)
+function HTTP.postJSON(url, data, callback, timeout)
   if not g_http or not g_http.post then
     return error("HTTP.postJSON is not supported")
   end
   if type(data) == "table" then
     data = json.encode(data)
   end
-  local operation = g_http.post(url, data, HTTP.timeout, true)
+  local operation = g_http.post(url, data, timeout or HTTP.timeout, true)
   HTTP.operations[operation] = { type = "post", json = true, url = url, callback = callback }
   return operation
 end
 
-function HTTP.download(url, file, callback, progressCallback)
+function HTTP.download(url, file, callback, progressCallback, timeout)
   if not g_http or not g_http.download then
     return error("HTTP.download is not supported")
   end
-  local operation = g_http.download(url, file, HTTP.timeout)
+  local operation = g_http.download(url, file, timeout or HTTP.timeout)
   HTTP.operations[operation] = {
     type = "download",
     url = url,
