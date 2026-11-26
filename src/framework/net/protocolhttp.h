@@ -26,6 +26,9 @@
 #include <framework/stdext/uri.h>
 
 #ifdef __EMSCRIPTEN__
+#include <condition_variable>
+#include <pthread.h>
+
 #include <emscripten/fetch.h>
 #include <emscripten/websocket.h>
 #else
@@ -107,6 +110,8 @@ private:
     static void onFetchSuccess(emscripten_fetch_t* fetch);
     static void onFetchError(emscripten_fetch_t* fetch);
     static void onFetchProgress(emscripten_fetch_t* fetch);
+    static void* fetchThreadMain(void* arg);
+    static void runFetch(void* arg);
     static EM_BOOL onWebSocketOpen(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData);
     static EM_BOOL onWebSocketMessage(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData);
     static EM_BOOL onWebSocketError(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData);
@@ -115,6 +120,7 @@ private:
     void completeFetch(FetchContext* context, emscripten_fetch_t* fetch, std::string error);
     void startFetch(std::unique_ptr<FetchContext> context, emscripten_fetch_attr_t attr, const std::string& url);
     void cleanupWebSocket(WebSocketContext* context, const std::string& closeMessage, bool dispatchClose);
+    bool startFetchThread();
 #else
     std::string describeHttpError(const ix::HttpResponsePtr& response, bool canceled);
     void copyHeaders(const std::unordered_map<std::string, std::string>& source, ix::WebSocketHttpHeaders& target);
@@ -132,6 +138,12 @@ private:
     std::unordered_map<int, HttpResult_ptr> m_operations;
 #ifdef __EMSCRIPTEN__
     std::unordered_map<int, std::shared_ptr<WebSocketContext>> m_websockets;
+    // The thread the fetches run on (see startFetch)
+    pthread_t m_fetchThread{};
+    bool m_fetchThreadStarted = false;
+    bool m_fetchThreadReady = false;
+    std::mutex m_fetchThreadMutex;
+    std::condition_variable m_fetchThreadCv;
 #else
     std::unordered_map<int, std::shared_ptr<ix::WebSocket>> m_websockets;
 #endif
