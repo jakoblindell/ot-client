@@ -6,9 +6,13 @@
 --          its angle snapped to the 8 directions
 -- Every style walks like a held arrow key (game_walk), so the first step
 -- delay and the walking speed are the same as with the keyboard.
+-- Turn from the centre (on unless turned off): a touch that starts in the
+-- centre turns the character towards the thumb, like Ctrl+arrow, and never
+-- walks; a touch that starts outside it walks.
 
 local STYLE_SETTING = 'mobileMovementStyle'
 local DEFAULT_STYLE = 'stick'
+local TURN_SETTING = 'mobileTurnFromCentre'
 STYLES = {
   { id = 'dpad4', name = 'D-Pad' },
   { id = 'dpad8', name = 'D-Pad (8-way)' },
@@ -31,7 +35,6 @@ local SECTORS = { Directions.East, Directions.SouthEast, Directions.South, Direc
   Directions.West, Directions.NorthWest, Directions.North, Directions.NorthEast }
 
 local style = DEFAULT_STYLE
-local arrows = {}
 
 local overlay
 local keypad
@@ -42,6 +45,20 @@ local firstStep = true
 -- does not say whether it is held
 local keypadHeld = false
 local moveListener
+local turnListener
+-- Turn from the centre is on (the setting); this touch turns (it started in
+-- the centre; nil: not decided yet, until its first update)
+local turnFromCentre = true
+local turnTouch
+-- The last turn sent: the direction the character faces until the server
+-- has had time to show it (getDirection still gives the old one), so a
+-- quick circle neither sends a turn twice nor leaves one out
+local sentTurn
+local SENT_TURN_TIME = 1000 -- ms, plus the ping
+-- A turn that had to wait for the shortest time between turns, and the
+-- retry after the thumb was lifted
+local wantedTurn
+local turnRetryEvent
 
 function init()
   if not g_platform.isMobile() then return end
@@ -51,6 +68,9 @@ function init()
   keypad = overlay.keypad
   keypad.onGeometryChange = placeArrows
   setStyle(g_settings.getString(STYLE_SETTING), true)
+  if g_settings.exists(TURN_SETTING) then
+    turnFromCentre = g_settings.getBoolean(TURN_SETTING)
+  end
   setupOptions()
 
   connect(keypad, {
@@ -69,6 +89,8 @@ function terminate()
   if not g_platform.isMobile() then return end
 
   removeEvent(keypadUpdateEvent)
+  removeEvent(turnRetryEvent)
+  turnRetryEvent = nil
 
   disconnect(keypad, {
     onMousePress = onKeypadTouchPress,
@@ -111,6 +133,11 @@ function addOnJoystickMoveListener(callback)
   moveListener = callback
 end
 
+-- callback(dir) sends a turn; returns false when it has to wait
+function addOnJoystickTurnListener(callback)
+  turnListener = callback
+end
+
 function onKeypadTouchPress(widget, pos, button)
   if button ~= MouseLeftButton then return false end
 
@@ -119,6 +146,10 @@ function onKeypadTouchPress(widget, pos, button)
 
   firstStep = true
   keypadHeld = true
+  turnTouch = nil
+  wantedTurn = nil
+  removeEvent(turnRetryEvent)
+  turnRetryEvent = nil
   executeWalk()
 
   return true
@@ -141,6 +172,11 @@ function onKeypadTouchRelease(widget, pos, button)
   keypadHeld = false
   executeWalk()
   removeEvent(keypadUpdateEvent)
+  -- the last direction the thumb turned to, if the turn had to wait
+  if turnTouch and wantedTurn then
+    turnRetryEvent = scheduleEvent(retryTurn, 60)
+  end
+  turnTouch = nil
   if moveListener then
     moveListener(nil)
   end
@@ -178,8 +214,53 @@ local function directionFor(x, y)
   return SECTORS[sector + 1]
 end
 
+-- Turning: the 4 directions the character can face; a diagonal goes to the
+-- larger axis
+local function turnDirectionFor(x, y)
+  if not directionFor(x, y) then
+    return nil
+  end
+  if math.abs(y) > math.abs(x) then
+    return y < 0 and Directions.North or Directions.South
+  end
+  return x < 0 and Directions.West or Directions.East
+end
+
+-- The direction the character faces, or will once the server has the turn
+-- just sent
+local function facing(player)
+  if sentTurn and g_clock.millis() - sentTurn.at < SENT_TURN_TIME + g_game.getPing() then
+    return sentTurn.dir
+  end
+  sentTurn = nil
+  return player:getDirection()
+end
+
+-- Turns towards dir unless the character already faces it. False when the
+-- turn has to wait (the shortest time between turns)
+local function turnTowards(dir)
+  local player = g_game.getLocalPlayer()
+  if not player or not turnListener or facing(player) == dir then
+    return true
+  end
+  if not turnListener(dir) then
+    return false
+  end
+  sentTurn = { dir = dir, at = g_clock.millis() }
+  return true
+end
+
+-- (once: after 60 ms the shortest time between turns has passed)
+function retryTurn()
+  turnRetryEvent = nil
+  if wantedTurn and not keypadHeld then
+    turnTowards(wantedTurn)
+  end
+  wantedTurn = nil
+end
+
 local function highlight(dir)
-  for _, arrow in ipairs(arrows) do
+  for _, arrow in ipairs(keypad.arrows or {}) do
     arrow:setOn(arrow.dir == dir)
   end
 end
@@ -205,6 +286,19 @@ function executeWalk()
   end
 
   local dir = directionFor(x, y)
+  if turnTouch == nil then
+    turnTouch = turnFromCentre and dir == nil
+    if not turnTouch then
+      -- walking: the character faces where it walks
+      sentTurn = nil
+    end
+  end
+  if turnTouch then
+    dir = turnDirectionFor(x, y)
+    highlight(dir)
+    wantedTurn = dir and not turnTowards(dir) and dir or nil
+    return
+  end
   highlight(dir)
   if dir and moveListener then
     moveListener(dir, firstStep)
@@ -214,14 +308,20 @@ end
 -- Styles ---------------------------------------------------------------------
 
 -- Puts the D-pad arrows around the centre (again when the pad is resized in
--- the layout editor)
-function placeArrows()
-  if not keypad then
+-- the layout editor). Both as shares of the pad's picture (its shorter
+-- side): the arrows sit in the middle of the ring between the inner circle
+-- (0.27) and the edge (0.48), small enough to leave a gap between the 8-way
+-- pad's neighbours. Only a picture: the direction comes from the thumb's
+-- angle (directionFor).
+function placeArrows(pad)
+  pad = pad or keypad
+  if not pad then
     return
   end
-  local radius = math.min(keypad:getWidth(), keypad:getHeight()) * 0.34
-  local arrowSize = math.floor(math.min(keypad:getWidth(), keypad:getHeight()) * 0.27)
-  for _, arrow in ipairs(arrows) do
+  local side = math.min(pad:getWidth(), pad:getHeight())
+  local radius = side * 0.375
+  local arrowSize = math.floor(side * 0.20)
+  for _, arrow in ipairs(pad.arrows or {}) do
     arrow:setSize({ width = arrowSize, height = arrowSize })
     arrow:setMarginLeft(math.floor(arrow.offsetX * radius))
     arrow:setMarginTop(math.floor(arrow.offsetY * radius))
@@ -230,6 +330,15 @@ end
 
 function getStyle()
   return style
+end
+
+function getTurnFromCentre()
+  return turnFromCentre
+end
+
+function setTurnFromCentre(on)
+  turnFromCentre = on and true or false
+  g_settings.set(TURN_SETTING, turnFromCentre)
 end
 
 function setStyle(newStyle, initial)
@@ -242,26 +351,34 @@ function setStyle(newStyle, initial)
     g_settings.set(STYLE_SETTING, style)
   end
 
-  for _, arrow in ipairs(arrows) do
+  dressPad(keypad, style)
+end
+
+-- Gives a pad the picture (and arrows) of a style: the keypad, or a picture
+-- of one (the UI gallery)
+function dressPad(pad, padStyle)
+  for _, arrow in ipairs(pad.arrows or {}) do
     arrow:destroy()
   end
-  arrows = {}
-  local stick = style == 'stick'
-  keypad.pointer:setVisible(stick)
+  pad.arrows = {}
+  local stick = padStyle == 'stick'
+  if pad.pointer then
+    pad.pointer:setVisible(stick)
+  end
   if stick then
-    keypad:setImageSource('/images/game/mobile/keypad')
+    pad:setImageSource('/images/game/mobile/keypad')
   else
-    keypad:setImageSource('/images/game/mobile/dpad')
+    pad:setImageSource('/images/game/mobile/dpad')
     for _, entry in ipairs(ARROWS) do
-      if style == 'dpad8' or not entry.diagonal then
-        local arrow = g_ui.createWidget('JoystickArrow', keypad)
+      if padStyle == 'dpad8' or not entry.diagonal then
+        local arrow = g_ui.createWidget('JoystickArrow', pad)
         arrow:setImageSource('/images/game/mobile/dpad_' .. entry.id)
         arrow.dir = entry.dir
         arrow.offsetX, arrow.offsetY = entry.x, entry.y
-        table.insert(arrows, arrow)
+        table.insert(pad.arrows, arrow)
       end
     end
-    placeArrows()
+    placeArrows(pad)
   end
 end
 

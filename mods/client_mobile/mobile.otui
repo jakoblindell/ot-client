@@ -1,4 +1,5 @@
-// (icons: data/images/ui/ot/icons, gold while its panel is open)
+// A panel's button on the bottom bar (icons: data/images/ui/ot/icons, white):
+// boxed, a gold outline on a faint fill, while its panel is on the screen
 MobileToolbarButton < UIButton
   size: 46 40
   margin-left: 2
@@ -9,13 +10,30 @@ MobileToolbarButton < UIButton
   border-width: 1
   border-color: #00000000
   $checked:
-    background-color: #ffffff22
-    border-color: #ffffff55
-  // pinned on the screen (pins.lua)
-  $on:
-    border-color: #d9b45c
+    background-color: #e0b84c1c
+    border-color: $ot-gold
   $pressed:
     background-color: #ffffff33
+
+// The menu button, first on the bar: always a boxed stone button
+MobileToolbarMenuButton < MobileToolbarButton
+  image-source: /images/ui/button-9grid-idle
+  image-border: 4
+  $checked:
+    image-source: /images/ui/button-9grid-pressed
+    background-color: alpha
+    border-color: $ot-gold
+  $pressed:
+    image-source: /images/ui/button-9grid-pressed
+
+// The thin line between the panels' buttons
+MobileToolbarDivider < UIWidget
+  size: 1 24
+  margin-left: 2
+  margin-right: 2
+  margin-top: 8
+  background-color: #ffffff30
+  phantom: true
 
 MobileToolbar < UIWidget
   height: 44
@@ -112,88 +130,197 @@ MobileChatButton < UIButton
     phantom: true
     visible: false
 
-MobileEditSizeButton < OtButton
-  size: 40 40
-
-// Edit mode: - and + resize a piece, Reset puts it back where it was at
-// first (placed next to its frame)
-MobileEditSizeBar < OtPanel
-  size: 196 52
-  padding: 6
+// A panel as a piece of the layout (panels.lua): the windows in it (mini
+// windows bring their own title bar)
+MobilePanelPiece < UIMiniWindowContainer
+  focusable: false
   phantom: false
+  image-source: /images/ui/miniwindow_body
+  image-border: 4
   layout:
-    type: horizontalBox
-    spacing: 2
-  MobileEditSizeButton
-    id: smaller
-    !text: '-'
-  OtValue
-    id: size
-    width: 52
-  MobileEditSizeButton
-    id: bigger
-    !text: '+'
-  MobileEditSizeButton
-    id: reset
-    width: 52
-    !text: tr('Reset')
-    color: $ot-text
+    type: verticalBox
 
-// Edit mode: a frame over each movable piece, dragged with one finger, with
-// a resize corner
+// The title bar of equipment and the map: as the mini windows' (15 px, the
+// name, - and x)
+MobilePanelHeader < UIWidget
+  height: 15
+  image-source: /images/ui/miniwindow_header
+  image-border: 4
+  phantom: true
+
+  Label
+    id: title
+    anchors.left: parent.left
+    anchors.right: minimize.left
+    anchors.verticalCenter: parent.verticalCenter
+    margin-left: 6
+    font: verdana-11px-antialised
+    color: #c0c0c0
+    phantom: true
+
+  UIButton
+    id: close
+    anchors.top: parent.top
+    anchors.right: parent.right
+    margin-top: 2
+    margin-right: 3
+    size: 12 12
+    image-size: 14 14
+    image-source: /images/ui/miniwindow_buttons
+    image-clip: 28 0 14 14
+    $pressed:
+      image-clip: 28 28 14 14
+
+  UIButton
+    id: minimize
+    anchors.top: close.top
+    anchors.right: close.left
+    margin-right: 1
+    size: 12 12
+    image-size: 14 14
+    image-source: /images/ui/miniwindow_buttons
+    image-clip: 0 0 14 14
+    $pressed:
+      image-clip: 0 28 14 14
+    $on:
+      image-clip: 14 0 14 14
+
+// Edit layout (edit.lua) ----------------------------------------------------
+
+// Over the game view while editing: the map dims
+MobileEditDim < UIWidget
+  background-color: #00000099
+  phantom: true
+
+// A dashed gold line (one side of a piece's outline)
+MobileEditDashH < UIWidget
+  height: 2
+  image-source: /mods/client_mobile/images/edit_dash_h
+  image-repeated: true
+  phantom: true
+
+MobileEditDashV < UIWidget
+  width: 2
+  image-source: /mods/client_mobile/images/edit_dash_v
+  image-repeated: true
+  phantom: true
+
+// A round - or + in the middle of a piece; the face is set by setRoundFace
+MobileEditRoundButton < UIButton
+  size: 34 34
+  icon-size: 16 16
+  icon-align: center
+
+// The outline over a piece while editing: dashed, exactly the piece's
+// size, its name, and - and + for its size in the middle. One finger drags
+// it. The piece under it is dimmed, so its name stands out.
 MobileEditFrame < UIWidget
   draggable: true
   focusable: false
-  background-color: #ffffff18
-  border-width: 2
-  border-color: #ffffffaa
+  background-color: #000000a0
   $on:
-    background-color: #e0b84c30
-    border-color: $ot-gold
+    background-color: #2a200aa8
+
+  MobileEditDashH
+    id: top
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+
+  MobileEditDashH
+    id: bottom
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+    anchors.right: parent.right
+
+  MobileEditDashV
+    id: left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.left: parent.left
+
+  MobileEditDashV
+    id: right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    anchors.right: parent.right
+
+  // (on a dark backing: readable over any piece)
+  Label
+    id: name
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.bottom: parent.verticalCenter
+    margin-bottom: 2
+    height: 16
+    font: $ot-font-label
+    color: $ot-gold
+    text-align: center
+    background-color: #000000d0
+    phantom: true
 
   UIWidget
-    id: resize
-    size: 24 24
-    anchors.right: parent.right
-    anchors.bottom: parent.bottom
-    margin-right: -10
-    margin-bottom: -10
-    draggable: true
-    image-source: /images/ui/button-9grid-idle
-    image-border: 4
-    border-width: 2
-    border-color: $ot-gold
+    id: sizes
+    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.top: parent.verticalCenter
+    size: 76 34
+    phantom: true
 
-MobileEditBar < OtPanel
-  size: 400 56
-  anchors.top: parent.top
-  anchors.horizontalCenter: parent.horizontalCenter
-  margin-top: 6
-  padding: 8
+    MobileEditRoundButton
+      id: smaller
+      anchors.left: parent.left
+      anchors.top: parent.top
+      icon-source: /mods/client_mobile/images/edit_minus
 
-  OtHint
+    MobileEditRoundButton
+      id: bigger
+      anchors.right: parent.right
+      anchors.top: parent.top
+      icon-source: /mods/client_mobile/images/edit_plus
+
+// "Customize Layout": a small window in the middle of the game view
+MobileEditDialog < OtPanel
+  size: 236 136
+  padding: 10
+
+  OtTitle
+    id: title
+    anchors.top: parent.top
+    anchors.horizontalCenter: parent.horizontalCenter
+    !text: tr('Customize Layout')
+
+  OtButtonPrimary
+    id: save
+    anchors.top: title.bottom
     anchors.left: parent.left
-    anchors.right: reset.left
-    anchors.verticalCenter: parent.verticalCenter
-    margin-right: 6
-    text-auto-resize: true
-    !text: tr('Drag to move.\nTap, then - / + to resize.')
+    anchors.right: parent.horizontalCenter
+    margin-top: 10
+    margin-right: 4
+    !text: tr('Save')
 
   OtButtonDanger
     id: reset
-    anchors.right: done.left
-    anchors.verticalCenter: parent.verticalCenter
-    margin-right: 6
-    width: 92
-    !text: tr('Reset UI')
-
-  OtButtonPrimary
-    id: done
+    anchors.top: save.top
+    anchors.left: parent.horizontalCenter
     anchors.right: parent.right
-    anchors.verticalCenter: parent.verticalCenter
-    width: 80
-    !text: tr('Done')
+    margin-left: 4
+    !text: tr('Reset')
 
+  OtButton
+    id: center
+    anchors.top: save.bottom
+    anchors.left: parent.left
+    anchors.right: parent.horizontalCenter
+    margin-top: 6
+    margin-right: 4
+    !text: tr('Center')
+
+  OtButton
+    id: cancel
+    anchors.top: center.top
+    anchors.left: parent.horizontalCenter
+    anchors.right: parent.right
+    margin-left: 4
+    !text: tr('Cancel')
 
 // First-login UI setup (setup.lua): the start and end sheet
 MobileSetupSheet < OtBackdrop

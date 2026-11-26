@@ -10,9 +10,11 @@
 
 local root
 local PAGES = {}
-local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
+local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'movement', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
     'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
+    'layout-panels', 'layout-lists', 'layout-edit',
+    'layout-setup', 'layout-setup-held', 'layout-extra-rows',
     'messages' }
 
 -- Helpers -------------------------------------------------------------------
@@ -233,15 +235,17 @@ PAGES.touch = function(page)
         end)
     end
 
-    row = section(c, 'Toolbar: normal, checked (open), on (pinned)', 44)
+    row = section(c, 'Toolbar: the menu, then panels with dividers; boxed: the panel is on the screen', 44)
     widget('MobileToolbar', row, function(w)
-        w:setWidth(320)
+        w:setWidth(340)
         local buttons = w:getChildById('buttons')
         for i, icon in ipairs({ 'menu', 'equipment', 'map', 'battle', 'containers' }) do
-            widget('MobileToolbarButton', buttons, function(b)
-                b:setIcon('/images/ui/ot/icons/' .. icon .. (i == 3 and '_on' or ''))
-                b:setChecked(i == 3)
-                b:setOn(i == 4)
+            if i > 1 then
+                widget('MobileToolbarDivider', buttons)
+            end
+            widget(i == 1 and 'MobileToolbarMenuButton' or 'MobileToolbarButton', buttons, function(b)
+                b:setIcon('/images/ui/ot/icons/' .. icon)
+                b:setChecked(i == 3 or i == 5)
             end)
         end
     end)
@@ -447,6 +451,28 @@ PAGES.map = function()
     return { screen }, true
 end
 
+-- The movement pad's styles at their first size, as game_joystick draws them
+PAGES.movement = function(page)
+    local joystick = modules.game_joystick
+    if not joystick or not joystick.dressPad then
+        return
+    end
+    local c = column(page, 360)
+    local function pad(parent, style, lit)
+        local w = widget('GalleryPad', parent)
+        joystick.dressPad(w, style)
+        for _, arrow in ipairs(w.arrows) do
+            arrow:setOn(arrow.dir == lit)
+        end
+    end
+    local row = section(c, 'Movement: D-Pad, D-Pad (8-way)', 150)
+    pad(row, 'dpad4')
+    pad(row, 'dpad8')
+    row = section(c, 'A lit arrow (walking or turning); analog stick', 150)
+    pad(row, 'dpad8', Directions.North)
+    pad(row, 'stick')
+end
+
 -- The hub's Settings, one page per tab
 for _, tab in ipairs({ 'Gameplay', 'Display', 'Controls', 'Layout', 'Optimization' }) do
     PAGES['settings-' .. tab:lower()] = function()
@@ -480,6 +506,75 @@ PAGES['house-list'] = function()
     textWindows().onGameEditList(3, 1, 'Mira\nToren\nLune\nKasimir\nOld Bess')
 end
 PAGES['house-list-keyboard'] = PAGES['house-list']
+
+-- The touch layout without a game (client_mobile): the game screen with
+-- the pieces in their default places and some panels open, in portrait or
+-- landscape as the device is. Desktop devices show a note instead.
+local function sampleBars(game)
+    local stats = game:recursiveGetChildById('mobileStats')
+    if not stats then
+        return
+    end
+    for id, part in pairs({ health = 1, mana = 0.72 }) do
+        local bar = stats:getChildById(id)
+        local fill = bar:getChildById('fill')
+        fill:setWidth(math.floor((bar:getWidth() - 2) * part))
+        fill:setVisible(true)
+        bar:getChildById('text'):setText(math.floor(345 * part) .. ' / 345')
+    end
+end
+
+local function layoutPage(panels, edit, setup, hotbar)
+    return function(page)
+        local mobile = modules.client_mobile
+        if not (mobile and mobile.startLayoutPreview and mobile.startLayoutPreview(panels, edit, setup, hotbar)) then
+            local c = column(page, 560)
+            widget('OtHint', section(c, 'Touch layout', 40), function(w)
+                w:setWidth(500)
+                w:setText('The touch layout shows on phones and tablets only; the desktop layout is unchanged.')
+            end)
+            return
+        end
+        -- nothing of the gallery's own behind the game screen: it shows as on
+        -- the device
+        page:setBackgroundColor('#00000000')
+        local game = modules.game_interface.getRootPanel()
+        -- The empty game view (no map without a game) draws an animation
+        -- whose phase depends on timing: covered with plain black, right
+        -- above it and under everything else, so the screenshots repeat
+        local map = modules.game_interface.getMapPanel()
+        local cover = g_ui.createWidget('UIWidget', game)
+        cover:setId('galleryMapCover')
+        cover:setBackgroundColor('#000000')
+        cover:setPhantom(true)
+        cover:fill(map:getId())
+        game:moveChildToIndex(cover, game:getChildIndex(map) + 1)
+        local shown = { game }
+        -- (windows of their own over the game screen)
+        local containers = modules.client_containers and modules.client_containers.getWindow()
+        local keypad = modules.game_joystick and modules.game_joystick.getPanel and modules.game_joystick.getPanel()
+        for _, window in ipairs({ keypad and keypad:getParent(), containers }) do
+            if window and window ~= rootWidget then
+                table.insert(shown, window)
+            end
+        end
+        -- (the bars once they have their width)
+        scheduleEvent(function() sampleBars(game) end, 600)
+        return shown
+    end
+end
+
+-- Containers and equipment; the map, skills and the hunt analyzer; Edit
+-- layout with containers and equipment
+PAGES['layout-panels'] = layoutPage({ 'bag', 'equipment' })
+PAGES['layout-lists'] = layoutPage({ 'map', 'skills', 'hunt' })
+PAGES['layout-edit'] = layoutPage({ 'bag', 'equipment' }, true)
+-- The UI setup's first step, the piece placed partly over the game view;
+-- the same with a finger on the piece (the prompt hidden)
+PAGES['layout-setup'] = layoutPage({}, false, 'placing')
+PAGES['layout-setup-held'] = layoutPage({}, false, 'held')
+-- The 3x3 hotbar with both extra rows on
+PAGES['layout-extra-rows'] = layoutPage({}, false, nil, { extra1 = true, extra2 = true })
 
 -- On-screen messages (ot-client#173): game_textmessage's boxes over two
 -- busy backgrounds standing in for the game view (the gallery has no map
@@ -565,10 +660,16 @@ end
 
 -- Text covered by a button or switch it doesn't belong to (a setting's name
 -- under its row of choices): logged like clipped text
-local function collectTexts(widget, texts, controls)
+-- (order: the order widgets are drawn in, a widget before its children and
+-- before the widgets after it: a control drawn under a text does not cover it,
+-- such as the game view under a panel laid over it)
+local function collectTexts(widget, texts, controls, order)
+    order = order or { n = 0 }
     if not widget:isVisible() or widget:getWidth() <= 0 then
         return
     end
+    order.n = order.n + 1
+    local drawn = order.n
     -- (every widget has UIWidget's own onClick: only one set on it counts)
     local clickable = widget.onClick and widget.onClick ~= UIWidget.onClick
     local switch = widget.onCheckChange and widget.onCheckChange ~= UIWidget.onCheckChange
@@ -578,7 +679,7 @@ local function collectTexts(widget, texts, controls)
         return
     end
     if (clickable or switch) and not widget:isPhantom() then
-        table.insert(controls, { widget = widget, rect = shown })
+        table.insert(controls, { widget = widget, rect = shown, drawn = drawn })
     else
         local text = widget.getText and widget:getText() or ''
         if text ~= '' and not widget:isTextWrap() then
@@ -592,11 +693,12 @@ local function collectTexts(widget, texts, controls)
             elseif bit.band(align, AlignRight) ~= 0 then
                 x = rect.x + rect.width - width
             end
-            table.insert(texts, { widget = widget, x = x, y = rect.y, width = width, height = rect.height })
+            table.insert(texts, { widget = widget, x = x, y = rect.y, width = width, height = rect.height,
+                drawn = drawn })
         end
     end
     for _, child in ipairs(widget:getChildren()) do
-        collectTexts(child, texts, controls)
+        collectTexts(child, texts, controls, order)
     end
 end
 
@@ -619,7 +721,8 @@ local function checkCovered(top, found)
             local overlapX = math.min(text.x + text.width, r.x + r.width) - math.max(text.x, r.x)
             local overlapY = math.min(text.y + text.height, r.y + r.height) - math.max(text.y, r.y)
             -- (a button's own label, or a label laid over a whole panel, is fine)
-            if overlapX > 2 and overlapY > 2 and not isInside(text.widget, control) and not isInside(control, text.widget) then
+            if overlapX > 2 and overlapY > 2 and entry.drawn > text.drawn and not isInside(text.widget, control)
+                and not isInside(control, text.widget) then
                 table.insert(found, string.format('%s#%s "%s" covered by %s#%s "%s"', text.widget:getStyleName(),
                     text.widget:getId(), text.widget:getText(), control:getStyleName(), control:getId(),
                     control.getText and control:getText() or ''))
@@ -732,6 +835,7 @@ function init()
     g_ui.importStyle('/mods/client_mobile/hotbar_sheet')
     g_ui.importStyle('/mods/client_mobile/hub')
     g_ui.importStyle('/mods/client_mobile/outfit')
+    g_ui.importStyle('/modules/game_joystick/joystick_styles')
     g_ui.importStyle('gallery')
     -- through the options (they apply their own scale shortly after start,
     -- over a direct g_app.setHUDScale); option value v is a scale of v / 2 + 0.5

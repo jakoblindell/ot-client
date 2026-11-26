@@ -6,8 +6,9 @@
 -- player is not using are kept in action bars that are never shown (101-106),
 -- in the same per-character hotkey set as the rest, so they are saved with it.
 --
--- Optional extra hotbars of 3 slots (action bars 2 and 3) sit above the main
--- one and stay the same when the preset changes. The pencil button turns on
+-- The main hotbar is always 9 slots, 3x3 (ot-client#158). Optional extra
+-- hotbars of 3 slots (action bars 2 and 3) sit above it and stay the same
+-- when the preset changes. The pencil button turns on
 -- edit mode: a tap on a slot opens the "Add to hotbar" sheet, dragging one
 -- slot onto another swaps them. A long press on either button opens the
 -- hotbar settings.
@@ -15,8 +16,10 @@
 local PRESET_BAR_BASE = 100
 local MAX_PRESETS = 6
 local PRESET_CHOICES = { 1, 2, 3, 4, 5, 6 }
-local SLOT_CHOICES = { 4, 6, 8, 9, 12, 16, 24 }
-local DEFAULTS = { presets = 1, current = 1, slots = 12, extra1 = false, extra2 = false, editButton = true }
+-- (a "slots" value saved before the hotbar was always 3x3 is ignored)
+local DEFAULTS = { presets = 1, current = 1, extra1 = false, extra2 = false, editButton = true }
+-- The UI gallery (layout preview): settings shown instead of the saved ones
+local previewSettings
 
 local presetRow
 local editOverlay
@@ -45,8 +48,17 @@ function hotbarSettings()
     end
     settings.presets = math.max(1, math.min(MAX_PRESETS, tonumber(settings.presets) or 1))
     settings.current = math.max(1, math.min(settings.presets, tonumber(settings.current) or 1))
-    settings.slots = tonumber(settings.slots) or DEFAULTS.slots
+    if previewSettings and isLayoutPreview() then
+        for key, value in pairs(previewSettings) do
+            settings[key] = value
+        end
+    end
     return settings
+end
+
+-- The layout preview with these settings (nil: the saved ones)
+function setHotbarPreviewSettings(settings)
+    previewSettings = settings
 end
 
 local function saveSettings(settings)
@@ -303,8 +315,6 @@ function openHotbarSettings()
             selectHotbarPreset(value)
             openHotbarSettings()
         end)
-    addChoices(list, tr('Slots'), tr('How many slots the main hotbar shows (fewer if they do not fit the screen).'),
-        SLOT_CHOICES, settings.slots, function(value) changeSetting('slots', value) end)
     g_ui.createWidget('HotbarSheetHeading', list):setText(tr('Also show'))
     local toggles = g_ui.createWidget('MobileHotbarToggleRow', list)
     local cell = math.floor((list:getWidth() - 12) / 3)
