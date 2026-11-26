@@ -177,6 +177,12 @@ static float wantedPixelRatio(float device, float maxRatio) {
 }
 
 void BrowserWindow::applyCanvasSize(bool force) {
+    // A canvas cannot be resized while its GL context is lost (Emscripten
+    // reads the context's viewport): done when the context is back
+    if (g_graphics.isContextLost()) {
+        m_canvasSizePending = true;
+        return;
+    }
     double w, h;
     emscripten_get_element_css_size("#canvas", &w, &h);
     m_devicePixelRatio = std::max(1.f, static_cast<float>(emscripten_get_device_pixel_ratio()));
@@ -280,8 +286,13 @@ void BrowserWindow::poll() {
     if (const int32_t events = m_glContextEvents.exchange(0)) {
         if (events & GL_CONTEXT_LOST)
             g_graphics.contextLost();
-        if (events & GL_CONTEXT_RESTORED)
+        if (events & GL_CONTEXT_RESTORED) {
             g_graphics.contextRestored();
+            if (m_canvasSizePending) {
+                m_canvasSizePending = false;
+                applyCanvasSize(true);
+            }
+        }
     }
 
 
