@@ -31,6 +31,13 @@ with saved baseline images on every pull request (ot-client#70).
 | `house-list` | a house list in Edit List |
 | `letter-keyboard`, `house-list-keyboard` | the same with the on-screen keyboard open (touch devices only; below) |
 | `map` | the game screen without a server: a player and monsters with names, health and mana bars and a yell, two of them on the view's top row and left edge, drawn by the map at its real size (no game sprites: creatures and ground are not drawn) |
+| `layout-panels` | the touch layout (no game) with Containers and Equipment open in their default places |
+| `layout-lists` | the touch layout with the Map, Skills and the Hunt analyzer open (the oldest gives way when they do not all fit) |
+| `layout-edit` | Edit layout with Containers and Equipment open: outlines, - and +, the "Customize Layout" window |
+
+The `layout-*` pages are portrait on `iphone-portrait` and landscape on the
+other phones and the tablet; desktop devices show a note (the desktop layout
+has no touch pieces).
 
 Screen pages get their data the way the game would, through the extended
 opcodes (`ProtocolGame.onExtendedOpcode`), with fixed sample data. The clock

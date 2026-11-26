@@ -12,7 +12,8 @@ local root
 local PAGES = {}
 local PAGE_ORDER = { 'buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
-    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map' }
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
+    'layout-panels', 'layout-lists', 'layout-edit' }
 
 -- Helpers -------------------------------------------------------------------
 
@@ -232,15 +233,17 @@ PAGES.touch = function(page)
         end)
     end
 
-    row = section(c, 'Toolbar: normal, checked (open), on (pinned)', 44)
+    row = section(c, 'Toolbar: the menu, then panels with dividers; boxed: the panel is on the screen', 44)
     widget('MobileToolbar', row, function(w)
-        w:setWidth(320)
+        w:setWidth(340)
         local buttons = w:getChildById('buttons')
         for i, icon in ipairs({ 'menu', 'equipment', 'map', 'battle', 'containers' }) do
-            widget('MobileToolbarButton', buttons, function(b)
-                b:setIcon('/images/ui/ot/icons/' .. icon .. (i == 3 and '_on' or ''))
-                b:setChecked(i == 3)
-                b:setOn(i == 4)
+            if i > 1 then
+                widget('MobileToolbarDivider', buttons)
+            end
+            widget(i == 1 and 'MobileToolbarMenuButton' or 'MobileToolbarButton', buttons, function(b)
+                b:setIcon('/images/ui/ot/icons/' .. icon)
+                b:setChecked(i == 3 or i == 5)
             end)
         end
     end)
@@ -479,6 +482,66 @@ PAGES['house-list'] = function()
     textWindows().onGameEditList(3, 1, 'Mira\nToren\nLune\nKasimir\nOld Bess')
 end
 PAGES['house-list-keyboard'] = PAGES['house-list']
+
+-- The touch layout without a game (client_mobile): the game screen with
+-- the pieces in their default places and some panels open, in portrait or
+-- landscape as the device is. Desktop devices show a note instead.
+local function sampleBars(game)
+    local stats = game:recursiveGetChildById('mobileStats')
+    if not stats then
+        return
+    end
+    for id, part in pairs({ health = 1, mana = 0.72 }) do
+        local bar = stats:getChildById(id)
+        local fill = bar:getChildById('fill')
+        fill:setWidth(math.floor((bar:getWidth() - 2) * part))
+        fill:setVisible(true)
+        bar:getChildById('text'):setText(math.floor(345 * part) .. ' / 345')
+    end
+end
+
+local function layoutPage(panels, edit)
+    return function(page)
+        local mobile = modules.client_mobile
+        if not (mobile and mobile.startLayoutPreview and mobile.startLayoutPreview(panels, edit)) then
+            local c = column(page, 560)
+            widget('OtHint', section(c, 'Touch layout', 40), function(w)
+                w:setWidth(500)
+                w:setText('The touch layout shows on phones and tablets only; the desktop layout is unchanged.')
+            end)
+            return
+        end
+        local game = modules.game_interface.getRootPanel()
+        -- The empty game view (no map without a game) draws an animation
+        -- whose phase depends on timing: covered with plain black, right
+        -- above it and under everything else, so the screenshots repeat
+        local map = modules.game_interface.getMapPanel()
+        local cover = g_ui.createWidget('UIWidget', game)
+        cover:setId('galleryMapCover')
+        cover:setBackgroundColor('#000000')
+        cover:setPhantom(true)
+        cover:fill(map:getId())
+        game:moveChildToIndex(cover, game:getChildIndex(map) + 1)
+        local shown = { game }
+        -- (windows of their own over the game screen)
+        local containers = modules.client_containers and modules.client_containers.getWindow()
+        local keypad = modules.game_joystick and modules.game_joystick.getPanel and modules.game_joystick.getPanel()
+        for _, window in ipairs({ keypad and keypad:getParent(), containers }) do
+            if window and window ~= rootWidget then
+                table.insert(shown, window)
+            end
+        end
+        -- (the bars once they have their width)
+        scheduleEvent(function() sampleBars(game) end, 600)
+        return shown
+    end
+end
+
+-- Containers and equipment; the map, skills and the hunt analyzer; Edit
+-- layout with containers and equipment
+PAGES['layout-panels'] = layoutPage({ 'bag', 'equipment' })
+PAGES['layout-lists'] = layoutPage({ 'map', 'skills', 'hunt' })
+PAGES['layout-edit'] = layoutPage({ 'bag', 'equipment' }, true)
 
 -- The part of a widget's rect that shows: inside every clipping ancestor (a
 -- scrolled list). nil when none of it shows.
