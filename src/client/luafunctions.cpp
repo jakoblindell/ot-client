@@ -349,6 +349,7 @@ void Client::registerLuaFunctions()
     g_lua.bindSingletonFunction("g_game", "canExivaOptions", &Game::canExivaOptions, &g_game);
     g_lua.bindSingletonFunction("g_game", "sendExivaOptions", &Game::sendExivaOptions, &g_game);
     g_lua.bindSingletonFunction("g_game", "isOnline", &Game::isOnline, &g_game);
+    g_lua.bindSingletonFunction("g_game", "startPreview", &Game::startPreview, &g_game);
     g_lua.bindSingletonFunction("g_game", "isLogging", &Game::isLogging, &g_game);
     g_lua.bindSingletonFunction("g_game", "isDead", &Game::isDead, &g_game);
     g_lua.bindSingletonFunction("g_game", "isAttacking", &Game::isAttacking, &g_game);
@@ -659,6 +660,8 @@ void Client::registerLuaFunctions()
     g_lua.bindClassMemberFunction<Creature>("getIcon", &Creature::getIcon);
     g_lua.bindClassMemberFunction<Creature>("getIcons", &Creature::getIcons);
     g_lua.bindClassMemberFunction<Creature>("setOutfit", &Creature::setOutfit);
+    g_lua.bindClassMemberFunction<Creature>("setName", &Creature::setName);
+    g_lua.bindClassMemberFunction<Creature>("setHealthPercent", &Creature::setHealthPercent);
     g_lua.bindClassMemberFunction<Creature>("getOutfit", &Creature::getOutfit);
     g_lua.bindClassMemberFunction<Creature>("getDirection", &Creature::getDirection);
     g_lua.bindClassMemberFunction<Creature>("getStepDuration", &Creature::getStepDuration);
