@@ -104,6 +104,15 @@ local function showUnusable(panel, unusable)
     panel:setVisible(unusable and not g_platform.isMobile() or false)
 end
 
+-- Passive abilities (Gift of Life, from the Wheel of Destiny) exist from
+-- Tibia 13.10 on. Older servers, like our 7.92 one, have none: the option
+-- is not offered and a slot that holds one shows nothing (its saved data is
+-- kept, and replaced when something else is assigned to the slot).
+local PASSIVE_ABILITIES_VERSION = 1310
+local function passivesSupported()
+    return g_game.getClientVersion() >= PASSIVE_ABILITIES_VERSION
+end
+
 --- Checks if player can use a spell
 local function playerCanUseSpell(spellData)
     if not g_game.isOnline() then
@@ -848,10 +857,12 @@ function configureButtonMouseRelease(button)
             menu:addOption(buttonText:len() > 0 and tr('Edit Text') or tr('Assign Text'), function()
                 assignText(button)
             end)
-            menu:addOption(button.cache.isPassive and tr('Edit Passive Ability') or tr('Assign Passive Ability'),
-                function()
-                    assignPassive(button)
-                end)
+            if passivesSupported() then
+                menu:addOption(button.cache.isPassive and tr('Edit Passive Ability') or tr('Assign Passive Ability'),
+                    function()
+                        assignPassive(button)
+                    end)
+            end
             menu:addOption(button.cache.specialAction and tr('Edit Action') or tr('Assign Action'), function()
                 assignSpecialAction(button, mousePos)
             end)
@@ -1150,7 +1161,7 @@ function updateButton(button)
         button.cache.actionType = UseTypes["chatText"]
     end
 
-    if passiveAbility then
+    if passiveAbility and passivesSupported() then
         local passive = PassiveAbilities[passiveAbility]
         button.item.text:setImageSource(passive.icon)
         button.item.text:setImageClip("0 0 32 32")

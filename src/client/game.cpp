@@ -625,6 +625,19 @@ void Game::loginWorld(const std::string_view account, const std::string_view pas
     m_worldName = worldName;
 }
 
+LocalPlayerPtr Game::startPreview()
+{
+    if (m_protocolGame || isOnline())
+        throw Exception("Unable to start a preview while online or logging.");
+
+    resetGameStates();
+
+    m_localPlayer = std::make_shared<LocalPlayer>();
+    m_localPlayer->onCreate();
+    m_online = true;
+    return m_localPlayer;
+}
+
 void Game::playRecord(const std::string_view& file)
 {
     if (m_protocolGame || isOnline())

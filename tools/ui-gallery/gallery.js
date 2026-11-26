@@ -24,7 +24,7 @@ const { chromium } = require(process.env.PW_MODULE || 'playwright');
 
 const PAGES = ['buttons', 'controls', 'text', 'touch', 'hub', 'journal', 'achievements', 'npc', 'hotbar', 'outfit',
     'settings-gameplay', 'settings-display', 'settings-controls', 'settings-layout', 'settings-optimization',
-    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard',
+    'letter', 'letter-keyboard', 'letter-read', 'house-list', 'house-list-keyboard', 'map',
     'layout-panels', 'layout-lists', 'layout-edit', 'layout-setup', 'layout-setup-held',
     'layout-extra-rows'];
 
