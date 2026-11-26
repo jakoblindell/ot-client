@@ -523,9 +523,11 @@ end
 function whenMapResizeChange()
     local mapWidth, mapHeight = mapPanel:getWidth(), mapPanel:getHeight()
     if mapWidth > 2 * CIRCLE_EDGE and mapHeight > 2 * CIRCLE_EDGE and imageSourceBroad > 0 then
+        -- 90 from the centre, or a tenth of the view's height on a tall view
         local barDistance = 90
-        if not (math.floor(mapHeight / 2 * 0.2) < 100) then -- 0.381
-            barDistance = math.floor(mapHeight / 2 * 0.2)
+        local tenth = math.floor(mapHeight / 2 * 0.2)
+        if tenth >= 100 then
+            barDistance = tenth
         end
         -- how far the circles reach from the centre, at full size
         local reach = barDistance + imageSourceThin + math.max(0, distanceFromCenter)
